@@ -61,6 +61,7 @@ GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s/proton"
 export PROTONPATH="$(dirname "$PROTON_BIN")"
+export STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.steam/steam"
 export STEAM_COMPAT_DATA_PATH="$GAME_DIR"
 
 load_launch_vars() {
@@ -138,6 +139,7 @@ GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s"
 export PROTONPATH="$(dirname "$PROTON_BIN")"
+export STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.steam/steam"
 export STEAM_COMPAT_DATA_PATH="$GAME_DIR"
 
 load_launch_vars() {
@@ -209,6 +211,7 @@ GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s/proton"
 export PROTONPATH="$(dirname "$PROTON_BIN")"
+export STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.steam/steam"
 export STEAM_COMPAT_DATA_PATH="$GAME_DIR"
 
 load_launch_vars() {
@@ -650,6 +653,7 @@ GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s/proton"
 export PROTONPATH="$(dirname "$PROTON_BIN")"
+export STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.steam/steam"
 export STEAM_COMPAT_DATA_PATH="$GAME_DIR"
 
 load_launch_vars() {
@@ -736,6 +740,7 @@ GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s"
 export PROTONPATH="$(dirname "$PROTON_BIN")"
+export STEAM_COMPAT_CLIENT_INSTALL_PATH="$HOME/.steam/steam"
 export STEAM_COMPAT_DATA_PATH="$GAME_DIR"
 
 load_launch_vars() {
