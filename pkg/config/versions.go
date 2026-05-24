@@ -28,7 +28,7 @@ var DefaultVersions = Versions{
 	ProtonVer:     "proton-cachyos-10.0-20260424-slr-x86_64",
 	ProtonBaseURL: "https://github.com/CachyOS/proton-cachyos/releases/download",
 	WineVer:       "wine-11.8",
-	WinetricksVer: "20250102-modified",
+	WinetricksVer: "20250102",
 	DXVKVer:       "2.7.1-3-521-low-latency",
 	VKD3DVer:      "2.14",
 	FSRPath:       "packages/fsr4",

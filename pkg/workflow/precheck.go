@@ -275,21 +275,56 @@ func CheckLauncherInstaller(launcherInstallerPath string, logger *core.Logger) e
 	return nil
 }
 
-// CheckWinetricks checks if winetricks is available
+// CheckWinetricks checks if winetricks is available.
+// Tries: PATH -> local archive -> download from GitHub (latest release).
 func CheckWinetricks(workdir string, logger *core.Logger) error {
 	if core.LookPath("winetricks") != "" {
 		logger.Info("[OK] winetricks binary found: " + core.LookPath("winetricks"))
 		return nil
 	}
 
-	logger.Warn("winetricks binary not found, attempting to install from local archive...")
-
+	// Try local archive first
 	winetricksArchive := filepath.Join(workdir, "packages", "winetricks-"+config.DefaultVersions.WinetricksVer+".tar.gz")
-	if _, err := os.Stat(winetricksArchive); os.IsNotExist(err) {
-		logger.Error(fmt.Sprintf("winetricks binary not found in PATH and %s not found", winetricksArchive))
-		return fmt.Errorf("winetricks not found")
+	if _, err := os.Stat(winetricksArchive); err == nil {
+		return installWinetricksFromArchive(winetricksArchive, logger)
 	}
 
+	// Download latest winetricks from GitHub
+	logger.Info("Winetricks not found locally, downloading from GitHub...")
+	winetricksURL := "https://raw.githubusercontent.com/Winetricks/winetricks/master/src/winetricks"
+	tmpFile := filepath.Join(workdir, "winetricks")
+	logFile := filepath.Join(workdir, "logs", "installer.log")
+	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err != nil {
+		return fmt.Errorf("failed to create log directory: %w", err)
+	}
+	if err := core.RunCommand(core.RunModeSilent, []string{"wget", "-O", tmpFile, winetricksURL}, logger, logFile); err != nil {
+		logger.Error("Failed to download winetricks from GitHub")
+		return fmt.Errorf("failed to download winetricks: %w", err)
+	}
+
+	// Install to /usr/local/bin
+	logger.Info("Installing winetricks...")
+	if err := core.RunCommand(core.RunModeSilent, []string{"sudo", "install", "-m", "755", tmpFile, "/usr/local/bin/winetricks"}, logger, ""); err != nil {
+		logger.Error("Failed to install winetricks")
+		os.Remove(tmpFile)
+		return err
+	}
+	os.Remove(tmpFile)
+
+	if core.LookPath("winetricks") == "" {
+		logger.Error("winetricks binary not found after installation")
+		return fmt.Errorf("winetricks installation failed")
+	}
+
+	logger.Info("Running winetricks self-update...")
+	_ = core.RunCommand(core.RunModeSilent, []string{"sudo", "winetricks", "--self-update"}, logger, "")
+
+	logger.Info("[OK] winetricks installed and updated successfully")
+	return nil
+}
+
+// installWinetricksFromArchive installs winetricks from a local tar.gz archive.
+func installWinetricksFromArchive(winetricksArchive string, logger *core.Logger) error {
 	logger.Info(fmt.Sprintf("Extracting %s into packages/.tmp/winetricks/...", winetricksArchive))
 	tmpDir, err := packages.ExtractPackage(winetricksArchive, "winetricks")
 	if err != nil {

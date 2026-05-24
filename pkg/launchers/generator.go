@@ -20,9 +20,8 @@ type LauncherConfig struct {
 }
 
 // GenerateLauncher generates the launcher wrapper scripts and desktop files.
-// Both GPU types write to /usr/local/bin/Bellum, but with different content:
-//   - AMD: wine wrapper (wineboot + wine)
-//   - NVIDIA: proton wrapper (wineserver + proton run)
+// Both GPU types write to /usr/local/bin/Bellum, using Proton run for
+// self-updating launcher compatibility (no wineboot --end-session or wineserver -k).
 func GenerateLauncher(config LauncherConfig) error {
 	if err := generateLauncherWrapper(config); err != nil {
 		return fmt.Errorf("failed to generate launcher wrapper: %w", err)
@@ -37,9 +36,8 @@ func GenerateLauncher(config LauncherConfig) error {
 }
 
 // generateLauncherWrapper creates the /usr/local/bin/Bellum wrapper script.
-// GPU-specific content:
-//   - AMD: uses wineboot + wine (mirrors lib/launcher.sh)
-//   - NVIDIA: uses wineserver -k + proton run (mirrors lib/launcher.sh)
+// Uses Proton run (not plain wine) for self-updating launcher compatibility.
+// Includes apply_pending_update() hook to work around Wine ReplaceFileW limitation.
 func generateLauncherWrapper(config LauncherConfig) error {
 	script := generateWrapperContent(config)
 	return writeWrapper("/usr/local/bin/Bellum", script)
@@ -62,6 +60,7 @@ LAUNCH_VARS="%s/launch_vars.env"
 GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s/proton"
+export PROTONPATH="$(dirname "$PROTON_BIN")"
 
 load_launch_vars() {
 	if [ -f "$LAUNCH_VARS" ]; then
@@ -80,8 +79,13 @@ validate_paths() {
 		exit 1
 	fi
 
-	if ! command -v wine &>/dev/null; then
-		echo "ERROR: wine not found or not executable" >&2
+	if [ ! -f "$PROTON_BIN" ]; then
+		echo "ERROR: Proton binary not found: $PROTON_BIN" >&2
+		exit 1
+	fi
+
+	if [ ! -x "$PROTON_BIN" ]; then
+		echo "ERROR: Proton binary not executable: $PROTON_BIN" >&2
 		exit 1
 	fi
 }
@@ -90,21 +94,31 @@ run_launcher() {
 	cd "$GAME_DIR" || exit 1
 	LOG_FILE="$GAME_DIR/launcher.log"
 
-	wineboot "--restart"
-	sleep 1
-
-	wine "$LAUNCHER_EXE" "$@" > "$LOG_FILE" 2>> "$LOG_FILE"
-
-	wineboot "--end-session"
+	# Use Proton run (not plain wine) for self-updating launcher compatibility.
+	# wineboot --end-session kills the wineserver immediately, which
+	# breaks the launcher's self-update handoff (updater gets killed mid-flight).
+	"$PROTON_BIN" run "$LAUNCHER_EXE" "$@" > "$LOG_FILE" 2>> "$LOG_FILE"
 
 	return "$?"
+}
+
+apply_pending_update() {
+	local UPDATE_FILE="$GAME_DIR/AstarteLauncher.exe.update"
+	if [ -f "$UPDATE_FILE" ]; then
+		echo "[Bellum] Pending update detected, applying..."
+		cp -v "$UPDATE_FILE" "$LAUNCHER_EXE"
+		rm -v "$UPDATE_FILE"
+		echo "[Bellum] Update applied."
+	fi
 }
 
 main() {
 	load_launch_vars
 	validate_paths
 	run_launcher "$@"
-	exit $?
+	EXIT_CODE=$?
+	apply_pending_update
+	exit $EXIT_CODE
 }
 
 main "$@"
@@ -122,6 +136,7 @@ LAUNCH_VARS="%s/launch_vars.env"
 GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s"
+export PROTONPATH="$(dirname "$PROTON_BIN")"
 
 load_launch_vars() {
 	if [ -f "$LAUNCH_VARS" ]; then
@@ -141,7 +156,7 @@ validate_paths() {
 	fi
 
 	if [ ! -x "%s" ]; then
-		echo "ERROR: %s not found or not executable" >&2
+		echo "ERROR: Proton binary not found or not executable: %s" >&2
 		exit 1
 	fi
 }
@@ -150,19 +165,31 @@ run_launcher() {
 	cd "$GAME_DIR" || exit 1
 	LOG_FILE="$GAME_DIR/launcher.log"
 
-	wineserver "-k"
-	sleep 1
-
+	# Use Proton run for self-updating launcher compatibility.
+	# wineserver -k kills the wineserver immediately, which
+	# breaks the launcher's self-update handoff.
 	%s run "$LAUNCHER_EXE" "$@" > "$LOG_FILE" 2>> "$LOG_FILE"
 
 	return "$?"
+}
+
+apply_pending_update() {
+	local UPDATE_FILE="$GAME_DIR/AstarteLauncher.exe.update"
+	if [ -f "$UPDATE_FILE" ]; then
+		echo "[Bellum] Pending update detected, applying..."
+		cp -v "$UPDATE_FILE" "$LAUNCHER_EXE"
+		rm -v "$UPDATE_FILE"
+		echo "[Bellum] Update applied."
+	fi
 }
 
 main() {
 	load_launch_vars
 	validate_paths
 	run_launcher "$@"
-	exit $?
+	EXIT_CODE=$?
+	apply_pending_update
+	exit $EXIT_CODE
 }
 
 main "$@"
@@ -179,6 +206,7 @@ LAUNCH_VARS="%s/launch_vars.env"
 GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s/proton"
+export PROTONPATH="$(dirname "$PROTON_BIN")"
 
 load_launch_vars() {
 	if [ -f "$LAUNCH_VARS" ]; then
@@ -197,8 +225,13 @@ validate_paths() {
 		exit 1
 	fi
 
-	if ! command -v wine &>/dev/null; then
-		echo "ERROR: wine not found or not executable" >&2
+	if [ ! -f "$PROTON_BIN" ]; then
+		echo "ERROR: Proton binary not found: $PROTON_BIN" >&2
+		exit 1
+	fi
+
+	if [ ! -x "$PROTON_BIN" ]; then
+		echo "ERROR: Proton binary not executable: $PROTON_BIN" >&2
 		exit 1
 	fi
 }
@@ -207,21 +240,31 @@ run_launcher() {
 	cd "$GAME_DIR" || exit 1
 	LOG_FILE="$GAME_DIR/launcher.log"
 
-	wineboot "--restart"
-	sleep 1
-
-	wine "$LAUNCHER_EXE" "$@" > "$LOG_FILE" 2>> "$LOG_FILE"
-
-	wineboot "--end-session"
+	# Use Proton run (not plain wine) for self-updating launcher compatibility.
+	# wineboot --end-session kills the wineserver immediately, which
+	# breaks the launcher's self-update handoff (updater gets killed mid-flight).
+	"$PROTON_BIN" run "$LAUNCHER_EXE" "$@" > "$LOG_FILE" 2>> "$LOG_FILE"
 
 	return "$?"
+}
+
+apply_pending_update() {
+	local UPDATE_FILE="$GAME_DIR/AstarteLauncher.exe.update"
+	if [ -f "$UPDATE_FILE" ]; then
+		echo "[Bellum] Pending update detected, applying..."
+		cp -v "$UPDATE_FILE" "$LAUNCHER_EXE"
+		rm -v "$UPDATE_FILE"
+		echo "[Bellum] Update applied."
+	fi
 }
 
 main() {
 	load_launch_vars
 	validate_paths
 	run_launcher "$@"
-	exit $?
+	EXIT_CODE=$?
+	apply_pending_update
+	exit $EXIT_CODE
 }
 
 main "$@"
@@ -588,9 +631,9 @@ func EnsureProtonBinary(protonpath string) error {
 
 // GetLauncherScript returns the Bellum wrapper script content (AMD).
 func GetLauncherScript(wineprefix, protonpath string) (string, error) {
-	wineBin, winebootBin, _, err := EnsureWineBinaries()
-	if err != nil {
-		return "", err
+	protonBin := filepath.Join(protonpath, "proton")
+	if _, err := os.Stat(protonBin); err != nil {
+		return "", fmt.Errorf("proton binary not found at %s: %w", protonBin, err)
 	}
 
 	return fmt.Sprintf(`#!/bin/bash
@@ -603,9 +646,10 @@ LAUNCH_VARS="%s/launch_vars.env"
 GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s/proton"
+export PROTONPATH="$(dirname "$PROTON_BIN")"
 
 load_launch_vars() {
-	if [ -f "$LAUNCHER_EXE" ]; then
+	if [ -f "$LAUNCH_VARS" ]; then
 		set -a
 		source "$LAUNCH_VARS"
 		set +a
@@ -621,8 +665,13 @@ validate_paths() {
 		exit 1
 	fi
 
-	if ! command -v %s &>/dev/null; then
-		echo "ERROR: %s not found or not executable" >&2
+	if [ ! -f "$PROTON_BIN" ]; then
+		echo "ERROR: Proton binary not found: $PROTON_BIN" >&2
+		exit 1
+	fi
+
+	if [ ! -x "$PROTON_BIN" ]; then
+		echo "ERROR: Proton binary not executable: $PROTON_BIN" >&2
 		exit 1
 	fi
 }
@@ -631,39 +680,45 @@ run_launcher() {
 	cd "$GAME_DIR" || exit 1
 	LOG_FILE="$GAME_DIR/launcher.log"
 
-	%s "--restart"
-	sleep 1
-
-	%s "$LAUNCHER_EXE" "$@" > "$LOG_FILE" 2>> "$LOG_FILE"
-
-	%s "--end-session"
+	# Use Proton run (not plain wine) for self-updating launcher compatibility.
+	# wineboot --end-session kills the wineserver immediately, which
+	# breaks the launcher's self-update handoff.
+	"$PROTON_BIN" run "$LAUNCHER_EXE" "$@" > "$LOG_FILE" 2>> "$LOG_FILE"
 
 	return "$?"
+}
+
+apply_pending_update() {
+	local UPDATE_FILE="$GAME_DIR/AstarteLauncher.exe.update"
+	if [ -f "$UPDATE_FILE" ]; then
+		echo "[Bellum] Pending update detected, applying..."
+		cp -v "$UPDATE_FILE" "$LAUNCHER_EXE"
+		rm -v "$UPDATE_FILE"
+		echo "[Bellum] Update applied."
+	fi
 }
 
 main() {
 	load_launch_vars
 	validate_paths
 	run_launcher "$@"
-	exit $?
+	EXIT_CODE=$?
+	apply_pending_update
+	exit $EXIT_CODE
 }
 
 main "$@"
 `, wineprefix, wineprefix,
 		LauncherExePath(wineprefix),
-		protonpath,
-		wineBin, wineBin,
-		winebootBin, wineBin, winebootBin), nil
+		protonpath), nil
 }
 
 // GetProtonLauncherScript returns the proton wrapper script content (NVIDIA).
 func GetProtonLauncherScript(wineprefix, protonpath string) (string, error) {
-	wineserverBin := core.LookPath("wineserver")
-	if wineserverBin == "" {
-		return "", fmt.Errorf("wineserver not found")
-	}
-
 	protonBin := filepath.Join(protonpath, "proton")
+	if _, err := os.Stat(protonBin); err != nil {
+		return "", fmt.Errorf("proton binary not found at %s: %w", protonBin, err)
+	}
 
 	return fmt.Sprintf(`#!/bin/bash
 # Bellum Proton Launcher Wrapper
@@ -676,6 +731,7 @@ LAUNCH_VARS="%s/launch_vars.env"
 GAME_DIR="%s"
 LAUNCHER_EXE="%s"
 PROTON_BIN="%s"
+export PROTONPATH="$(dirname "$PROTON_BIN")"
 
 load_launch_vars() {
 	if [ -f "$LAUNCH_VARS" ]; then
@@ -695,7 +751,7 @@ validate_paths() {
 	fi
 
 	if [ ! -x "%s" ]; then
-		echo "ERROR: %s not found or not executable" >&2
+		echo "ERROR: Proton binary not found or not executable: %s" >&2
 		exit 1
 	fi
 }
@@ -704,19 +760,31 @@ run_launcher() {
 	cd "$GAME_DIR" || exit 1
 	LOG_FILE="$GAME_DIR/launcher.log"
 
-	%s "-k"
-	sleep 1
-
+	# Use Proton run for self-updating launcher compatibility.
+	# wineserver -k kills the wineserver immediately, which
+	# breaks the launcher's self-update handoff.
 	%s run "$LAUNCHER_EXE" "$@" > "$LOG_FILE" 2>> "$LOG_FILE"
 
 	return "$?"
+}
+
+apply_pending_update() {
+	local UPDATE_FILE="$GAME_DIR/AstarteLauncher.exe.update"
+	if [ -f "$UPDATE_FILE" ]; then
+		echo "[Bellum] Pending update detected, applying..."
+		cp -v "$UPDATE_FILE" "$LAUNCHER_EXE"
+		rm -v "$UPDATE_FILE"
+		echo "[Bellum] Update applied."
+	fi
 }
 
 main() {
 	load_launch_vars
 	validate_paths
 	run_launcher "$@"
-	exit $?
+	EXIT_CODE=$?
+	apply_pending_update
+	exit $EXIT_CODE
 }
 
 main "$@"
@@ -724,7 +792,7 @@ main "$@"
 		LauncherExePath(wineprefix),
 		protonBin,
 		protonBin, protonBin,
-		wineserverBin, protonBin), nil
+		protonBin), nil
 }
 
 // LaunchVarsEnvContent returns the content for the launch_vars.env file.
