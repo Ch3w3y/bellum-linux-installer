@@ -11,7 +11,7 @@ import (
 // PatchProtonSettings patches the Proton user_settings.py file with GPU-specific settings
 // settingsFile: path to the user_settings.py file (can be user_settings.sample.py)
 // isAMD: true if the GPU is AMD, false otherwise
-// isFSR41: true if using FSR 4.1 upgrade path, false for regular mode
+// isFSR41: true only when a capability-gated runtime FSR upgrade was selected
 func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 	if settingsFile == "" {
 		return fmt.Errorf("settings file path is empty")
@@ -68,10 +68,10 @@ func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 
 	// AMD-specific settings (FSR4 upgrade)
 	if isAMD {
-		// Runtime FSR replacement is opt-in; the explicit FSR 4.1 path is capability-gated.
+		// Runtime FSR replacement is opt-in and capability-gated.
 		if isFSR41 {
-			desired["PROTON_FSR4_UPGRADE"] = "4.1.0"
-			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "4.1.0"
+			desired["PROTON_FSR4_UPGRADE"] = "1"
+			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "1"
 		} else {
 			desired["PROTON_FSR4_UPGRADE"] = "0"
 			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "0"

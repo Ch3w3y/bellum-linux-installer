@@ -136,7 +136,7 @@ export WINEPREFIX=` + quoteShellEnv(wineprefix) + `
 export STEAM_COMPAT_DATA_PATH=` + quoteShellEnv(wineprefix) + `
 export STEAM_COMPAT_SHADER_PATH="shadercache"
 export STEAM_COMPAT_CLIENT_INSTALL_PATH=""
-export PROTON_ENABLE_NGX_UPDATER="1"
+export PROTON_ENABLE_NGX_UPDATER="0"
 export PROTON_ENABLE_NVAPI="1"
 export PROTON_VKD3D_HEAP="1"
 export PROTON_DXVK_D3D8="1"
@@ -149,12 +149,11 @@ export WINEFSYNC="1"
 export DXVK_NVAPI="1"
 export DXVK_ENABLE_NVAPI="1"
 export DXVK_NVAPIHACK="0"
-export WEBKIT_DISABLE_DMABUF_RENDERER="1"
 export WINE_LARGE_ADDRESS_AWARE="1"
 export CUDA_DISABLE_PERF_BOOST="1"
 `
 
-	if err := files.WriteFile(launchVars, []byte(content), 0644); err != nil {
+	if err := files.WriteFile(launchVars, []byte(content), 0600); err != nil {
 		logger.Error(fmt.Sprintf("Failed to create launch vars file: %v", err))
 		return err
 	}
@@ -172,13 +171,12 @@ func createLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, logger
 	launchVars := filepath.Join(wineprefix, "launch_vars.env")
 	logger.Info(fmt.Sprintf("Creating launch environment file: %s", launchVars))
 
-	// Determine FSR4 values based on mode
-	// Runtime FSR upgrades are opt-in; preserve the game's shipped upscaler by default.
+	// Runtime FSR replacement is opt-in; preserve the shipped upscaler by default.
 	fsr4Upgrade := "0"
 	fsr4Rdna3Upgrade := "0"
 	if isFSR41 {
-		fsr4Upgrade = "4.1.0"
-		fsr4Rdna3Upgrade = "4.1.0"
+		fsr4Upgrade = "1"
+		fsr4Rdna3Upgrade = "1"
 	}
 
 	content := `# Bellum Launch Variables (AMD)
@@ -196,7 +194,7 @@ export WINE_LARGE_ADDRESS_AWARE="1"
 export DXIL_SPIRV_CONFIG=wmma_rdna3_workaround
 `
 
-	if err := files.WriteFile(launchVars, []byte(content), 0644); err != nil {
+	if err := files.WriteFile(launchVars, []byte(content), 0600); err != nil {
 		logger.Error(fmt.Sprintf("Failed to create launch vars file: %v", err))
 		return err
 	}

@@ -153,6 +153,12 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 
 	// Initialize WINEPREFIX with Proton base
 	logger.Info("Initializing WINEPREFIX with Proton base")
+	if err := os.MkdirAll(config.WINEPREFIX, 0700); err != nil {
+		return fmt.Errorf("create private Wine prefix: %w", err)
+	}
+	if err := os.Chmod(config.WINEPREFIX, 0700); err != nil {
+		return fmt.Errorf("secure Wine prefix: %w", err)
+	}
 	logFile := filepath.Join(config.Workdir, "logs", "installer.log")
 	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{"umu-run", cfg.DefaultVersions.Binaries.Msidb}, logger, logFile); err != nil {
 		logger.Warn("umu-run /usr/bin/msidb failed")
@@ -195,6 +201,9 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	proton := filepath.Join(config.ProtonPath, "proton")
 	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{proton, "run", launcherInstaller}, logger, logFile); err != nil {
 		logger.Error("Launcher installation failed.")
+		return err
+	}
+	if err := checkWebView2Runtime(config.WINEPREFIX); err != nil {
 		return err
 	}
 
@@ -242,6 +251,24 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	boundaries.MutatePrefix(core.RunModeSilent, []string{"wineboot", "--end-session"}, logger, logFile)
 
 	return nil
+}
+
+// checkWebView2Runtime rejects a bootstrapper-only installation. The launcher
+// needs the installed runtime to keep its authentication UI alive.
+func checkWebView2Runtime(prefix string) error {
+	for _, programFiles := range []string{"Program Files (x86)", "Program Files"} {
+		pattern := filepath.Join(prefix, "drive_c", programFiles, "Microsoft", "EdgeWebView", "Application", "*", "msedgewebview2.exe")
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return err
+		}
+		for _, match := range matches {
+			if info, err := os.Stat(match); err == nil && info.Mode().IsRegular() {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("WebView2 runtime missing from Wine prefix %q: install msedgewebview2.exe before launching Bellum", prefix)
 }
 
 // GenerateLauncher generates the launcher wrappers and desktop files

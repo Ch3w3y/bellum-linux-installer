@@ -184,7 +184,7 @@ func ValidateWINEPREFIXWithGUI(logger *core.Logger) (string, error) {
 	// Create the Bellum directory if it doesn't exist
 	if !isDir(wineprefixPath) {
 		logger.Info(fmt.Sprintf("Creating Bellum directory at %s...", wineprefixPath))
-		if err := os.MkdirAll(wineprefixPath, 0755); err != nil {
+		if err := os.MkdirAll(wineprefixPath, 0700); err != nil {
 			return "", fmt.Errorf("failed to create Bellum directory %s: %w", wineprefixPath, err)
 		}
 		logger.Info("[OK] Bellum directory created successfully")

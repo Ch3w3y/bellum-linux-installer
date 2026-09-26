@@ -63,8 +63,21 @@ set +a
 [ -d "${PROTON_EAC_RUNTIME:-}" ] || { echo "Proton EasyAntiCheat Runtime is missing: ${PROTON_EAC_RUNTIME:-unset}" >&2; exit 1; }
 [ -x "$PROTONPATH/proton" ] || { echo "Pinned Proton is missing: $PROTONPATH" >&2; exit 1; }
 command -v umu-run >/dev/null || { echo "umu-run is required" >&2; exit 1; }
+command -v flock >/dev/null || { echo "flock is required" >&2; exit 1; }
+umask 077
+chmod 0700 "$WINEPREFIX"
+chmod 0600 "$LAUNCH_VARS"
+exec 9>"$WINEPREFIX/.bellum-launch.lock"
+if ! flock -n 9; then
+  echo "Bellum is already running in $WINEPREFIX" >&2
+  exit 0
+fi
+touch "$WINEPREFIX/launcher.log"
+chmod 0600 "$WINEPREFIX/launcher.log"
 export GAMEID="${GAMEID:-nonsteam}"
 export UMU_LOG=1
+# Keep the container alive while the launcher and game share the Wine session.
+export PROTON_VERB=waitforexitandrun
 exec umu-run "$LAUNCHER_EXE" "$@" >> "$WINEPREFIX/launcher.log" 2>&1
 `, shellQuote(filepath.Join(config.Wineprefix, "launch_vars.env")), shellQuote(launcherExe))
 }
