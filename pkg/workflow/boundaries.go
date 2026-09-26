@@ -37,6 +37,9 @@ type WorkflowBoundaries struct {
 	AcquirePackage   func(string, *core.Logger) (*packages.LauncherInstallerState, error)
 	MutatePrefix     func(core.RunMode, []string, *core.Logger, string) error
 	GenerateLauncher func(launchers.LauncherConfig) error
+	VerifyFile       func(string, string) error
+	ExtractPackage   func(string, string) (string, error)
+	CleanupPackage   func(string)
 }
 
 type systemCommands struct{}
@@ -115,6 +118,9 @@ var DefaultBoundaries = WorkflowBoundaries{
 	AcquirePackage:   packages.DownloadLauncherInstaller,
 	MutatePrefix:     core.RunCommand,
 	GenerateLauncher: launchers.GenerateLauncher,
+	VerifyFile:       packages.VerifySHA256,
+	ExtractPackage:   packages.ExtractPackage,
+	CleanupPackage:   packages.CleanupTempDir,
 }
 
 // DiscoverExecutable is a small host-discovery seam shared by prechecks.

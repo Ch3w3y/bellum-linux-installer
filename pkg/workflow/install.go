@@ -26,6 +26,27 @@ type InstallConfig struct {
 
 // InstallDXVK installs DXVK for AMD GPUs
 func InstallDXVK(gpuType string, workdir string, logger *core.Logger) error {
+	return InstallDXVKWithBoundaries(gpuType, workdir, os.Getenv("WINEPREFIX"), logger, DefaultBoundaries)
+}
+
+// InstallDXVKWithBoundaries makes archive handling, host commands, and prefix
+// file writes replaceable in tests and by callers embedding the workflow.
+func InstallDXVKWithBoundaries(gpuType, workdir, wineprefix string, logger *core.Logger, boundaries WorkflowBoundaries) error {
+	if boundaries.Files == nil {
+		boundaries.Files = DefaultBoundaries.Files
+	}
+	if boundaries.Commands == nil {
+		boundaries.Commands = DefaultBoundaries.Commands
+	}
+	if boundaries.VerifyFile == nil {
+		boundaries.VerifyFile = DefaultBoundaries.VerifyFile
+	}
+	if boundaries.ExtractPackage == nil {
+		boundaries.ExtractPackage = DefaultBoundaries.ExtractPackage
+	}
+	if boundaries.CleanupPackage == nil {
+		boundaries.CleanupPackage = DefaultBoundaries.CleanupPackage
+	}
 	// Only install DXVK for AMD GPUs
 	if !strings.Contains(strings.ToLower(gpuType), "amd") && !strings.Contains(strings.ToLower(gpuType), "radeon") {
 		logger.Info(fmt.Sprintf("Skipping DXVK installation for non-AMD GPU: %s", gpuType))
@@ -36,15 +57,15 @@ func InstallDXVK(gpuType string, workdir string, logger *core.Logger) error {
 	var tmpDir string
 
 	logger.Info("Installing DXVK...")
-	if _, err := os.Stat(archive); os.IsNotExist(err) {
+	if _, err := boundaries.Files.Stat(archive); os.IsNotExist(err) {
 		logger.Error(fmt.Sprintf("DXVK archive not found: %s", archive))
 		return fmt.Errorf("DXVK archive not found: %s", archive)
 	}
-	if err := packages.VerifySHA256(archive, packages.DXVKSHA256); err != nil {
+	if err := boundaries.VerifyFile(archive, packages.DXVKSHA256); err != nil {
 		return err
 	}
 
-	tmpDir, err := packages.ExtractPackage(archive, "dxvk")
+	tmpDir, err := boundaries.ExtractPackage(archive, "dxvk")
 	if err != nil {
 		logger.Error("Failed to extract DXVK archive")
 		return err
@@ -52,12 +73,12 @@ func InstallDXVK(gpuType string, workdir string, logger *core.Logger) error {
 
 	// Find the dxvk_setup.sh script
 	installDir := tmpDir
-	if _, err := os.Stat(filepath.Join(tmpDir, "dxvk_setup.sh")); os.IsNotExist(err) {
+	if _, err := boundaries.Files.Stat(filepath.Join(tmpDir, "dxvk_setup.sh")); os.IsNotExist(err) {
 		// Try to find subdirectory
-		entries, err := os.ReadDir(tmpDir)
+		entries, err := boundaries.Files.ReadDir(tmpDir)
 		if err != nil || len(entries) == 0 {
 			logger.Error("DXVK setup script not found after extraction.")
-			packages.CleanupTempDir(archive)
+			boundaries.CleanupPackage(archive)
 			return fmt.Errorf("DXVK setup script not found")
 		}
 		for _, entry := range entries {
@@ -68,36 +89,39 @@ func InstallDXVK(gpuType string, workdir string, logger *core.Logger) error {
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(installDir, "dxvk_setup.sh")); os.IsNotExist(err) {
+	if _, err := boundaries.Files.Stat(filepath.Join(installDir, "dxvk_setup.sh")); os.IsNotExist(err) {
 		logger.Error("DXVK setup script not found after extraction.")
-		packages.CleanupTempDir(archive)
+		boundaries.CleanupPackage(archive)
 		return fmt.Errorf("DXVK setup script not found")
 	}
 
 	// Run dxvk_setup.sh install
 	logFile := filepath.Join(workdir, "logs", "installer.log")
-	if err := core.RunCommand(core.RunModeSilent, []string{filepath.Join(installDir, "dxvk_setup.sh"), "install"}, logger, logFile); err != nil {
+	if err := boundaries.Commands.Run(core.RunModeSilent, []string{filepath.Join(installDir, "dxvk_setup.sh"), "install"}, logger, logFile); err != nil {
 		logger.Error("DXVK installation failed.")
-		packages.CleanupTempDir(archive)
+		boundaries.CleanupPackage(archive)
 		return err
 	}
 
 	// Copy dxvk.conf to WINEPREFIX
 	dxvkConf := filepath.Join(installDir, "dxvk.conf")
-	wineprefix := os.Getenv("WINEPREFIX")
 	if wineprefix == "" {
 		logger.Error("WINEPREFIX not set")
-		packages.CleanupTempDir(archive)
+		boundaries.CleanupPackage(archive)
 		return fmt.Errorf("WINEPREFIX not set")
 	}
 
-	if err := copyFile(dxvkConf, filepath.Join(wineprefix, "dxvk.conf")); err != nil {
+	content, err := boundaries.Files.ReadFile(dxvkConf)
+	if err == nil {
+		err = boundaries.Files.WriteFile(filepath.Join(wineprefix, "dxvk.conf"), content, 0644)
+	}
+	if err != nil {
 		logger.Error("Failed to copy dxvk.conf.")
-		packages.CleanupTempDir(archive)
+		boundaries.CleanupPackage(archive)
 		return err
 	}
 
-	packages.CleanupTempDir(archive)
+	boundaries.CleanupPackage(archive)
 	logger.Info("[OK] DXVK installed")
 	return nil
 }
@@ -219,7 +243,7 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 
 	// Install DXVK (AMD only)
 	if config.GPUCapabilities.Vendor == core.GPUAMD {
-		if err := InstallDXVK("AMD", config.Workdir, logger); err != nil {
+		if err := InstallDXVKWithBoundaries("AMD", config.Workdir, config.WINEPREFIX, logger, boundaries); err != nil {
 			return err
 		}
 	}

@@ -229,7 +229,7 @@ func checkRequiredWineBinaries(files FileStore, logger *core.Logger) error {
 
 // CheckWineVersion verifies Wine version matches requirements
 func CheckWineVersion(logger *core.Logger, force bool) error {
-	installedWine := getWineVersion(logger)
+	installedWine := getWineVersionWith(DefaultBoundaries.Commands, logger)
 	requiredWine := strings.TrimPrefix(config.DefaultVersions.WineVer, "wine-")
 
 	if installedWine == "" {
@@ -350,7 +350,7 @@ func CheckProton(packageRoot string, gpuType string, isFSR41 bool, logger *core.
 	}
 	isAMD := strings.Contains(strings.ToLower(gpuType), "amd") || strings.Contains(strings.ToLower(gpuType), "radeon")
 
-	if core.LookPath("wget") == "" {
+	if DiscoverExecutable("wget", DefaultBoundaries.Commands) == "" {
 		logger.Error("Proton is missing and wget is not available to download it.")
 		return "", "", fmt.Errorf("proton missing and wget not available")
 	}
@@ -498,14 +498,18 @@ func isWritable(path string) bool {
 }
 
 func isSSD(path string, logger *core.Logger) bool {
+	return isSSDWith(path, logger, DefaultBoundaries.Commands)
+}
+
+func isSSDWith(path string, logger *core.Logger, commands CommandRunner) bool {
 	// Try lsblk first
-	if output, err := core.RunCommandWithOutput([]string{"lsblk", "-no", "rota", filepath.Dir(path)}); err == nil {
+	if output, err := commands.Output([]string{"lsblk", "-no", "rota", filepath.Dir(path)}); err == nil {
 		rotational := strings.TrimSpace(output)
 		return rotational == "0"
 	}
 
 	// Fallback to checking device name
-	device, err := core.RunCommandWithOutput([]string{"df", "-P", path})
+	device, err := commands.Output([]string{"df", "-P", path})
 	if err != nil {
 		return false
 	}
@@ -524,13 +528,17 @@ func isSSD(path string, logger *core.Logger) bool {
 }
 
 func getWineVersion(logger *core.Logger) string {
+	return getWineVersionWith(DefaultBoundaries.Commands, logger)
+}
+
+func getWineVersionWith(commands CommandRunner, logger *core.Logger) string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
 	defaultPfx := filepath.Join(homeDir, ".wine")
 	os.Setenv("WINEPREFIX", defaultPfx)
-	output, err := core.RunCommandWithOutput([]string{"wine", "--version"})
+	output, err := commands.Output([]string{"wine", "--version"})
 	if err != nil {
 		return ""
 	}
