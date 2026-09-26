@@ -32,10 +32,10 @@ var DefaultVersions = Versions{
 	ProtonBaseURL: "https://github.com/CachyOS/proton-cachyos/releases/download",
 	// SHA-256 from the official CachyOS GitHub release asset metadata.
 	ProtonSHA256: "62ff4b2750180723cc00538608fe687e21d1d91a31ef64ce1a7c9f46c3db310b",
-	// Steam app 1826330, depot 1826331, public manifest 3310269496439035229
-	// (build 10437216). Anonymous SteamCMD cannot access this depot; the
-	// runtime hash must be measured from an authenticated Valve installation.
-	EACRuntimeSHA256: "",
+	// Measured from the entitled Steam client install of app 1826330,
+	// depot 1826331, manifest 3310269496439035229 (build 10437216).
+	// Digest covers the six paths in packages.eacRuntimeFiles.
+	EACRuntimeSHA256: "4d18c3a5b896c757be9e25bf1004b81568bc4d4e56ddd8d1a2a634eebf12d1f9",
 	// Official Astarte updater download inspected on 2026-09-26.
 	LauncherSHA256: "2c2d17b724bee70883eae782d2ff9ead2533d2d339fd4ee1b9326c60bb3f064a",
 	LauncherSigner: "ASTARTE INDUSTRIES INC.",
