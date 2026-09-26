@@ -66,4 +66,7 @@ jobs:
           cache: true
 
       - name: Build binaries (compile-only, no installer side effects)
-        run: CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath -o /tmp/bellum-ci/${{ matrix.arch }} ./bellum-installer ./bellum-uninstaller
+        run: |
+          mkdir -p /tmp/bellum-ci/${{ matrix.arch }}
+          CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath \
+            -o /tmp/bellum-ci/${{ matrix.arch }} ./bellum-installer ./bellum-uninstaller
