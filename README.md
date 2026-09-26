@@ -34,6 +34,7 @@ uses umu-launcher, Proton, and the Proton EasyAntiCheat Runtime for every GPU.
 Set `PROTON_EAC_RUNTIME` to the installed runtime directory if it is outside
 Steam's default location. The launcher logs to `launcher.log` in the prefix;
 check that log for EAC initialization when validating Linux mode.
+See [the EAC QA checklist](docs/eac-qa.md) for the evidence to record.
 
 
 2. Select the directory where you want to install Bellum and confirm the install summary. A WINEPREFIX named `Bellum` will be created in the selected directory.

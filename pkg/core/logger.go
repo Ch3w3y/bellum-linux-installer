@@ -3,7 +3,9 @@ package core
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // ANSI color codes
@@ -31,28 +33,40 @@ type Logger struct {
 
 // NewLogger creates a new Logger instance
 func NewLogger(logPath string) (*Logger, error) {
-	dir := ""
-	if idx := lastSlash(logPath); idx > 0 {
-		dir = logPath[:idx]
-	}
-
-	if dir != "" {
-		if err := os.MkdirAll(dir, 0755); err != nil {
-			return nil, fmt.Errorf("failed to create log directory: %w", err)
-		}
-	}
-
 	var logFile *os.File
 	var err error
 
 	if logPath != "" {
-		logFile, err = os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		logFile, err = OpenLogFile(logPath)
 		if err != nil {
 			return nil, fmt.Errorf("failed to open log file: %w", err)
 		}
 	}
 
 	return &Logger{logFile: logFile}, nil
+}
+
+// OpenLogFile confines logs to a private directory and refuses symlink files.
+func OpenLogFile(logPath string) (*os.File, error) {
+	dir := filepath.Dir(logPath)
+	if err := os.MkdirAll(dir, 0700); err != nil {
+		return nil, err
+	}
+	info, err := os.Lstat(dir)
+	if err != nil {
+		return nil, err
+	}
+	if !info.IsDir() || info.Mode()&os.ModeSymlink != 0 {
+		return nil, fmt.Errorf("unsafe log directory: %s", dir)
+	}
+	if err := os.Chmod(dir, 0700); err != nil {
+		return nil, err
+	}
+	fd, err := syscall.Open(logPath, syscall.O_APPEND|syscall.O_CREAT|syscall.O_WRONLY|syscall.O_NOFOLLOW, 0600)
+	if err != nil {
+		return nil, err
+	}
+	return os.NewFile(uintptr(fd), logPath), nil
 }
 
 // Close closes the log file

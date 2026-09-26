@@ -53,3 +53,18 @@ func AskBool(prompt string) bool {
 	fmt.Println("Please enter 'y' or 'Y' to proceed, 'n' or 'N' to cancel, or press Enter to proceed (default: yes)")
 	return AskBool(prompt)
 }
+
+// AskBoolDefaultNo requires an explicit yes for destructive actions.
+func AskBoolDefaultNo(prompt string) bool {
+	fmt.Print(prompt)
+	input, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	if err != nil {
+		return false
+	}
+	switch strings.ToLower(strings.TrimSpace(input)) {
+	case "y", "yes":
+		return true
+	default:
+		return false
+	}
+}

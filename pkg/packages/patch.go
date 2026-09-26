@@ -58,7 +58,8 @@ func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 
 	// Unified settings for all GPUs using proton-cachyos
 	desired["PROTON_ENABLE_NVAPI"] = "1"
-	desired["PROTON_DLSS_UPGRADE"] = "1"
+	// Runtime DLSS replacement is opt-in; keep native game libraries by default.
+	desired["PROTON_DLSS_UPGRADE"] = "0"
 	desired["MALLOC_ARENA_MAX"] = "1"
 	desired["PROTON_VKD3D_HEAP"] = "1"
 	desired["VKD3D_CONFIG"] = "descriptor_heap"
@@ -67,13 +68,13 @@ func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 
 	// AMD-specific settings (FSR4 upgrade)
 	if isAMD {
-		// Default mode uses "1", FSR4.1 mode uses "4.1.0"
+		// Runtime FSR replacement is opt-in; the explicit FSR 4.1 path is capability-gated.
 		if isFSR41 {
 			desired["PROTON_FSR4_UPGRADE"] = "4.1.0"
 			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "4.1.0"
 		} else {
-			desired["PROTON_FSR4_UPGRADE"] = "1"
-			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "1"
+			desired["PROTON_FSR4_UPGRADE"] = "0"
+			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "0"
 		}
 	}
 
