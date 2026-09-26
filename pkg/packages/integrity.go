@@ -29,7 +29,6 @@ func VerifySHA256(path, expected string) error {
 }
 
 const (
-	DXVKSHA256       = "6ecbff8ac1ea6c61c44a549e993d4ab735efdd006496b3d5b4347711adeae6fd"
 	WinetricksSHA256 = "ca1d0a5f018412c6d92ed6c615aba27416c8ec00417831bf8c0a85d8b03a14a2"
 	IconSHA256       = "39646334a10452a17537b86b72c480d5a3cdd1a5af5585d8bc86122e411d00df"
 )

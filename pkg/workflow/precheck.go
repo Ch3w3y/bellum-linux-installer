@@ -200,6 +200,10 @@ func CheckRequiredWineBinaries(logger *core.Logger) error {
 }
 
 func checkRequiredWineBinaries(files FileStore, logger *core.Logger) error {
+	return checkRequiredWineBinariesWith(files, DefaultBoundaries.Commands, logger)
+}
+
+func checkRequiredWineBinariesWith(files FileStore, commands CommandRunner, logger *core.Logger) error {
 	requiredBinaries := []string{
 		config.DefaultVersions.Binaries.Wine,
 		config.DefaultVersions.Binaries.Wineboot,
@@ -210,17 +214,17 @@ func checkRequiredWineBinaries(files FileStore, logger *core.Logger) error {
 
 	var missing []string
 	for _, binary := range requiredBinaries {
-		if _, err := files.Stat(binary); os.IsNotExist(err) {
+		if DiscoverExecutable(binary, commands) == "" {
 			missing = append(missing, binary)
 		}
 	}
 
 	if len(missing) > 0 {
-		logger.Error("Required Wine binaries not found:")
-		for _, binary := range missing {
-			logger.Error(fmt.Sprintf("  - %s", binary))
-		}
-		return fmt.Errorf("missing Wine binaries")
+		host := DetectHost(files, commands)
+		guidance := MissingDependencyGuidance(host, missing)
+		logger.Error("Required Wine tools not found in PATH: " + strings.Join(missing, ", "))
+		logger.Error(guidance)
+		return fmt.Errorf("missing Wine binaries: %s", guidance)
 	}
 
 	logger.Info("[OK] All required Wine binaries found")
@@ -297,6 +301,13 @@ func checkLauncherInstaller(launcherInstallerPath string, logger *core.Logger, f
 
 // CheckWinetricks checks if winetricks is available
 func CheckWinetricks(workdir string, logger *core.Logger) error {
+	if DetectHost(DefaultBoundaries.Files, DefaultBoundaries.Commands).Immutable {
+		if DiscoverExecutable("winetricks", DefaultBoundaries.Commands) == "" {
+			message := MissingDependencyGuidance(DetectHost(DefaultBoundaries.Files, DefaultBoundaries.Commands), []string{"winetricks"})
+			logger.Error(message)
+			return fmt.Errorf("winetricks unavailable on immutable host: %s", message)
+		}
+	}
 	logger.Info("Installing pinned vendored winetricks without privilege...")
 
 	winetricksArchive := filepath.Join(workdir, "packages", "winetricks-"+config.DefaultVersions.WinetricksVer+".tar.gz")

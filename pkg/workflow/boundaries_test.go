@@ -23,6 +23,56 @@ func TestDiscoverExecutableUsesInjectedHost(t *testing.T) {
 	}
 }
 
+type releaseFiles struct {
+	fakeFileStore
+	release string
+}
+
+func (f releaseFiles) ReadFile(string) ([]byte, error) { return []byte(f.release), nil }
+
+type namedCommands struct{ available map[string]string }
+
+func (f namedCommands) Run(_ core.RunMode, _ []string, _ *core.Logger, _ string) error { return nil }
+func (f namedCommands) Output(_ []string) (string, error)                              { return "", nil }
+func (f namedCommands) LookPath(n string) string {
+	if n == "" {
+		return ""
+	}
+	return f.available[n]
+}
+
+func TestHostDiscoveryAndDependencyGuidance(t *testing.T) {
+	tests := []struct {
+		name, release, manager, family, command string
+		immutable                               bool
+	}{
+		{"arch", "ID=arch\n", "pacman", "arch", "pacman -S", false},
+		{"fedora", "ID=fedora\n", "dnf", "fedora", "dnf install", false},
+		{"ubuntu", "ID=ubuntu\n", "apt-get", "debian", "apt install", false},
+		{"opensuse", "ID=opensuse-tumbleweed\n", "zypper", "opensuse", "zypper install", false},
+		{"steamos", "ID=steamos\n", "pacman", "unknown", "immutable", true},
+		{"bazzite", "ID=bazzite\n", "", "unknown", "immutable", true},
+		{"unknown", "ID=void\n", "", "unknown", "unknown", false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			files := releaseFiles{release: tt.release}
+			commands := namedCommands{available: map[string]string{tt.manager: "/usr/bin/" + tt.manager}}
+			host := DetectHost(files, commands)
+			if host.PackageFamily() != tt.family || host.Immutable != tt.immutable {
+				t.Fatalf("host = %#v family=%s", host, host.PackageFamily())
+			}
+			if tt.manager != "" && host.PackageManager != tt.manager {
+				t.Fatalf("manager = %q", host.PackageManager)
+			}
+			msg := MissingDependencyGuidance(host, []string{"wine", "umu-run"})
+			if !strings.Contains(msg, tt.command) || !strings.Contains(msg, "wine") {
+				t.Fatalf("guidance: %s", msg)
+			}
+		})
+	}
+}
+
 func TestUMURunPrecheckUsesInjectedHost(t *testing.T) {
 	logger, err := core.NewLogger("")
 	if err != nil {
@@ -127,5 +177,26 @@ func TestFileBoundaryRejectsWritesUnderGameInstallTree(t *testing.T) {
 	}
 	if err := guard.WriteFile("/prefix/launch_vars.env", []byte("allowed"), 0644); err != nil {
 		t.Fatalf("prefix write should remain allowed: %v", err)
+	}
+}
+
+func TestDependencyGuidanceIncludesGlxinfoPackage(t *testing.T) {
+	cases := map[string]string{
+		"arch":     "mesa-demos",
+		"fedora":   "glx-utils",
+		"debian":   "mesa-utils",
+		"opensuse": "Mesa-demo-x",
+	}
+	for release, wantPkg := range map[string]string{
+		"ID=arch\n":                cases["arch"],
+		"ID=fedora\n":              cases["fedora"],
+		"ID=ubuntu\n":              cases["debian"],
+		"ID=opensuse-tumbleweed\n": cases["opensuse"],
+	} {
+		host := DetectHost(releaseFiles{release: release}, namedCommands{})
+		msg := MissingDependencyGuidance(host, []string{"glxinfo"})
+		if !strings.Contains(msg, wantPkg) {
+			t.Fatalf("%s guidance missing %s: %s", host.PackageFamily(), wantPkg, msg)
+		}
 	}
 }

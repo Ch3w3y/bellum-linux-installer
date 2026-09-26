@@ -24,6 +24,9 @@ func TestValidateBellumPrefixRequiresMarkersAndRejectsUnsafePaths(t *testing.T) 
 	if err := os.WriteFile(filepath.Join(prefix, "system.reg"), []byte("WINE REGISTRY Version 2"), 0644); err != nil {
 		t.Fatal(err)
 	}
+	if err := writeManifest(prefix, DefaultBoundaries.Files); err != nil {
+		t.Fatal(err)
+	}
 	if err := validateBellumPrefix(prefix); err != nil {
 		t.Fatal(err)
 	}

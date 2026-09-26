@@ -17,6 +17,7 @@ func main() {
 
 	// Parse command line arguments
 	wineprefix := flag.String("wineprefix", "", "Path to WINEPREFIX directory (optional if WINEPREFIX env var is set)")
+	dryRun := flag.Bool("dry-run", false, "Show the selected Bellum prefix that would be removed")
 	help := flag.Bool("help", false, "Show help message")
 
 	flag.Parse()
@@ -28,6 +29,7 @@ func main() {
 		fmt.Println()
 		fmt.Println("Options:")
 		fmt.Println("  --wineprefix PATH  Path to WINEPREFIX directory (optional if WINEPREFIX env var is set)")
+		fmt.Println("  --dry-run          Show removal target without changing files")
 		fmt.Println("  --help             Show this help message")
 		fmt.Println()
 		fmt.Println("Examples:")
@@ -90,6 +92,7 @@ func main() {
 	uninstallConfig := workflow.UninstallConfig{
 		WINEPREFIX: *wineprefix,
 		GPUType:    gpuType,
+		DryRun:     *dryRun,
 	}
 
 	// Run uninstallation

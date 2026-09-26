@@ -1,6 +1,10 @@
 package core
 
 import (
+	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 )
 
@@ -41,14 +45,161 @@ func DetectGPUCapabilitiesWith(readRenderer func() (string, error)) (GPUCapabili
 	return ClassifyGPUCapabilities(renderer), nil
 }
 
+// glxinfoMissingError reports whether the renderer probe failed because the
+// glxinfo binary itself is absent (exec.LookPath "executable file not found").
+func glxinfoMissingError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if _, ok := err.(*exec.Error); ok {
+		return true
+	}
+	return strings.Contains(err.Error(), "executable file not found in $PATH")
+}
+
+// readRendererWithFallback is the production renderer acquisition chain:
+// glxinfo first (rich renderer strings), then lspci, then DRM sysfs vendor
+// IDs. It only errors when every probe fails, so prechecks degrade
+// gracefully on hosts without glxinfo instead of hard-failing.
+func readRendererWithFallback() (string, error) {
+	return readRendererWithFallbackWith(
+		func() (string, error) {
+			output, err := RunCommandWithOutput([]string{"glxinfo", "-B"})
+			if err != nil {
+				return "", err
+			}
+			return parseRenderer(output), nil
+		},
+		readRendererFromLspci,
+		detectGPUCapabilitiesFromDRM,
+	)
+}
+
+// readRendererWithFallbackWith makes each probe injectable for tests.
+// glxinfo probe errors that are not "binary missing" abort the chain.
+func readRendererWithFallbackWith(
+	runGlxinfo func() (string, error),
+	runLspci func() (string, bool),
+	runDRM func() (GPUCapabilities, error),
+) (string, error) {
+	renderer, err := runGlxinfo()
+	if err == nil {
+		return renderer, nil
+	}
+	if !glxinfoMissingError(err) {
+		return "", err
+	}
+	if lspciRenderer, ok := runLspci(); ok {
+		return lspciRenderer, nil
+	}
+	if caps, drmErr := runDRM(); drmErr == nil {
+		return caps.Renderer, nil
+	}
+	// Surface the original, most actionable lookup failure.
+	return "", err
+}
+
 func DetectGPUCapabilities() (GPUCapabilities, error) {
-	return DetectGPUCapabilitiesWith(func() (string, error) {
-		output, err := RunCommandWithOutput([]string{"glxinfo", "-B"})
-		if err != nil {
-			return "", err
+	return DetectGPUCapabilitiesWith(readRendererWithFallback)
+}
+
+// detectGPUCapabilitiesFromDRM identifies the GPU vendor directly from sysfs
+// DRM card entries when no GL renderer source is available. It matches the
+// known PCI vendor IDs of NVIDIA, AMD/ATI, and Intel adapters.
+func detectGPUCapabilitiesFromDRM() (GPUCapabilities, error) {
+	entries, err := os.ReadDir("/sys/class/drm")
+	if err != nil {
+		return GPUCapabilities{}, err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		// Top-level cardN nodes only; cardN-DP-1 style connectors are skipped.
+		if !strings.HasPrefix(name, "card") || strings.Contains(name, "-") {
+			continue
 		}
-		return parseRenderer(output), nil
-	})
+		vendorID, readErr := os.ReadFile(filepath.Join("/sys/class/drm", name, "device", "vendor"))
+		if readErr != nil {
+			continue
+		}
+		vid := strings.TrimSpace(string(vendorID))
+		var vendor GPUVendor
+		switch vid {
+		case "0x10de":
+			vendor = GPUNVIDIA
+		case "0x1002", "0x1022":
+			vendor = GPUAMD
+		case "0x8086":
+			vendor = GPUIntel
+		default:
+			continue
+		}
+		return GPUCapabilities{Vendor: vendor, Renderer: fmt.Sprintf("DRM device %s (vendor %s, no GL renderer)", name, vid)}, nil
+	}
+	return GPUCapabilities{}, fmt.Errorf("no supported DRM GPU device found")
+}
+
+// readRendererFromLspci runs lspci when available and maps the first
+// VGA/Display/3D device to a renderer string. ok=false when lspci is absent,
+// fails, or no GPU-class device exists.
+func readRendererFromLspci() (string, bool) {
+	if LookPath("lspci") == "" {
+		return "", false
+	}
+	output, err := RunCommandWithOutput([]string{"lspci", "-mm"})
+	if err != nil {
+		return "", false
+	}
+	return readRendererFromLspciOutput(output)
+}
+
+func readRendererFromLspciOutput(output string) (string, bool) {
+	for _, line := range strings.Split(output, "\n") {
+		if renderer, ok := parseLspciRendererLine(line); ok {
+			return renderer, true
+		}
+	}
+	return "", false
+}
+
+// parseLspciRendererLine inspects one `lspci -mm` line. The bracketed hex
+// class code (e.g. [0300]) is what actually marks a GPU-class device, so the
+// check survives localized class labels like "Affichage" or "3D-Controller".
+func parseLspciRendererLine(line string) (string, bool) {
+	classCode := lspciClassCode(line)
+	if classCode == "" || (classCode != "0300" && classCode != "0302" && classCode != "0380") {
+		return "", false
+	}
+	lower := strings.ToLower(line)
+	switch {
+	case strings.Contains(lower, "nvidia"):
+		return "NVIDIA " + strings.TrimSpace(line), true
+	case strings.Contains(lower, "amd") || strings.Contains(lower, "ati ") || strings.Contains(lower, "radeon") || strings.Contains(lower, "advanced micro devices"):
+		return "AMD " + strings.TrimSpace(line), true
+	case strings.Contains(lower, "intel"):
+		return "Intel " + strings.TrimSpace(line), true
+	}
+	return "", false
+}
+
+// lspciClassCode extracts the bracketed hex class code from an lspci -mm
+// line, e.g. `[0300]` -> `0300`. Returns "" when absent or malformed.
+func lspciClassCode(line string) string {
+	open := strings.Index(line, "[0")
+	if open < 0 {
+		return ""
+	}
+	rest := line[open+1:]
+	end := strings.Index(rest, "]")
+	if end != 4 {
+		return ""
+	}
+	code := rest[:end]
+	for _, ch := range code {
+		if !strings.ContainsRune("0123456789abcdef", ch) {
+			return ""
+		}
+	}
+	return code
 }
 
 // DetectGPU preserves the historical vendor-string API for cleanup code.
