@@ -6,3 +6,7 @@ AstarteLauncher.sh
 packages/.tmp/
 **/__pycache__/
 *.pyc
+dist/
+installer
+uninstaller
+*.tar.gz

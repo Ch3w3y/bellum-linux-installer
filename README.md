@@ -28,15 +28,12 @@ cd bellum-installer-linux-amd64-v2.0.0
 ```
 
 
-**Optional FSR 4.1 for AMD Users:**
-
-By default, this will install the current FSR 4.0.0 level.
-
-If you want the leaked FSR 4.1.0 level, use the **--fsr41** flag 
-
-```bash
-./installer --fsr41
-```
+Runtime FSR and DLSS upgrades are disabled by default; the game uses its shipped
+upscalers. No DLLs are copied into the game directory. The generated launcher
+uses umu-launcher, Proton, and the Proton EasyAntiCheat Runtime for every GPU.
+Set `PROTON_EAC_RUNTIME` to the installed runtime directory if it is outside
+Steam's default location. The launcher logs to `launcher.log` in the prefix;
+check that log for EAC initialization when validating Linux mode.
 
 
 2. Select the directory where you want to install Bellum and confirm the install summary. A WINEPREFIX named `Bellum` will be created in the selected directory.
@@ -94,8 +91,27 @@ The release tarball (`bellum-installer-linux-amd64-v2.0.0.tar.gz`) contains:
 bellum-installer-linux-amd64-v2.0.0.tar.gz
 ├── installer          # Installer binary
 ├── uninstaller        # Uninstaller binary
+├── MANIFEST.md        # Versioned manifest (per-file sha256 + sizes)
+├── SHA256SUMS         # Checksums for all staged files
 └── packages/          # All bundled packages
 ```
+
+## Building and verifying releases
+
+CI runs gofmt/go vet/go test, module-pinning checks, and compile-only Linux
+builds (amd64/arm64) on every PR — the installer itself is never executed by
+CI. Release archives are reproducible and ship a versioned `MANIFEST.md` and
+`SHA256SUMS`.
+
+```bash
+make check                       # same checks CI runs
+make release VERSION=2.1.0       # reproducible tarball + MANIFEST + SHA256SUMS
+make verify-release              # verify staged checksums
+```
+
+See [RELEASE.md](RELEASE.md) for the full release procedure, the release gate
+(QA + EAC + green CI + reproducibility + provenance checks before any RC tag),
+and the binary/provenance policy.
 
 ##  ** ONLY Nvidia Blackwell 5000 Series GPUs **
 If you have an RTX 5000 series GPU running driver level `595`, you will need to downgrade to `590` before installing Bellum.
@@ -106,7 +122,7 @@ The driver is just plain broken for UE5 on wine/proton and it will fail to load 
 
 ## Implementation Notes
 
-- Supports FSR 4.0 and FSR 4.1 (with --fsr41)
+- Runtime upscaler upgrades stay off until the game developers confirm support
 - Supports DLSS and Nvidia Framegen (5000 series users see driver note above)
 - All scripts are Go binaries with no external dependencies
 - Packages are bundled in the release tarball, not statically embedded
