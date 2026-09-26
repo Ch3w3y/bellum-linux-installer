@@ -1,14 +1,15 @@
 # Bellum EAC Linux mode check
 
-1. Confirm the selected Proton build and Proton EasyAntiCheat Runtime match the approved release manifest. The installer must fail before launch when either pin is absent or the runtime directory is missing.
-2. Start `~/.local/bin/Bellum` with `PROTON_LOG=1` and `UMU_LOG=1`. The wrapper sources `<prefix>/launch_vars.env`, checks `PROTON_EAC_RUNTIME`, and executes `umu-run` for AMD, NVIDIA, and Intel. It writes `<prefix>/launcher.log`.
-3. Inspect the new log after the game's protected process starts:
+1. Obtain the runtime through the Steam client using an entitled Steam account. In Steam, open **Library → Tools**, search for **Proton EasyAntiCheat Runtime**, and install it (Steam app `1826330`; direct client URI: `steam://install/1826330`). Keep it in that Steam library; do not copy it into the installer or redistribute depot files. For a non-default library, set `PROTON_EAC_RUNTIME` to `<library>/steamapps/common/Proton EasyAntiCheat Runtime` when starting the installer and launcher. The default lookup is `~/.local/share/Steam/steamapps/common/Proton EasyAntiCheat Runtime`.
+2. Confirm the selected Proton build and runtime match the approved release manifest. Bellum hashes the six required files under `v2/lib32` and `v2/lib64`; a missing file or digest mismatch must stop setup before launch. The official source selected for the pin is app `1826330`, depot `1826331`, manifest `3310269496439035229` (build `10437216`). The runtime digest has not yet been verified from an entitled client install, so the pin remains empty and the current installer intentionally fails closed. Installing the runtime alone does not bypass this gate; release use requires the verified digest to be added first.
+3. Start `~/.local/bin/Bellum` with `PROTON_LOG=1` and `UMU_LOG=1`. The wrapper sources `<prefix>/launch_vars.env`, checks `PROTON_EAC_RUNTIME`, and executes `umu-run` for AMD, NVIDIA, and Intel. It writes `<prefix>/launcher.log`.
+4. Inspect the new log after the game's protected process starts:
 
    ```sh
    rg -i 'umu|proton|easyanticheat|eac|anti.cheat' "$WINEPREFIX/launcher.log"
    ```
 
-4. Record the actual log lines showing umu selected the pinned Proton and that the EasyAntiCheat Linux runtime initialized for the protected game process. A launch or sign-in alone is insufficient evidence; if no explicit EAC initialization line appears, mark the check inconclusive and collect the Proton/umu debug logs. Record the GPU vendor, runtime path, Proton version, and result on the QA issue.
+5. Record the actual log lines showing umu selected the pinned Proton and that the EasyAntiCheat Linux runtime initialized for the protected game process. A launch or sign-in alone is insufficient evidence; if no explicit EAC initialization line appears, mark the check inconclusive and collect the Proton/umu debug logs. Record the GPU vendor, runtime path, Proton version, and result on the QA issue. Static hash verification is not proof that Bellum's protected session works in Linux mode; that live evidence belongs to TES-12.
 
 The launcher never stages DLLs in the game's directory. RDNA4 enables Proton's FSR4 driver component by default; RDNA3 and DLSS upgrades stay off. MangoHud, vkBasalt, and gamescope are opt-in through `BELLUM_MANGOHUD=1`, `BELLUM_VKBASALT=1`, and `BELLUM_GAMESCOPE=1` on the wrapper command.
 
