@@ -10,7 +10,8 @@ import (
 	"bellum-installer/pkg/core"
 )
 
-const launcherInstallerURL = "https://auto-updater.astarte.industries/astartelauncher/windows-amd64/AstarteLauncher-amd64-installer.exe"
+// playbellum.com/download redirects to this official release endpoint.
+const launcherInstallerURL = "https://releases.astarte.industries/astartelauncher/windows-amd64/AstarteLauncher-amd64-installer.exe"
 
 // LauncherInstallerState tracks the state of the launcher installer download
 type LauncherInstallerState struct {
@@ -35,8 +36,8 @@ func GetProtonURL(protonVer, protonBaseURL string) string {
 
 // DownloadLauncherInstaller downloads the launcher installer to a cache directory
 func DownloadLauncherInstaller(workdir string, logger *core.Logger) (*LauncherInstallerState, error) {
-	if config.DefaultVersions.LauncherSHA256 == "" || config.DefaultVersions.LauncherSigner == "" {
-		return nil, fmt.Errorf("launcher checksum and signer pins are required before download")
+	if config.DefaultVersions.LauncherSigner == "" {
+		return nil, fmt.Errorf("launcher Authenticode signer pin is required before download")
 	}
 	downloadDir := filepath.Join(workdir, "installer-cache")
 	filename := "AstarteLauncher-amd64-installer.exe"

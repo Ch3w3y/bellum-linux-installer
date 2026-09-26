@@ -65,6 +65,21 @@ func TestConfigurationWritesLaunchVarsThroughFileBoundary(t *testing.T) {
 	}
 }
 
+func TestRDNA4EnablesOnlyNativeFSR4DriverComponent(t *testing.T) {
+	files := fakeFileStore{written: map[string][]byte{}}
+	logger, err := core.NewLogger("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := createLaunchVarsFileAMD("/prefix", "/proton", true, logger, files); err != nil {
+		t.Fatal(err)
+	}
+	content := string(files.written["/prefix/launch_vars.env"])
+	if !strings.Contains(content, `PROTON_FSR4_UPGRADE="1"`) || !strings.Contains(content, `PROTON_FSR4_RDNA3_UPGRADE="0"`) {
+		t.Fatalf("wrong RDNA4 defaults: %s", content)
+	}
+}
+
 func TestGenericLaunchVarsAreSourceable(t *testing.T) {
 	files := fakeFileStore{written: map[string][]byte{}}
 	if err := createLaunchVarsFileGeneric("/prefix with spaces", "/proton's build", files); err != nil {

@@ -271,8 +271,8 @@ func CheckLauncherInstaller(launcherInstallerPath string, logger *core.Logger) e
 }
 
 func checkLauncherInstaller(launcherInstallerPath string, logger *core.Logger, files FileStore, commands CommandRunner) error {
-	if config.DefaultVersions.LauncherSHA256 == "" || config.DefaultVersions.LauncherSigner == "" {
-		return fmt.Errorf("AstarteLauncher checksum and Authenticode signer pins are required")
+	if config.DefaultVersions.LauncherSigner == "" {
+		return fmt.Errorf("AstarteLauncher Authenticode signer pin is required")
 	}
 	if launcherInstallerPath != "" {
 		if _, err := files.Stat(launcherInstallerPath); os.IsNotExist(err) {
@@ -397,11 +397,11 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 		gpuType = "Unknown"
 	}
 	isAMD := gpuCaps.Vendor == core.GPUAMD
-	useFSR41 := fsr41 && gpuCaps.FSR41
+	// RDNA4 needs the Proton driver component for the game's native FSR4.
+	// The retired fsr41 CLI option is ignored; RDNA3 remains disabled.
+	useFSR41 := gpuCaps.Vendor == core.GPUAMD && gpuCaps.Generation == "RDNA4" && !gpuCaps.Ambiguous
 	logger.Info(fmt.Sprintf("GPU Vendor: %s (generation: %s, ambiguous: %t)", gpuType, gpuCaps.Generation, gpuCaps.Ambiguous))
-	if fsr41 && !useFSR41 {
-		logger.Warn("FSR 4.1 was requested but the detected GPU is not confirmed as supported; using the standard FSR path")
-	}
+	_ = fsr41
 
 	// Validate WINEPREFIX
 	wineprefix, _, _, err := ValidateWINEPREFIX(wineprefixArg, logger)
@@ -452,6 +452,9 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 	runtimePath := eacRuntimePath()
 	if info, err := os.Stat(runtimePath); err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("Proton EasyAntiCheat Runtime is required at %q (set PROTON_EAC_RUNTIME to its installed directory)", runtimePath)
+	}
+	if err := packages.VerifyEACRuntime(runtimePath, config.DefaultVersions.EACRuntimeSHA256); err != nil {
+		return nil, err
 	}
 
 	logger.Info("[OK] All prechecks passed!")

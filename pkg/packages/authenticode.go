@@ -25,8 +25,10 @@ func VerifyLauncherAuthenticode(path string) error {
 }
 
 func VerifyLauncherInstaller(path string) error {
-	if err := VerifySHA256(path, config.DefaultVersions.LauncherSHA256); err != nil {
-		return err
+	if config.DefaultVersions.LauncherSHA256 != "" {
+		if err := VerifySHA256(path, config.DefaultVersions.LauncherSHA256); err != nil {
+			return err
+		}
 	}
 	return VerifyLauncherAuthenticode(path)
 }

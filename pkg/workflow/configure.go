@@ -55,7 +55,7 @@ func RunConfigurationWithBoundaries(config ConfigureConfig, logger *core.Logger,
 			return err
 		}
 		// dxvk_nvapi is included in Proton for NVIDIA
-	} else if config.GPUCapabilities.FSR {
+	} else if config.GPUCapabilities.Vendor == core.GPUAMD {
 		if err := createLaunchVarsFileAMD(config.WINEPREFIX, config.ProtonPath, config.IsFSR41 && config.GPUCapabilities.FSR41, logger, boundaries.Files); err != nil {
 			return err
 		}
@@ -171,12 +171,12 @@ func createLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, logger
 	launchVars := filepath.Join(wineprefix, "launch_vars.env")
 	logger.Info(fmt.Sprintf("Creating launch environment file: %s", launchVars))
 
-	// Runtime FSR replacement is opt-in; preserve the shipped upscaler by default.
+	// RDNA4 needs Proton's FSR4 driver component for native game FSR4.
+	// RDNA3's upgrade remains disabled unless a separate opt-in is implemented.
 	fsr4Upgrade := "0"
 	fsr4Rdna3Upgrade := "0"
 	if isFSR41 {
 		fsr4Upgrade = "1"
-		fsr4Rdna3Upgrade = "1"
 	}
 
 	content := `# Bellum Launch Variables (AMD)

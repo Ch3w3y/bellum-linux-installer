@@ -68,10 +68,10 @@ func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 
 	// AMD-specific settings (FSR4 upgrade)
 	if isAMD {
-		// Runtime FSR replacement is opt-in and capability-gated.
+		// RDNA4 uses Proton's FSR4 driver component by default. RDNA3 stays off.
 		if isFSR41 {
 			desired["PROTON_FSR4_UPGRADE"] = "1"
-			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "1"
+			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "0"
 		} else {
 			desired["PROTON_FSR4_UPGRADE"] = "0"
 			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "0"

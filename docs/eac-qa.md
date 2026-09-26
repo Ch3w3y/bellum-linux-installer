@@ -10,7 +10,9 @@
 
 4. Record the actual log lines showing umu selected the pinned Proton and that the EasyAntiCheat Linux runtime initialized for the protected game process. A launch or sign-in alone is insufficient evidence; if no explicit EAC initialization line appears, mark the check inconclusive and collect the Proton/umu debug logs. Record the GPU vendor, runtime path, Proton version, and result on the QA issue.
 
-The launcher never stages DLLs in the game's directory. Runtime FSR4, DLSS, MangoHud, vkBasalt, and gamescope remain disabled by default.
+The launcher never stages DLLs in the game's directory. RDNA4 enables Proton's FSR4 driver component by default; RDNA3 and DLSS upgrades stay off. MangoHud, vkBasalt, and gamescope are opt-in through `BELLUM_MANGOHUD=1`, `BELLUM_VKBASALT=1`, and `BELLUM_GAMESCOPE=1` on the wrapper command.
+
+Match EAC evidence to product `087dc666152349c68aa8e1962237c472`, sandbox `84c3e73046e546d282c07eee30ac3162`, and deployment `1ec8679293294023bb158112821a4041`. TES-16 is verifying the authoritative log location and Linux-mode indicators; do not infer success from these IDs alone.
 
 ## Launcher lifecycle and private data
 

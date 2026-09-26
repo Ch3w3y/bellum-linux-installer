@@ -78,6 +78,12 @@ export GAMEID="${GAMEID:-nonsteam}"
 export UMU_LOG=1
 # Keep the container alive while the launcher and game share the Wine session.
 export PROTON_VERB=waitforexitandrun
+if [ "${BELLUM_MANGOHUD:-0}" = 1 ]; then export MANGOHUD=1; fi
+if [ "${BELLUM_VKBASALT:-0}" = 1 ]; then export ENABLE_VKBASALT=1; fi
+if [ "${BELLUM_GAMESCOPE:-0}" = 1 ]; then
+  command -v gamescope >/dev/null || { echo "gamescope is required for BELLUM_GAMESCOPE=1" >&2; exit 1; }
+  exec gamescope -- umu-run "$LAUNCHER_EXE" "$@" >> "$WINEPREFIX/launcher.log" 2>&1
+fi
 exec umu-run "$LAUNCHER_EXE" "$@" >> "$WINEPREFIX/launcher.log" 2>&1
 `, shellQuote(filepath.Join(config.Wineprefix, "launch_vars.env")), shellQuote(launcherExe))
 }
