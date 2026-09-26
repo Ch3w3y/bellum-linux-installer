@@ -11,7 +11,7 @@ import (
 // PatchProtonSettings patches the Proton user_settings.py file with GPU-specific settings
 // settingsFile: path to the user_settings.py file (can be user_settings.sample.py)
 // isAMD: true if the GPU is AMD, false otherwise
-// isFSR41: true if using FSR 4.1 upgrade path, false for regular mode
+// isFSR41: true only when a capability-gated runtime FSR upgrade was selected
 func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 	if settingsFile == "" {
 		return fmt.Errorf("settings file path is empty")
@@ -58,7 +58,8 @@ func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 
 	// Unified settings for all GPUs using proton-cachyos
 	desired["PROTON_ENABLE_NVAPI"] = "1"
-	desired["PROTON_DLSS_UPGRADE"] = "1"
+	// Runtime DLSS replacement is opt-in; keep native game libraries by default.
+	desired["PROTON_DLSS_UPGRADE"] = "0"
 	desired["MALLOC_ARENA_MAX"] = "1"
 	desired["PROTON_VKD3D_HEAP"] = "1"
 	desired["VKD3D_CONFIG"] = "descriptor_heap"
@@ -67,13 +68,13 @@ func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 
 	// AMD-specific settings (FSR4 upgrade)
 	if isAMD {
-		// Default mode uses "1", FSR4.1 mode uses "4.1.0"
+		// RDNA4 uses Proton's FSR4 driver component by default. RDNA3 stays off.
 		if isFSR41 {
-			desired["PROTON_FSR4_UPGRADE"] = "4.1.0"
-			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "4.1.0"
-		} else {
 			desired["PROTON_FSR4_UPGRADE"] = "1"
-			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "1"
+			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "0"
+		} else {
+			desired["PROTON_FSR4_UPGRADE"] = "0"
+			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "0"
 		}
 	}
 

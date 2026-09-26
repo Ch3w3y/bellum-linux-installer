@@ -1,20 +1,17 @@
 package packages
 
 import (
-	"archive/tar"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
 
 	"bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
-
-	"github.com/ulikunitz/xz"
 )
 
-const launcherInstallerURL = "https://auto-updater.astarte.industries/astartelauncher/windows-amd64/AstarteLauncher-amd64-installer.exe"
+// playbellum.com/download redirects to this official release endpoint.
+const launcherInstallerURL = "https://releases.astarte.industries/astartelauncher/windows-amd64/AstarteLauncher-amd64-installer.exe"
 
 // LauncherInstallerState tracks the state of the launcher installer download
 type LauncherInstallerState struct {
@@ -39,6 +36,9 @@ func GetProtonURL(protonVer, protonBaseURL string) string {
 
 // DownloadLauncherInstaller downloads the launcher installer to a cache directory
 func DownloadLauncherInstaller(workdir string, logger *core.Logger) (*LauncherInstallerState, error) {
+	if config.DefaultVersions.LauncherSigner == "" {
+		return nil, fmt.Errorf("launcher Authenticode signer pin is required before download")
+	}
 	downloadDir := filepath.Join(workdir, "installer-cache")
 	filename := "AstarteLauncher-amd64-installer.exe"
 	dest := filepath.Join(downloadDir, filename)
@@ -62,6 +62,9 @@ func DownloadLauncherInstaller(workdir string, logger *core.Logger) (*LauncherIn
 	if _, err := os.Stat(dest); os.IsNotExist(err) {
 		logger.Error("Download verification failed: launcher installer not found")
 		return nil, fmt.Errorf("download verification failed: launcher installer not found")
+	}
+	if err := VerifyLauncherInstaller(dest); err != nil {
+		return nil, err
 	}
 
 	return &LauncherInstallerState{
@@ -117,11 +120,15 @@ func GetProtonInstallPath(protonVer string) string {
 
 // EnsureProton downloads and sets up the Proton directory
 func EnsureProton(protonDir, protonVer string, isAMD bool, isFSR41 bool, logger *core.Logger) error {
+	return EnsureProtonWithLog(filepath.Join(protonDir, protonVer), protonVer, isAMD, isFSR41, "", logger)
+}
+
+func EnsureProtonWithLog(protonDir, protonVer string, isAMD bool, isFSR41 bool, logPath string, logger *core.Logger) error {
 	// Use proton-cachyos for all GPUs (AMD and NVIDIA)
 	protonURL := GetProtonURL(protonVer, config.DefaultVersions.ProtonBaseURL)
 
 	// Use the dedicated proton install directory
-	actualProtonDir := GetProtonInstallPath(protonVer)
+	actualProtonDir := protonDir
 
 	// Check if proton directory exists
 	dirExists := false
@@ -186,7 +193,10 @@ func EnsureProton(protonDir, protonVer string, isAMD bool, isFSR41 bool, logger 
 		defer os.RemoveAll(tmpDir)
 
 		archivePath := filepath.Join(tmpDir, protonVer+".tar.xz")
-		if err := downloadFile(archivePath, protonURL, logger); err != nil {
+		if err := downloadFile(archivePath, protonURL, logPath, logger); err != nil {
+			return err
+		}
+		if err := VerifySHA256(archivePath, config.DefaultVersions.ProtonSHA256); err != nil {
 			return err
 		}
 
@@ -247,17 +257,11 @@ func copyDirectory(srcDir, dstDir string) error {
 }
 
 // downloadFile downloads a file using wget
-func downloadFile(dest, url string, logger *core.Logger) error {
+func downloadFile(dest, url, logFile string, logger *core.Logger) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
-	// Clean the path to resolve .. components
-	logFile := filepath.Clean(filepath.Join(filepath.Dir(dest), "..", "logs", "installer.log"))
-	// Create the logs directory
-	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err != nil {
-		return fmt.Errorf("failed to create log directory: %w", err)
-	}
 	if err := core.RunCommand(core.RunModeSilent, []string{"wget", "-O", dest, url}, logger, logFile); err != nil {
 		logger.Error(fmt.Sprintf("Failed to download %s", url))
 		return fmt.Errorf("failed to download %s: %w", url, err)
@@ -265,61 +269,6 @@ func downloadFile(dest, url string, logger *core.Logger) error {
 
 	if _, err := os.Stat(dest); os.IsNotExist(err) {
 		return fmt.Errorf("download verification failed: %s not found", dest)
-	}
-
-	return nil
-}
-
-// extractTarXZWithStrip extracts a tar.xz archive with a given number of path components stripped
-func extractTarXZWithStrip(archivePath, destDir string, stripComponents int) error {
-	f, err := os.Open(archivePath)
-	if err != nil {
-		return fmt.Errorf("failed to open archive: %w", err)
-	}
-	defer f.Close()
-
-	xzReader, err := xz.NewReader(f)
-	if err != nil {
-		return fmt.Errorf("failed to create xz reader: %w", err)
-	}
-
-	tr := tar.NewReader(xzReader)
-	for {
-		header, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("failed to read tar entry: %w", err)
-		}
-
-		// Apply strip components
-		parts := strings.Split(header.Name, string(filepath.Separator))
-		if len(parts) > stripComponents {
-			header.Name = strings.Join(parts[stripComponents:], string(filepath.Separator))
-		}
-
-		target := filepath.Join(destDir, header.Name)
-
-		switch header.Typeflag {
-		case tar.TypeDir:
-			if err := os.MkdirAll(target, 0755); err != nil {
-				return fmt.Errorf("failed to create directory: %w", err)
-			}
-		case tar.TypeReg:
-			if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
-				return fmt.Errorf("failed to create parent directory: %w", err)
-			}
-			outFile, err := os.Create(target)
-			if err != nil {
-				return fmt.Errorf("failed to create file: %w", err)
-			}
-			if _, err := io.Copy(outFile, tr); err != nil {
-				outFile.Close()
-				return fmt.Errorf("failed to write file: %w", err)
-			}
-			outFile.Close()
-		}
 	}
 
 	return nil

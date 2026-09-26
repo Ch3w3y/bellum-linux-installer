@@ -38,7 +38,7 @@ func RunCommand(mode RunMode, args []string, logger *Logger, logPath string) err
 	var logFile *os.File
 	if logPath != "" {
 		var err error
-		logFile, err = os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		logFile, err = OpenLogFile(logPath)
 		if err != nil {
 			return fmt.Errorf("failed to open log file: %w", err)
 		}
@@ -194,7 +194,7 @@ func runCommandStream(args []string, logger *Logger, logPath string) error {
 	}
 
 	// Open log file
-	logFile, err := os.OpenFile(logPath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	logFile, err := OpenLogFile(logPath)
 	if err != nil {
 		return fmt.Errorf("failed to open log file: %w", err)
 	}

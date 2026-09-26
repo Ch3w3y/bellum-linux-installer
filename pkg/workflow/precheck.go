@@ -23,6 +23,8 @@ type PrecheckResult struct {
 	LauncherInstaller string
 	GPUType           string
 	IsAMDGPU          bool
+	GPUCapabilities   core.GPUCapabilities
+	UseFSR41          bool
 	ProtonVer         string
 	ProtonPath        string
 }
@@ -182,7 +184,7 @@ func ValidateWINEPREFIXWithGUI(logger *core.Logger) (string, error) {
 	// Create the Bellum directory if it doesn't exist
 	if !isDir(wineprefixPath) {
 		logger.Info(fmt.Sprintf("Creating Bellum directory at %s...", wineprefixPath))
-		if err := os.MkdirAll(wineprefixPath, 0755); err != nil {
+		if err := os.MkdirAll(wineprefixPath, 0700); err != nil {
 			return "", fmt.Errorf("failed to create Bellum directory %s: %w", wineprefixPath, err)
 		}
 		logger.Info("[OK] Bellum directory created successfully")
@@ -194,6 +196,10 @@ func ValidateWINEPREFIXWithGUI(logger *core.Logger) (string, error) {
 
 // CheckRequiredWineBinaries checks if all required Wine binaries are present
 func CheckRequiredWineBinaries(logger *core.Logger) error {
+	return checkRequiredWineBinaries(DefaultBoundaries.Files, logger)
+}
+
+func checkRequiredWineBinaries(files FileStore, logger *core.Logger) error {
 	requiredBinaries := []string{
 		config.DefaultVersions.Binaries.Wine,
 		config.DefaultVersions.Binaries.Wineboot,
@@ -204,7 +210,7 @@ func CheckRequiredWineBinaries(logger *core.Logger) error {
 
 	var missing []string
 	for _, binary := range requiredBinaries {
-		if _, err := os.Stat(binary); os.IsNotExist(err) {
+		if _, err := files.Stat(binary); os.IsNotExist(err) {
 			missing = append(missing, binary)
 		}
 	}
@@ -246,27 +252,41 @@ func CheckWineVersion(logger *core.Logger, force bool) error {
 
 // CheckUMURun verifies umu-run is available
 func CheckUMURun(logger *core.Logger) error {
-	if core.LookPath("umu-run") == "" {
+	return checkUMURun(DefaultBoundaries.Commands, logger)
+}
+
+func checkUMURun(commands CommandRunner, logger *core.Logger) error {
+	if DiscoverExecutable("umu-run", commands) == "" {
 		logger.Error("umu-run binary not found in PATH.\nGrab latest umu-launcher-1.3.0 for your distro: https://github.com/Open-Wine-Components/umu-launcher/releases/tag/1.3.0")
 		return fmt.Errorf("umu-run not found")
 	}
 
-	logger.Info("[OK] umu-run binary found: " + core.LookPath("umu-run"))
+	logger.Info("[OK] umu-run binary found: " + DiscoverExecutable("umu-run", commands))
 	return nil
 }
 
 // CheckLauncherInstaller checks if launcher installer is available
 func CheckLauncherInstaller(launcherInstallerPath string, logger *core.Logger) error {
+	return checkLauncherInstaller(launcherInstallerPath, logger, DefaultBoundaries.Files, DefaultBoundaries.Commands)
+}
+
+func checkLauncherInstaller(launcherInstallerPath string, logger *core.Logger, files FileStore, commands CommandRunner) error {
+	if config.DefaultVersions.LauncherSigner == "" {
+		return fmt.Errorf("AstarteLauncher Authenticode signer pin is required")
+	}
 	if launcherInstallerPath != "" {
-		if _, err := os.Stat(launcherInstallerPath); os.IsNotExist(err) {
+		if _, err := files.Stat(launcherInstallerPath); os.IsNotExist(err) {
 			logger.Error(fmt.Sprintf("Launcher installer not found at: %s", launcherInstallerPath))
 			return fmt.Errorf("launcher installer not found: %s", launcherInstallerPath)
+		}
+		if err := packages.VerifyLauncherInstaller(launcherInstallerPath); err != nil {
+			return err
 		}
 		logger.Info(fmt.Sprintf("[OK] Launcher installer found: %s", launcherInstallerPath))
 		return nil
 	}
 
-	if core.LookPath("wget") == "" {
+	if DiscoverExecutable("wget", commands) == "" {
 		logger.Error("Launcher installer path not provided and wget is not available.")
 		return fmt.Errorf("launcher installer not provided and wget not available")
 	}
@@ -277,17 +297,15 @@ func CheckLauncherInstaller(launcherInstallerPath string, logger *core.Logger) e
 
 // CheckWinetricks checks if winetricks is available
 func CheckWinetricks(workdir string, logger *core.Logger) error {
-	if core.LookPath("winetricks") != "" {
-		logger.Info("[OK] winetricks binary found: " + core.LookPath("winetricks"))
-		return nil
-	}
-
-	logger.Warn("winetricks binary not found, attempting to install from local archive...")
+	logger.Info("Installing pinned vendored winetricks without privilege...")
 
 	winetricksArchive := filepath.Join(workdir, "packages", "winetricks-"+config.DefaultVersions.WinetricksVer+".tar.gz")
 	if _, err := os.Stat(winetricksArchive); os.IsNotExist(err) {
 		logger.Error(fmt.Sprintf("winetricks binary not found in PATH and %s not found", winetricksArchive))
 		return fmt.Errorf("winetricks not found")
+	}
+	if err := packages.VerifySHA256(winetricksArchive, packages.WinetricksSHA256); err != nil {
+		return err
 	}
 
 	logger.Info(fmt.Sprintf("Extracting %s into packages/.tmp/winetricks/...", winetricksArchive))
@@ -302,24 +320,22 @@ func CheckWinetricks(workdir string, logger *core.Logger) error {
 		return fmt.Errorf("winetricks extraction failed")
 	}
 
-	logger.Info("Installing winetricks...")
-	if err := core.RunCommand(core.RunModeStream, []string{"sudo", "make", "install"}, logger, ""); err != nil {
-		logger.Error("Failed to install winetricks")
+	winetricks, err := os.ReadFile(filepath.Join(tmpDir, "src", "winetricks"))
+	if err != nil {
+		return fmt.Errorf("read vendored winetricks: %w", err)
+	}
+	home, err := os.UserHomeDir()
+	if err != nil {
 		return err
 	}
-
-	if core.LookPath("winetricks") == "" {
-		logger.Error("winetricks binary not found after installation")
-		return fmt.Errorf("winetricks installation failed")
+	binDir := filepath.Join(home, ".local", "bin")
+	if err := os.MkdirAll(binDir, 0700); err != nil {
+		return err
 	}
-
-	logger.Info("Running winetricks self-update...")
-	if err := core.RunCommand(core.RunModeStream, []string{"sudo", "winetricks", "--self-update"}, logger, ""); err == nil {
-		logger.Info("[OK] winetricks installed and updated successfully")
-	} else {
-		logger.Error("winetricks installed but self-update failed")
-		return fmt.Errorf("winetricks self-update failed")
+	if err := os.WriteFile(filepath.Join(binDir, "winetricks"), winetricks, 0755); err != nil {
+		return fmt.Errorf("install unprivileged winetricks: %w", err)
 	}
+	logger.Info("[OK] Vendored winetricks installed in ~/.local/bin")
 
 	logger.Info("Cleaning up extracted winetricks directory...")
 	packages.CleanupTempDir(winetricksArchive)
@@ -329,6 +345,9 @@ func CheckWinetricks(workdir string, logger *core.Logger) error {
 
 // CheckProton ensures Proton is available
 func CheckProton(packageRoot string, gpuType string, isFSR41 bool, logger *core.Logger) (string, string, error) {
+	if config.DefaultVersions.ProtonSHA256 == "" {
+		return "", "", fmt.Errorf("approved Proton SHA-256 pin is required")
+	}
 	isAMD := strings.Contains(strings.ToLower(gpuType), "amd") || strings.Contains(strings.ToLower(gpuType), "radeon")
 
 	if core.LookPath("wget") == "" {
@@ -344,7 +363,7 @@ func CheckProton(packageRoot string, gpuType string, isFSR41 bool, logger *core.
 	// Get the actual proton install path
 	protonDir := packages.GetProtonInstallPath(protonVer)
 
-	if err := packages.EnsureProton(protonDir, protonVer, isAMD, isFSR41, logger); err != nil {
+	if err := packages.EnsureProtonWithLog(protonDir, protonVer, isAMD, isFSR41, filepath.Join(filepath.Dir(packageRoot), "logs", "installer.log"), logger); err != nil {
 		return "", "", err
 	}
 
@@ -369,12 +388,20 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 	fmt.Println()
 
 	// Detect GPU type
-	gpuType, err := DetectGPU(logger)
+	gpuCaps, err := core.DetectGPUCapabilities()
 	if err != nil {
 		return nil, err
 	}
-
-	isAMD := strings.Contains(strings.ToLower(gpuType), "amd") || strings.Contains(strings.ToLower(gpuType), "radeon")
+	gpuType := string(gpuCaps.Vendor)
+	if gpuCaps.Vendor == core.GPUUnknown {
+		gpuType = "Unknown"
+	}
+	isAMD := gpuCaps.Vendor == core.GPUAMD
+	// RDNA4 needs the Proton driver component for the game's native FSR4.
+	// The retired fsr41 CLI option is ignored; RDNA3 remains disabled.
+	useFSR41 := gpuCaps.Vendor == core.GPUAMD && gpuCaps.Generation == "RDNA4" && !gpuCaps.Ambiguous
+	logger.Info(fmt.Sprintf("GPU Vendor: %s (generation: %s, ambiguous: %t)", gpuType, gpuCaps.Generation, gpuCaps.Ambiguous))
+	_ = fsr41
 
 	// Validate WINEPREFIX
 	wineprefix, _, _, err := ValidateWINEPREFIX(wineprefixArg, logger)
@@ -383,7 +410,7 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 	}
 
 	// Check Wine binaries
-	if err := CheckRequiredWineBinaries(logger); err != nil {
+	if err := checkRequiredWineBinaries(DefaultBoundaries.Files, logger); err != nil {
 		return nil, err
 	}
 
@@ -418,8 +445,15 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 	}
 
 	// Check Proton
-	protonVer, protonPath, err := CheckProton(packageRoot, gpuType, fsr41, logger)
+	protonVer, protonPath, err := CheckProton(packageRoot, gpuType, useFSR41, logger)
 	if err != nil {
+		return nil, err
+	}
+	runtimePath := eacRuntimePath()
+	if info, err := os.Stat(runtimePath); err != nil || !info.IsDir() {
+		return nil, fmt.Errorf("Proton EasyAntiCheat Runtime is required at %q (set PROTON_EAC_RUNTIME to its installed directory)", runtimePath)
+	}
+	if err := packages.VerifyEACRuntime(runtimePath, config.DefaultVersions.EACRuntimeSHA256); err != nil {
 		return nil, err
 	}
 
@@ -430,6 +464,8 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 		WINEPREFIX:        wineprefix,
 		GPUType:           gpuType,
 		IsAMDGPU:          isAMD,
+		GPUCapabilities:   gpuCaps,
+		UseFSR41:          useFSR41,
 		ProtonVer:         protonVer,
 		ProtonPath:        protonPath,
 		ForceWineVersion:  forceWineVersion,
@@ -440,7 +476,11 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 // Helper functions
 
 func isDir(path string) bool {
-	info, err := os.Stat(path)
+	return isDirWith(path, DefaultBoundaries.Files)
+}
+
+func isDirWith(path string, files FileStore) bool {
+	info, err := files.Stat(path)
 	if err != nil {
 		return false
 	}

@@ -4,7 +4,6 @@ package main
 import (
 	"flag"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 
@@ -21,7 +20,6 @@ func main() {
 	forceWineVersion := flag.Bool("force-wine-version", false, "Force Wine version check")
 	wineprefix := flag.String("wineprefix", "", "Path to WINEPREFIX directory (optional if WINEPREFIX env var is set)")
 	launcherInstaller := flag.String("launcher-installer", "", "Path to launcher installer executable")
-	fsr41 := flag.Bool("fsr41", false, "Use FSR 4.1 upgrade path")
 	help := flag.Bool("help", false, "Show help message")
 
 	flag.Parse()
@@ -35,7 +33,6 @@ func main() {
 		fmt.Println("  --force-wine-version  Force Wine version check (not recommended)")
 		fmt.Println("  --wineprefix PATH     Path to WINEPREFIX directory (optional if WINEPREFIX env var is set)")
 		fmt.Println("  --launcher-installer PATH  Path to launcher installer executable")
-		fmt.Println("  --fsr41               Use FSR 4.1 upgrade path")
 		fmt.Println("  --help                Show this help message")
 		fmt.Println()
 		fmt.Println("Examples:")
@@ -94,7 +91,7 @@ func main() {
 	}
 
 	// Run prechecks with absolute paths
-	result, err := workflow.RunPrechecks(selectedWINEPREFIX, *launcherInstaller, *forceWineVersion, *fsr41, logger)
+	result, err := workflow.RunPrechecks(selectedWINEPREFIX, *launcherInstaller, *forceWineVersion, false, logger)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Prechecks failed: %v", err))
 		os.Exit(1)
@@ -124,19 +121,11 @@ func main() {
 		WINEPREFIX:        result.WINEPREFIX,
 		ProtonPath:        result.ProtonPath,
 		GPUType:           result.GPUType,
+		GPUCapabilities:   result.GPUCapabilities,
 		IsAMDGPU:          result.IsAMDGPU,
 		LauncherInstaller: result.LauncherInstaller,
 		Workdir:           workdir,
-		IsFSR41:           *fsr41,
-	}
-
-	// Run FSR4.1 upgrade DLL copy before installation if --fsr41 flag is passed
-	if *fsr41 && result.IsAMDGPU {
-		logger.Info("Preparing FSR 4.1 upgrade DLL...")
-		if err := copyFSR41UpgradeDLL(workdir, logger); err != nil {
-			logger.Error(fmt.Sprintf("Failed to copy FSR 4.1 upgrade DLL: %v", err))
-			os.Exit(1)
-		}
+		IsFSR41:           result.UseFSR41,
 	}
 
 	// Run installation
@@ -148,12 +137,13 @@ func main() {
 
 	// Run configuration
 	configureConfig := workflow.ConfigureConfig{
-		WINEPREFIX: result.WINEPREFIX,
-		ProtonPath: result.ProtonPath,
-		GPUType:    result.GPUType,
-		IsAMDGPU:   result.IsAMDGPU,
-		Workdir:    workdir,
-		IsFSR41:    *fsr41,
+		WINEPREFIX:      result.WINEPREFIX,
+		ProtonPath:      result.ProtonPath,
+		GPUType:         result.GPUType,
+		GPUCapabilities: result.GPUCapabilities,
+		IsAMDGPU:        result.IsAMDGPU,
+		Workdir:         workdir,
+		IsFSR41:         result.UseFSR41,
 	}
 
 	if err := workflow.RunConfiguration(configureConfig, logger); err != nil {
@@ -172,52 +162,6 @@ func main() {
 	fmt.Println()
 	fmt.Printf("Launch Environment Variable File: %s/launch_vars.env\n", configureConfig.WINEPREFIX)
 	fmt.Println()
-}
-
-// copyFSR41UpgradeDLL copies the FSR4.1 upgrade DLL to the protonfixes upscalers directory
-func copyFSR41UpgradeDLL(workdir string, logger *core.Logger) error {
-	fsPath := filepath.Join(workdir, "packages", "fsr4")
-
-	// Source DLL path
-	sourceDLL := filepath.Join(fsPath, "amdxcffx64.dll")
-
-	// Target directory: ${HOME}/.cache/protonfixes/upscalers/
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return fmt.Errorf("failed to get home directory: %w", err)
-	}
-
-	targetDir := filepath.Join(homeDir, ".cache", "protonfixes", "upscalers")
-
-	// Create target directory if it doesn't exist
-	if err := os.MkdirAll(targetDir, 0755); err != nil {
-		return fmt.Errorf("failed to create target directory: %w", err)
-	}
-
-	// Target file path with version suffix
-	targetDLL := filepath.Join(targetDir, "amdxcffx64_v4.1.0_69A0952A304a000.dll")
-
-	// Read source file
-	source, err := os.Open(sourceDLL)
-	if err != nil {
-		return fmt.Errorf("failed to open source DLL: %w", err)
-	}
-	defer source.Close()
-
-	// Create target file
-	target, err := os.Create(targetDLL)
-	if err != nil {
-		return fmt.Errorf("failed to create target DLL: %w", err)
-	}
-	defer target.Close()
-
-	// Copy file content
-	if _, err := io.Copy(target, source); err != nil {
-		return fmt.Errorf("failed to copy DLL: %w", err)
-	}
-
-	logger.Info(fmt.Sprintf("[OK] Copied FSR 4.1.0 DLL to %s", targetDLL))
-	return nil
 }
 
 func printInstallerBanner() {

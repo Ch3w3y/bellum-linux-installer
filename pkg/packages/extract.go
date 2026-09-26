@@ -61,6 +61,9 @@ func ExtractPackageTo(archivePath, destDir string, stripComponents int) error {
 // stripComponents: number of path components to strip from the archive entries
 // Returns error if any
 func extractArchive(archivePath, destDir string, stripComponents int) error {
+	if err := validateTarArchive(archivePath, destDir, stripComponents > 0); err != nil {
+		return err
+	}
 	ext := strings.ToLower(archivePath)
 	if strings.HasSuffix(ext, ".tar.xz") {
 		return extractXZ(archivePath, destDir, stripComponents > 0)
@@ -71,6 +74,69 @@ func extractArchive(archivePath, destDir string, stripComponents int) error {
 	}
 
 	return fmt.Errorf("unsupported archive format: %s", archivePath)
+}
+
+// validateTarArchive checks all names before any entry is written.
+func validateTarArchive(archivePath, destDir string, strip bool) error {
+	f, err := os.Open(archivePath)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+	var reader io.Reader = f
+	if strings.HasSuffix(archivePath, ".tar.gz") || strings.HasSuffix(archivePath, ".tgz") {
+		gz, err := gzip.NewReader(f)
+		if err != nil {
+			return err
+		}
+		defer gz.Close()
+		reader = gz
+	} else if strings.HasSuffix(archivePath, ".tar.xz") {
+		xzReader, err := xz.NewReader(f, 0)
+		if err != nil {
+			return err
+		}
+		reader = xzReader
+	}
+	tr := tar.NewReader(reader)
+	for {
+		h, err := tr.Next()
+		if err == io.EOF {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		name := h.Name
+		if strip {
+			parts := strings.SplitN(name, "/", 2)
+			if len(parts) < 2 {
+				continue
+			}
+			name = parts[1]
+		}
+		target, err := sanitizePath(destDir, name)
+		if err != nil {
+			return fmt.Errorf("unsafe archive entry %q: %w", h.Name, err)
+		}
+		if h.Typeflag == tar.TypeSymlink {
+			if filepath.IsAbs(h.Linkname) {
+				return fmt.Errorf("absolute symlink target %q", h.Linkname)
+			}
+			if _, err := sanitizePath(destDir, filepath.Join(filepath.Dir(name), h.Linkname)); err != nil {
+				return fmt.Errorf("unsafe symlink %q -> %q: %w", name, h.Linkname, err)
+			}
+		}
+		if h.Typeflag == tar.TypeLink {
+			if filepath.IsAbs(h.Linkname) {
+				return fmt.Errorf("absolute hardlink target %q", h.Linkname)
+			}
+			if _, err := sanitizePath(destDir, h.Linkname); err != nil {
+				return err
+			}
+		}
+		_ = target
+	}
 }
 
 // extractGZ extracts a tar.gz archive
@@ -311,7 +377,7 @@ func sanitizePath(destDir, entryName string) (string, error) {
 	cleanName := filepath.Clean(entryName)
 
 	// Reject paths that try to escape the destination directory
-	if strings.HasPrefix(cleanName, "..") || strings.Contains(cleanName, ".."+string(filepath.Separator)) {
+	if cleanName == ".." || strings.HasPrefix(cleanName, ".."+string(filepath.Separator)) {
 		return "", fmt.Errorf("entry name contains path traversal: %s", entryName)
 	}
 

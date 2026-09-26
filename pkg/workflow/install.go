@@ -17,6 +17,7 @@ type InstallConfig struct {
 	WINEPREFIX        string
 	ProtonPath        string
 	GPUType           string
+	GPUCapabilities   core.GPUCapabilities
 	IsAMDGPU          bool
 	LauncherInstaller string
 	Workdir           string
@@ -38,6 +39,9 @@ func InstallDXVK(gpuType string, workdir string, logger *core.Logger) error {
 	if _, err := os.Stat(archive); os.IsNotExist(err) {
 		logger.Error(fmt.Sprintf("DXVK archive not found: %s", archive))
 		return fmt.Errorf("DXVK archive not found: %s", archive)
+	}
+	if err := packages.VerifySHA256(archive, packages.DXVKSHA256); err != nil {
+		return err
 	}
 
 	tmpDir, err := packages.ExtractPackage(archive, "dxvk")
@@ -100,7 +104,29 @@ func InstallDXVK(gpuType string, workdir string, logger *core.Logger) error {
 
 // RunInstaller runs the main installation workflow
 func RunInstaller(config InstallConfig, logger *core.Logger) error {
+	return RunInstallerWithBoundaries(config, logger, DefaultBoundaries)
+}
+
+// RunInstallerWithBoundaries runs installation using explicit effect boundaries.
+func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, boundaries WorkflowBoundaries) error {
+	if boundaries.Commands == nil {
+		boundaries.Commands = DefaultBoundaries.Commands
+	}
+	if boundaries.AcquirePackage == nil {
+		boundaries.AcquirePackage = DefaultBoundaries.AcquirePackage
+	}
+	if boundaries.GenerateLauncher == nil {
+		boundaries.GenerateLauncher = DefaultBoundaries.GenerateLauncher
+	}
+	if boundaries.MutatePrefix == nil {
+		boundaries.MutatePrefix = boundaries.Commands.Run
+	}
 	logger.Info("Starting Installation")
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		return err
+	}
+	winetricks := filepath.Join(homeDir, ".local", "bin", "winetricks")
 	fmt.Println()
 
 	// Set environment variables
@@ -116,7 +142,7 @@ func RunInstaller(config InstallConfig, logger *core.Logger) error {
 	// Get launcher installer path
 	launcherInstaller := config.LauncherInstaller
 	if launcherInstaller == "" {
-		state, err := packages.DownloadLauncherInstaller(config.Workdir, logger)
+		state, err := boundaries.AcquirePackage(config.Workdir, logger)
 		if err != nil {
 			logger.Error("Failed to download launcher installer")
 			return err
@@ -127,13 +153,19 @@ func RunInstaller(config InstallConfig, logger *core.Logger) error {
 
 	// Initialize WINEPREFIX with Proton base
 	logger.Info("Initializing WINEPREFIX with Proton base")
+	if err := os.MkdirAll(config.WINEPREFIX, 0700); err != nil {
+		return fmt.Errorf("create private Wine prefix: %w", err)
+	}
+	if err := os.Chmod(config.WINEPREFIX, 0700); err != nil {
+		return fmt.Errorf("secure Wine prefix: %w", err)
+	}
 	logFile := filepath.Join(config.Workdir, "logs", "installer.log")
-	if err := core.RunCommand(core.RunModeSilent, []string{"umu-run", cfg.DefaultVersions.Binaries.Msidb}, logger, logFile); err != nil {
+	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{"umu-run", cfg.DefaultVersions.Binaries.Msidb}, logger, logFile); err != nil {
 		logger.Warn("umu-run /usr/bin/msidb failed")
 		return err
 	}
 
-	if err := core.RunCommand(core.RunModeSilent, []string{cfg.DefaultVersions.Binaries.Wineboot, "--init"}, logger, logFile); err != nil {
+	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{cfg.DefaultVersions.Binaries.Wineboot, "--init"}, logger, logFile); err != nil {
 		logger.Error("wineboot --init failed")
 		return err
 	}
@@ -152,7 +184,7 @@ func RunInstaller(config InstallConfig, logger *core.Logger) error {
 	}
 
 	for _, dll := range dlls {
-		if err := core.RunCommand(core.RunModeSilent, []string{"winetricks", "-q", dll}, logger, logFile); err != nil {
+		if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "-q", dll}, logger, logFile); err != nil {
 			logger.Error(fmt.Sprintf("Failed to install %s", dll))
 			return err
 		}
@@ -163,12 +195,15 @@ func RunInstaller(config InstallConfig, logger *core.Logger) error {
 	logger.Info("Time to install the launcher! Follow the on screen prompts once the GUI pops up.")
 
 	// Kill wine server before running installer
-	core.RunCommand(core.RunModeSilent, []string{"wineserver", "-k"}, logger, logFile)
+	boundaries.MutatePrefix(core.RunModeSilent, []string{"wineserver", "-k"}, logger, logFile)
 
 	// Run the launcher installer
 	proton := filepath.Join(config.ProtonPath, "proton")
-	if err := core.RunCommand(core.RunModeSilent, []string{proton, "run", launcherInstaller}, logger, logFile); err != nil {
+	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{proton, "run", launcherInstaller}, logger, logFile); err != nil {
 		logger.Error("Launcher installation failed.")
+		return err
+	}
+	if err := checkWebView2Runtime(config.WINEPREFIX); err != nil {
 		return err
 	}
 
@@ -176,50 +211,77 @@ func RunInstaller(config InstallConfig, logger *core.Logger) error {
 	logger.Warn("I'm not done! Don't launch game or close this script just yet")
 
 	// Set Windows 11
-	if err := core.RunCommand(core.RunModeSilent, []string{"winetricks", "win11"}, logger, logFile); err != nil {
+	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "win11"}, logger, logFile); err != nil {
 		logger.Warn("winetricks win11 failed (may be expected)")
 	}
 
 	fmt.Println()
 
 	// Install DXVK (AMD only)
-	if err := InstallDXVK(config.GPUType, config.Workdir, logger); err != nil {
-		return err
+	if config.GPUCapabilities.Vendor == core.GPUAMD {
+		if err := InstallDXVK("AMD", config.Workdir, logger); err != nil {
+			return err
+		}
 	}
 
 	// Configure WINEPREFIX
 	logger.Info("Configuring WINEPREFIX with things Bellum likes")
-	if err := core.RunCommand(core.RunModeSilent, []string{"winetricks", "grabfullscreen=y", "windowmanagerdecorated=n", "mwo=disabled"}, logger, logFile); err != nil {
+	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "grabfullscreen=y", "windowmanagerdecorated=n", "mwo=disabled"}, logger, logFile); err != nil {
 		logger.Error("Winetricks configuration failed.")
 		return err
 	}
 
 	// Remove mono for AMD GPUs
 	if config.IsAMDGPU {
-		if err := core.RunCommand(core.RunModeSilent, []string{"winetricks", "remove_mono"}, logger, logFile); err != nil {
+		if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "remove_mono"}, logger, logFile); err != nil {
 			logger.Error("Mono removal failed.")
 			return err
 		}
 	}
 
 	// Generate launcher
-	if err := GenerateLauncher(config, logger); err != nil {
+	if err := generateLauncherWith(config, logger, boundaries.GenerateLauncher); err != nil {
 		return err
 	}
 
 	// Set DLL overrides
-	core.RunCommand(core.RunModeSilent, []string{"wine", "reg", "add", `HKCU\Software\Wine\DirectInput`, "/v", "RawInput", "/t", "REG_DWORD", "/d", "1", "/f"}, logger, logFile)
+	boundaries.MutatePrefix(core.RunModeSilent, []string{"wine", "reg", "add", `HKCU\Software\Wine\DirectInput`, "/v", "RawInput", "/t", "REG_DWORD", "/d", "1", "/f"}, logger, logFile)
 
 	// End wine session
-	core.RunCommand(core.RunModeSilent, []string{"wineboot", "--end-session"}, logger, logFile)
+	boundaries.MutatePrefix(core.RunModeSilent, []string{"wineboot", "--end-session"}, logger, logFile)
 
 	return nil
 }
 
+// checkWebView2Runtime rejects a bootstrapper-only installation. The launcher
+// needs the installed runtime to keep its authentication UI alive.
+func checkWebView2Runtime(prefix string) error {
+	for _, programFiles := range []string{"Program Files (x86)", "Program Files"} {
+		pattern := filepath.Join(prefix, "drive_c", programFiles, "Microsoft", "EdgeWebView", "Application", "*", "msedgewebview2.exe")
+		matches, err := filepath.Glob(pattern)
+		if err != nil {
+			return err
+		}
+		for _, match := range matches {
+			if info, err := os.Stat(match); err == nil && info.Mode().IsRegular() {
+				return nil
+			}
+		}
+	}
+	return fmt.Errorf("WebView2 runtime missing from Wine prefix %q: install msedgewebview2.exe before launching Bellum", prefix)
+}
+
 // GenerateLauncher generates the launcher wrappers and desktop files
 func GenerateLauncher(config InstallConfig, logger *core.Logger) error {
+	return generateLauncherWith(config, logger, launchers.GenerateLauncher)
+}
+
+func generateLauncherWith(config InstallConfig, logger *core.Logger, generate func(launchers.LauncherConfig) error) error {
 	// Copy icon to system location
 	iconPath := filepath.Join(config.Workdir, "packages", "launcher_1_256x256x32.png")
+	if err := packages.VerifySHA256(iconPath, packages.IconSHA256); err != nil {
+		return err
+	}
 	if err := launchers.CopyIcon(iconPath); err != nil {
 		logger.Warn(fmt.Sprintf("Failed to copy icon: %v", err))
 	}
@@ -232,23 +294,12 @@ func GenerateLauncher(config InstallConfig, logger *core.Logger) error {
 		IconPath:   iconPath,
 	}
 
-	if err := launchers.GenerateLauncher(launcherConfig); err != nil {
+	if err := generate(launcherConfig); err != nil {
 		logger.Error(fmt.Sprintf("Failed to generate launcher: %v", err))
 		return err
 	}
 
-	logger.Info("[OK] Game launcher installed: /usr/local/bin/Bellum")
-
-	// Generate launch vars file
-	if config.GPUType == "NVIDIA" {
-		if err := launchers.GenerateLaunchVarsFileNvidia(config.WINEPREFIX); err != nil {
-			logger.Warn(fmt.Sprintf("Failed to generate NVIDIA launch vars: %v", err))
-		}
-	} else if config.GPUType == "AMD" {
-		if err := launchers.GenerateLaunchVarsAMD(config.WINEPREFIX, config.IsFSR41); err != nil {
-			logger.Warn(fmt.Sprintf("Failed to generate AMD launch vars: %v", err))
-		}
-	}
+	logger.Info("[OK] Game launcher installed in ~/.local/bin/Bellum")
 
 	return nil
 }
