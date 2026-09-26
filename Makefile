@@ -140,12 +140,18 @@ release: $(INSTALLER_BIN) $(UNINSTALLER_BIN)
 		-C $(DIST_DIR) $(RELEASE_STEM)
 	@echo "[RELEASE] Done! Release built in $(DIST_DIR)/:"
 	@ls -l $(DIST_DIR)/$(RELEASE_TARBALL) $(RELEASE_DIR)/MANIFEST.md $(RELEASE_DIR)/SHA256SUMS
+	@printf '%s\n' '$(VERSION)' > $(DIST_DIR)/.last-version
 	@rm -f $(INSTALLER_BIN) $(UNINSTALLER_BIN)
 
-# Verify a release directory against its SHA256SUMS (provenance check).
+# Verify the last successful release unless VERSION was explicitly supplied.
 verify-release:
-	@echo "[VERIFY] Checking checksums in $(RELEASE_DIR)..."
-	@cd $(RELEASE_DIR) && sha256sum --check --strict SHA256SUMS
+	@version='$(VERSION)'; \
+	if [ '$(origin VERSION)' = 'file' ] && [ -f $(DIST_DIR)/.last-version ]; then \
+		version=$$(cat $(DIST_DIR)/.last-version); \
+	fi; \
+	release_dir="$(DIST_DIR)/bellum-installer-linux-amd64-$$version"; \
+	echo "[VERIFY] Checking checksums in $$release_dir..."; \
+	cd "$$release_dir" && sha256sum --check --strict SHA256SUMS
 
 # Clean build artifacts
 clean:

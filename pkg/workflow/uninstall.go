@@ -5,16 +5,15 @@ import (
 	"os"
 	"path/filepath"
 
-	"bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
 	"bellum-installer/pkg/gui"
-	"bellum-installer/pkg/packages"
 )
 
 // UninstallConfig holds configuration for uninstallation
 type UninstallConfig struct {
 	WINEPREFIX string
 	GPUType    string
+	DryRun     bool
 }
 
 // RunUninstallation runs the uninstallation workflow
@@ -43,6 +42,9 @@ func RunUninstallationWithBoundaries(config UninstallConfig, logger *core.Logger
 	if err := validateBellumPrefix(config.WINEPREFIX); err != nil {
 		return err
 	}
+	if _, err := readManifest(config.WINEPREFIX, boundaries.Files); err != nil {
+		return err
+	}
 
 	// Check if WINEPREFIX exists
 	wineprefixExists := isDirWith(config.WINEPREFIX, boundaries.Files)
@@ -51,6 +53,11 @@ func RunUninstallationWithBoundaries(config UninstallConfig, logger *core.Logger
 	}
 
 	logger.Info(fmt.Sprintf("WINEPREFIX: %s", core.Colorize(config.WINEPREFIX, core.ColorBoldYellow)))
+	logger.Info("Owned resource: selected Bellum prefix (manifest verified). Shared Proton and user-wide launcher files are retained.")
+	if config.DryRun {
+		logger.Info(fmt.Sprintf("Dry run: would remove only %s", config.WINEPREFIX))
+		return nil
+	}
 
 	// Ask for confirmation before removing anything
 	fmt.Println()
@@ -62,26 +69,6 @@ func RunUninstallationWithBoundaries(config UninstallConfig, logger *core.Logger
 	fmt.Println()
 	logger.Info("Proceeding with uninstallation...")
 	fmt.Println()
-
-	// Remove launcher binaries
-	if err := removeLauncherBinariesWith(config.GPUType, logger, boundaries.Files); err != nil {
-		return err
-	}
-
-	// Remove desktop entries
-	if err := removeDesktopEntriesWith(config.GPUType, logger, boundaries.Files, boundaries.Commands); err != nil {
-		return err
-	}
-
-	// Remove icon
-	if err := removeIconWith(logger, boundaries.Files); err != nil {
-		return err
-	}
-
-	// Remove Proton directory
-	if err := removeProtonWith(config.WINEPREFIX, config.GPUType, logger, boundaries.Files); err != nil {
-		return err
-	}
 
 	// Remove WINEPREFIX if it exists
 	if wineprefixExists {
@@ -177,34 +164,7 @@ func removeProton(wineprefix string, gpuType string, logger *core.Logger) error 
 	return removeProtonWith(wineprefix, gpuType, logger, DefaultBoundaries.Files)
 }
 func removeProtonWith(wineprefix string, gpuType string, logger *core.Logger, files FileStore) error {
-	logger.Info("Removing Proton directory...")
-
-	// Use proton-cachyos for all GPUs (AMD and NVIDIA)
-	protonVer := config.DefaultVersions.ProtonVer
-
-	// Get the proton install path (even if wineprefix doesn't exist)
-	protonPath := packages.GetProtonInstallPath(protonVer)
-	if _, err := files.Stat(protonPath); err == nil {
-		logger.Info(fmt.Sprintf("Removing Proton directory: %s", protonPath))
-		if err := files.RemoveAll(protonPath); err != nil {
-			logger.Warn(fmt.Sprintf("Failed to remove Proton directory %s: %v", protonPath, err))
-		} else {
-			logger.Info("[OK] Removed Bellum Proton directory")
-		}
-	}
-
-	// Check if the parent proton directory is now empty and remove it silently
-	protonParentDir := filepath.Join(filepath.Dir(protonPath))
-	if isEmptyDirWith(protonParentDir, files) {
-		files.RemoveAll(protonParentDir)
-	}
-
-	// Check if the bellum directory is now empty and remove it silently
-	bellumDir := filepath.Join(filepath.Dir(filepath.Dir(protonParentDir)))
-	if isEmptyDirWith(bellumDir, files) {
-		files.RemoveAll(bellumDir)
-	}
-
+	logger.Info("Retaining shared Proton installation")
 	return nil
 }
 
@@ -262,6 +222,9 @@ func validateBellumPrefix(prefix string) error {
 	}
 	if info, err := os.Stat(filepath.Join(clean, "drive_c")); err != nil || !info.IsDir() {
 		return fmt.Errorf("prefix lacks Wine drive_c marker: %q", clean)
+	}
+	if _, err := readManifest(clean, DefaultBoundaries.Files); err != nil {
+		return err
 	}
 	return nil
 }

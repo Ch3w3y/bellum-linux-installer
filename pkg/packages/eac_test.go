@@ -11,6 +11,9 @@ func TestEACRuntimeVerificationFailsClosed(t *testing.T) {
 	if err := VerifyEACRuntime(root, ""); err == nil {
 		t.Fatal("missing pin accepted")
 	}
+	if _, err := EACRuntimeDigest(root); err == nil {
+		t.Fatal("runtime with missing manifest files was accepted")
+	}
 	for _, name := range eacRuntimeFiles {
 		path := filepath.Join(root, filepath.FromSlash(name))
 		if err := os.MkdirAll(filepath.Dir(path), 0700); err != nil {
@@ -25,7 +28,7 @@ func TestEACRuntimeVerificationFailsClosed(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := VerifyEACRuntime(root, pin); err != nil {
-		t.Fatal(err)
+		t.Fatalf("approved manifest contents rejected: %v", err)
 	}
 	path := filepath.Join(root, filepath.FromSlash(eacRuntimeFiles[0]))
 	if err := os.WriteFile(path, []byte("tampered"), 0600); err != nil {

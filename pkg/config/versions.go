@@ -22,6 +22,7 @@ type Versions struct {
 	WinetricksVer    string
 	DXVKVer          string
 	VKD3DVer         string
+	DXVKNVAPIVer     string
 	Binaries         Binaries
 }
 
@@ -41,13 +42,16 @@ var DefaultVersions = Versions{
 	LauncherSigner: "ASTARTE INDUSTRIES INC.",
 	WineVer:        "wine-11.8",
 	WinetricksVer:  "20250102-modified",
-	DXVKVer:        "2.7.1-3-521-low-latency",
-	VKD3DVer:       "2.14",
+	// The installer uses Proton's integrated components instead of independently
+	// pinned DLL overlays. The Proton archive hash is the reproducible content pin.
+	DXVKVer:      "integrated with pinned Proton",
+	VKD3DVer:     "integrated with pinned Proton",
+	DXVKNVAPIVer: "integrated with pinned Proton",
 	Binaries: Binaries{
-		Wine:       "/usr/bin/wine",
-		Wineboot:   "/usr/bin/wineboot",
-		Msidb:      "/usr/bin/msidb",
-		Winecfg:    "/usr/bin/winecfg",
-		Wineserver: "/usr/bin/wineserver",
+		Wine:       "wine",
+		Wineboot:   "wineboot",
+		Msidb:      "msidb",
+		Winecfg:    "winecfg",
+		Wineserver: "wineserver",
 	},
 }

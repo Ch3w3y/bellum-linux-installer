@@ -15,8 +15,8 @@ That said, my goal is making sure none of my fellow linux gamers have to see the
 3. Extract the release tarball & access extracted directory:
 
 ```bash
-tar -xzf bellum-installer-linux-amd64-v2.0.0.tar.gz 
-cd bellum-installer-linux-amd64-v2.0.0
+tar -xzf bellum-installer-linux-amd64-v2.0.1.tar.gz
+cd bellum-installer-linux-amd64-v2.0.1
 ```
 
 ### Install Game
@@ -84,12 +84,22 @@ export WINEPREFIX=/path/to/wineprefix
 ./uninstaller
 ```
 
+The installer writes `.bellum-manifest.json` inside each new prefix to identify
+the Bellum-owned instance. Uninstall verifies that manifest, shows the resolved
+prefix, and requires an explicit `y` before deleting that prefix; Enter defaults
+to cancel. Run `./uninstaller --wineprefix /path/to/Bellum --dry-run` to inspect
+the target without changing files. Uninstall retains shared Proton and
+user-wide launcher files, which may be used by other Bellum instances. Back up
+the entire prefix first if it contains saves, credentials, or other data you
+want to keep. If installation fails after creating a new prefix, the installer
+removes that newly created prefix; it leaves pre-existing directories intact.
+
 ## Release Tarball Structure
 
-The release tarball (`bellum-installer-linux-amd64-v2.0.0.tar.gz`) contains:
+The release tarball (`bellum-installer-linux-amd64-v2.0.1.tar.gz`) contains:
 
 ```
-bellum-installer-linux-amd64-v2.0.0.tar.gz
+bellum-installer-linux-amd64-v2.0.1.tar.gz
 ├── installer          # Installer binary
 ├── uninstaller        # Uninstaller binary
 ├── MANIFEST.md        # Versioned manifest (per-file sha256 + sizes)
@@ -114,19 +124,17 @@ See [RELEASE.md](RELEASE.md) for the full release procedure, the release gate
 (QA + EAC + green CI + reproducibility + provenance checks before any RC tag),
 and the binary/provenance policy.
 
-##  ** ONLY Nvidia Blackwell 5000 Series GPUs **
-If you have an RTX 5000 series GPU running driver level `595`, you will need to downgrade to `590` before installing Bellum.
+## NVIDIA Blackwell (RTX 5000 series) driver note
 
-The driver is just plain broken for UE5 on wine/proton and it will fail to load shaders every time.
+The 595 driver branch has multiple community-reported regressions on Blackwell under Wine/Proton, and reports of UE5 problems on earlier branches (580 and 590 included) also exist. Examples: 595.71.05 fails Vulkan swapchain creation under Proton where 595.58.03 worked ([NVIDIA forum](https://forums.developer.nvidia.com/t/regression-595-71-05-blackwell-rtx-5070-vulkan-swapchain-creation-fails-vk-error-initialization-failed-under-proton-worked-on-595-58-03/371778)), and 595 performance regressions ([CachyOS #378](https://github.com/CachyOS/distribution/issues/378)).
 
-`590` is the latest driver level that is confirmed to be working for these GPUs.
+If Bellum fails to load shaders or renders a black screen on a 5000 series GPU with a 595 driver, try 595.58.03 or the 590 branch. No driver branch is validated by the Bellum project itself; this is guidance from public reports, not a guarantee.
 
 ## Implementation Notes
 
-- Runtime upscaler upgrades stay off until the game developers confirm support
-- Supports DLSS and Nvidia Framegen (5000 series users see driver note above)
-- All scripts are Go binaries with no external dependencies
-- Packages are bundled in the release tarball, not statically embedded
-- The installer detects GPU type and configures accordingly
-- All logging is written to `logs/installer.log`
-- The uninstaller removes all launcher files and optionally the WINEPREFIX
+- Runtime FSR/DLSS DLL upgrades are off by default; no DLLs are copied into the game directory. RDNA4 enables Proton's FSR4 driver component; RDNA3 stays off.
+- DXVK, vkd3d-proton and dxvk-nvapi come from the pinned CachyOS Proton runtime (see [runtime pins](docs/runtime-pins.md)). DLSS/Frame Generation availability depends on that runtime and your driver; it has not been validated against Bellum.
+- The launcher uses umu-launcher with the Proton EasyAntiCheat Runtime (see [EAC QA](docs/eac-qa.md)).
+- The installer and uninstaller are Go binaries; packages are bundled in the release tarball, not embedded.
+- All install logging is written to `logs/installer.log`; the uninstaller writes `uninstaller.log`.
+- The uninstaller removes the Bellum-owned prefix after confirmation and retains shared Proton and user-wide launcher files.

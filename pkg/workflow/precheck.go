@@ -200,6 +200,10 @@ func CheckRequiredWineBinaries(logger *core.Logger) error {
 }
 
 func checkRequiredWineBinaries(files FileStore, logger *core.Logger) error {
+	return checkRequiredWineBinariesWith(files, DefaultBoundaries.Commands, logger)
+}
+
+func checkRequiredWineBinariesWith(files FileStore, commands CommandRunner, logger *core.Logger) error {
 	requiredBinaries := []string{
 		config.DefaultVersions.Binaries.Wine,
 		config.DefaultVersions.Binaries.Wineboot,
@@ -210,17 +214,17 @@ func checkRequiredWineBinaries(files FileStore, logger *core.Logger) error {
 
 	var missing []string
 	for _, binary := range requiredBinaries {
-		if _, err := files.Stat(binary); os.IsNotExist(err) {
+		if DiscoverExecutable(binary, commands) == "" {
 			missing = append(missing, binary)
 		}
 	}
 
 	if len(missing) > 0 {
-		logger.Error("Required Wine binaries not found:")
-		for _, binary := range missing {
-			logger.Error(fmt.Sprintf("  - %s", binary))
-		}
-		return fmt.Errorf("missing Wine binaries")
+		host := DetectHost(files, commands)
+		guidance := MissingDependencyGuidance(host, missing)
+		logger.Error("Required Wine tools not found in PATH: " + strings.Join(missing, ", "))
+		logger.Error(guidance)
+		return fmt.Errorf("missing Wine binaries: %s", guidance)
 	}
 
 	logger.Info("[OK] All required Wine binaries found")
@@ -229,7 +233,7 @@ func checkRequiredWineBinaries(files FileStore, logger *core.Logger) error {
 
 // CheckWineVersion verifies Wine version matches requirements
 func CheckWineVersion(logger *core.Logger, force bool) error {
-	installedWine := getWineVersion(logger)
+	installedWine := getWineVersionWith(DefaultBoundaries.Commands, logger)
 	requiredWine := strings.TrimPrefix(config.DefaultVersions.WineVer, "wine-")
 
 	if installedWine == "" {
@@ -297,6 +301,13 @@ func checkLauncherInstaller(launcherInstallerPath string, logger *core.Logger, f
 
 // CheckWinetricks checks if winetricks is available
 func CheckWinetricks(workdir string, logger *core.Logger) error {
+	if DetectHost(DefaultBoundaries.Files, DefaultBoundaries.Commands).Immutable {
+		if DiscoverExecutable("winetricks", DefaultBoundaries.Commands) == "" {
+			message := MissingDependencyGuidance(DetectHost(DefaultBoundaries.Files, DefaultBoundaries.Commands), []string{"winetricks"})
+			logger.Error(message)
+			return fmt.Errorf("winetricks unavailable on immutable host: %s", message)
+		}
+	}
 	logger.Info("Installing pinned vendored winetricks without privilege...")
 
 	winetricksArchive := filepath.Join(workdir, "packages", "winetricks-"+config.DefaultVersions.WinetricksVer+".tar.gz")
@@ -350,7 +361,7 @@ func CheckProton(packageRoot string, gpuType string, isFSR41 bool, logger *core.
 	}
 	isAMD := strings.Contains(strings.ToLower(gpuType), "amd") || strings.Contains(strings.ToLower(gpuType), "radeon")
 
-	if core.LookPath("wget") == "" {
+	if DiscoverExecutable("wget", DefaultBoundaries.Commands) == "" {
 		logger.Error("Proton is missing and wget is not available to download it.")
 		return "", "", fmt.Errorf("proton missing and wget not available")
 	}
@@ -498,14 +509,18 @@ func isWritable(path string) bool {
 }
 
 func isSSD(path string, logger *core.Logger) bool {
+	return isSSDWith(path, logger, DefaultBoundaries.Commands)
+}
+
+func isSSDWith(path string, logger *core.Logger, commands CommandRunner) bool {
 	// Try lsblk first
-	if output, err := core.RunCommandWithOutput([]string{"lsblk", "-no", "rota", filepath.Dir(path)}); err == nil {
+	if output, err := commands.Output([]string{"lsblk", "-no", "rota", filepath.Dir(path)}); err == nil {
 		rotational := strings.TrimSpace(output)
 		return rotational == "0"
 	}
 
 	// Fallback to checking device name
-	device, err := core.RunCommandWithOutput([]string{"df", "-P", path})
+	device, err := commands.Output([]string{"df", "-P", path})
 	if err != nil {
 		return false
 	}
@@ -524,13 +539,17 @@ func isSSD(path string, logger *core.Logger) bool {
 }
 
 func getWineVersion(logger *core.Logger) string {
+	return getWineVersionWith(DefaultBoundaries.Commands, logger)
+}
+
+func getWineVersionWith(commands CommandRunner, logger *core.Logger) string {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
 	defaultPfx := filepath.Join(homeDir, ".wine")
 	os.Setenv("WINEPREFIX", defaultPfx)
-	output, err := core.RunCommandWithOutput([]string{"wine", "--version"})
+	output, err := commands.Output([]string{"wine", "--version"})
 	if err != nil {
 		return ""
 	}

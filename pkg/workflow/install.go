@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
 
 	cfg "bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
@@ -24,91 +23,13 @@ type InstallConfig struct {
 	IsFSR41           bool
 }
 
-// InstallDXVK installs DXVK for AMD GPUs
-func InstallDXVK(gpuType string, workdir string, logger *core.Logger) error {
-	// Only install DXVK for AMD GPUs
-	if !strings.Contains(strings.ToLower(gpuType), "amd") && !strings.Contains(strings.ToLower(gpuType), "radeon") {
-		logger.Info(fmt.Sprintf("Skipping DXVK installation for non-AMD GPU: %s", gpuType))
-		return nil
-	}
-
-	archive := filepath.Join(workdir, "packages", "dxvk-"+cfg.DefaultVersions.DXVKVer+".tar.gz")
-	var tmpDir string
-
-	logger.Info("Installing DXVK...")
-	if _, err := os.Stat(archive); os.IsNotExist(err) {
-		logger.Error(fmt.Sprintf("DXVK archive not found: %s", archive))
-		return fmt.Errorf("DXVK archive not found: %s", archive)
-	}
-	if err := packages.VerifySHA256(archive, packages.DXVKSHA256); err != nil {
-		return err
-	}
-
-	tmpDir, err := packages.ExtractPackage(archive, "dxvk")
-	if err != nil {
-		logger.Error("Failed to extract DXVK archive")
-		return err
-	}
-
-	// Find the dxvk_setup.sh script
-	installDir := tmpDir
-	if _, err := os.Stat(filepath.Join(tmpDir, "dxvk_setup.sh")); os.IsNotExist(err) {
-		// Try to find subdirectory
-		entries, err := os.ReadDir(tmpDir)
-		if err != nil || len(entries) == 0 {
-			logger.Error("DXVK setup script not found after extraction.")
-			packages.CleanupTempDir(archive)
-			return fmt.Errorf("DXVK setup script not found")
-		}
-		for _, entry := range entries {
-			if entry.IsDir() {
-				installDir = filepath.Join(tmpDir, entry.Name())
-				break
-			}
-		}
-	}
-
-	if _, err := os.Stat(filepath.Join(installDir, "dxvk_setup.sh")); os.IsNotExist(err) {
-		logger.Error("DXVK setup script not found after extraction.")
-		packages.CleanupTempDir(archive)
-		return fmt.Errorf("DXVK setup script not found")
-	}
-
-	// Run dxvk_setup.sh install
-	logFile := filepath.Join(workdir, "logs", "installer.log")
-	if err := core.RunCommand(core.RunModeSilent, []string{filepath.Join(installDir, "dxvk_setup.sh"), "install"}, logger, logFile); err != nil {
-		logger.Error("DXVK installation failed.")
-		packages.CleanupTempDir(archive)
-		return err
-	}
-
-	// Copy dxvk.conf to WINEPREFIX
-	dxvkConf := filepath.Join(installDir, "dxvk.conf")
-	wineprefix := os.Getenv("WINEPREFIX")
-	if wineprefix == "" {
-		logger.Error("WINEPREFIX not set")
-		packages.CleanupTempDir(archive)
-		return fmt.Errorf("WINEPREFIX not set")
-	}
-
-	if err := copyFile(dxvkConf, filepath.Join(wineprefix, "dxvk.conf")); err != nil {
-		logger.Error("Failed to copy dxvk.conf.")
-		packages.CleanupTempDir(archive)
-		return err
-	}
-
-	packages.CleanupTempDir(archive)
-	logger.Info("[OK] DXVK installed")
-	return nil
-}
-
 // RunInstaller runs the main installation workflow
 func RunInstaller(config InstallConfig, logger *core.Logger) error {
 	return RunInstallerWithBoundaries(config, logger, DefaultBoundaries)
 }
 
 // RunInstallerWithBoundaries runs installation using explicit effect boundaries.
-func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, boundaries WorkflowBoundaries) error {
+func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, boundaries WorkflowBoundaries) (resultErr error) {
 	if boundaries.Commands == nil {
 		boundaries.Commands = DefaultBoundaries.Commands
 	}
@@ -120,6 +41,9 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	}
 	if boundaries.MutatePrefix == nil {
 		boundaries.MutatePrefix = boundaries.Commands.Run
+	}
+	if boundaries.Files == nil {
+		boundaries.Files = DefaultBoundaries.Files
 	}
 	logger.Info("Starting Installation")
 	homeDir, err := os.UserHomeDir()
@@ -151,6 +75,21 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 		defer packages.CleanupLauncherInstaller(state, logger)
 	}
 
+	// The precheck rejects nonempty existing prefixes. Track whether this run
+	// created the selected directory so a failed install can remove only its own.
+	_, statErr := os.Lstat(config.WINEPREFIX)
+	createdPrefix := os.IsNotExist(statErr)
+	if statErr != nil && !createdPrefix {
+		return fmt.Errorf("inspect Wine prefix: %w", statErr)
+	}
+	defer func() {
+		if resultErr != nil && createdPrefix {
+			if err := rollbackNewPrefix(config.WINEPREFIX, true, boundaries.Files); err != nil {
+				resultErr = fmt.Errorf("%w (also failed to roll back new prefix: %v)", resultErr, err)
+			}
+		}
+	}()
+
 	// Initialize WINEPREFIX with Proton base
 	logger.Info("Initializing WINEPREFIX with Proton base")
 	if err := os.MkdirAll(config.WINEPREFIX, 0700); err != nil {
@@ -158,6 +97,9 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	}
 	if err := os.Chmod(config.WINEPREFIX, 0700); err != nil {
 		return fmt.Errorf("secure Wine prefix: %w", err)
+	}
+	if err := writeManifest(config.WINEPREFIX, boundaries.Files); err != nil {
+		return fmt.Errorf("write Bellum ownership manifest: %w", err)
 	}
 	logFile := filepath.Join(config.Workdir, "logs", "installer.log")
 	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{"umu-run", cfg.DefaultVersions.Binaries.Msidb}, logger, logFile); err != nil {
@@ -217,12 +159,9 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 
 	fmt.Println()
 
-	// Install DXVK (AMD only)
-	if config.GPUCapabilities.Vendor == core.GPUAMD {
-		if err := InstallDXVK("AMD", config.Workdir, logger); err != nil {
-			return err
-		}
-	}
+	// Proton's pinned build supplies DXVK, vkd3d-proton, and dxvk-nvapi.
+	// Do not overlay a separate DXVK build into the prefix: retain one coherent
+	// runtime set and its upstream integrity guarantees for every GPU vendor.
 
 	// Configure WINEPREFIX
 	logger.Info("Configuring WINEPREFIX with things Bellum likes")

@@ -7,7 +7,7 @@ binary/provenance policy that applies to every artifact.
 
 A release candidate must NOT be tagged until all of the following are complete:
 
-1. **QA evidence** — [TES-12](https://github.com/Ch3w3y/bellum-linux-installer)
+1. **QA evidence** — [TES-12](/TES/issues/TES-12)
    records the production release matrix and remaining limitations.
 2. **EAC gate** — per the TES-13 scope update: game-directory-write removal,
    the common umu/Proton EAC path, and all Security high/medium findings fixed.
@@ -16,12 +16,13 @@ A release candidate must NOT be tagged until all of the following are complete:
 4. **Release verification** — `make release` produces the tarball, `MANIFEST.md`,
    and `SHA256SUMS`; `make verify-release` passes; rebuilding from a clean tree
    yields a byte-identical tarball (see "Reproducibility" below).
-5. **Pinned artifact provenance/checksum checks** — every bundled package
-   (DXVK, winetricks, FSR4 DLLs, launcher icon) is a pinned, named version.
-   Its sha256 in `MANIFEST.md`/`SHA256SUMS` is checked against the pinned
-   provenance table in `pkg/config/versions.go` (and the upstream source the
-   artifact came from). New or replaced packages require an updated pin and a
-   fresh checksum entry — never an unverified re-download.
+5. **Pinned artifact provenance/checksum checks** — every bundled package is
+   a pinned, named version. Its sha256 in `MANIFEST.md`/`SHA256SUMS` is checked
+   against its provenance and pin. Runtime component provenance and the
+   integrated Proton component policy are recorded in
+   [`docs/runtime-pins.md`](docs/runtime-pins.md). New or replaced packages
+   require an updated pin and a fresh checksum entry — never an unverified
+   re-download.
 
 ## Building a release locally
 
@@ -32,7 +33,7 @@ make check
 # 2. Build the reproducible release (override VERSION as needed)
 make release VERSION=2.1.0
 
-# 3. Verify checksums of the staged artifacts
+# 3. Verify checksums of the staged artifacts (uses the last release version)
 make verify-release
 ```
 
@@ -61,6 +62,10 @@ and `packages/`.
   `946684800`, i.e. 2000-01-01T00:00:00Z), `--sort=name`, and a fixed mode.
 - `LC_ALL=C` and a stable `find | sort` order make file lists deterministic.
 
+The successful release version is recorded in `dist/.last-version`, so
+`make verify-release` checks that release. Pass `VERSION=<v>` to verify a
+different staged release.
+
 Verification: run `make release VERSION=<v>` twice from a clean tree; the
 tarball sha256 must match. CI and the release checklist treat any mismatch as
 a release blocker.
@@ -71,16 +76,24 @@ a release blocker.
   `MANIFEST.md` (`commit:` field) with the Go toolchain version recorded
   alongside. Prebuilt binaries are never committed to the repository.
 - **Bundled packages** in `packages/` are pinned versions of upstream
-  artifacts (proton-cachyos, DXVK, winetricks-modified, FSR4 DLLs). Their
-  sha256 is recorded in the release manifest; provenance/pinning policy and
-  version pins live in `pkg/config/versions.go`. A checksum mismatch on any
-  bundled package fails release verification.
+  artifacts (winetricks-modified and the launcher icon). Their sha256 is
+  recorded in the release manifest; provenance/pinning policy and version
+  pins live in `pkg/config/versions.go` and `docs/runtime-pins.md`. Proton is
+  downloaded with a pinned checksum; DXVK, vkd3d-proton, and dxvk-nvapi come
+  from that Proton runtime rather than separately overlaid bundles. A checksum
+  mismatch on any bundled or downloaded artifact fails closed.
 - **The installer and uninstaller are never executed by CI, the Makefile, or
   release tooling.** They touch Wine prefixes, download runtime artifacts,
   and mutate the host; that is exercised only by the manual QA matrix in
   TES-12. CI and `make release` are compile/package-only.
 - **No RC without the gate**: tagging is blocked on the checklist above —
   QA evidence, EAC fixes, green CI, reproducibility, and provenance checks.
+
+## Local build troubleshooting
+
+If a local Go build reports `error obtaining VCS status`, ensure a real Git
+executable is first in `PATH`. The Paperclip git shim can shadow Git in some
+agent environments. Keep VCS stamping enabled for release provenance.
 
 ## Publishing
 
