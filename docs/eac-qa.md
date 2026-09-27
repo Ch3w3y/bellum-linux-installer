@@ -1,28 +1,112 @@
-# Bellum EAC Linux mode check
+# Hardware and Easy Anti-Cheat QA
 
-> Status (2026-09-27): Astarte has enabled Proton/Linux EAC support for Bellum.
-> Use this checklist to capture per-release evidence that the installed
-> configuration works. Links of the form `/TES/issues/...` point to the
-> internal tracker and do not resolve on GitHub. The digest in step 2 identifies a
-> known build; after a Steam update the installer warns and continues.
+Every final release needs QA and EAC evidence from a real install of the
+release candidate it ships (see [RELEASE.md](../RELEASE.md)). CI can't provide
+this: it never runs the installer, and Easy Anti-Cheat only runs on real
+hardware with a real account. Astarte has enabled Proton/Linux EAC support for
+Bellum; this checklist confirms that each release's configuration works with
+it.
 
-1. Obtain the runtime through the Steam client using an entitled Steam account. In Steam, open **Library → Tools**, search for **Proton EasyAntiCheat Runtime**, and install it (Steam app `1826330`; direct client URI: `steam://install/1826330`). Keep it in that Steam library; do not copy it into the installer or redistribute depot files. The installer finds it in any native or Flatpak Steam library; `PROTON_EAC_RUNTIME` overrides the lookup.
-2. Confirm the installed app manifest reports build `10437216`; the approved source is Steam app `1826330`, depot `1826331`, manifest `3310269496439035229`. Bellum verifies SHA-256 over each required relative path, a NUL byte, that file's bytes, and a trailing NUL, in sorted manifest order. The six individual file hashes and sizes, plus the combined manifest digest `4d18c3a5b896c757be9e25bf1004b81568bc4d4e56ddd8d1a2a634eebf12d1f9`, are recorded in [TES-13 remediation status](internal/tes13-remediation-status.md). Missing or non-regular files fail closed; a changed digest (a Steam update) is logged as a warning and should be added to `EACRuntimeSHA256Allowlist` after this checklist passes. The app remains in the user's Steam library; Bellum neither downloads nor redistributes the runtime.
-3. Start `~/.local/bin/Bellum` with `PROTON_LOG=1` and `UMU_LOG=1`. The wrapper sources `<prefix>/launch_vars.env`, checks `PROTON_EAC_RUNTIME`, and executes `umu-run` for AMD, NVIDIA, and Intel. It writes `<prefix>/launcher.log`.
-4. Inspect the new log after the game's protected process starts:
+## Install the candidate
 
-   ```sh
-   rg -i 'umu|proton|easyanticheat|eac|anti.cheat' "$WINEPREFIX/launcher.log"
-   ```
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version vX.Y.Z-rc.N
+```
 
-5. Follow the [EAC Linux-mode verification procedure](/TES/issues/TES-16#document-eac-linux-verification) for the fresh EAC logs under `drive_c/users/*/AppData/Roaming/EasyAntiCheat`, the Proton log, and the protected multiplayer session. Confirm `linux64` module selection, successful module load and Wine mapping, and protected-session admission and retention for the same launch. The `launcher.log` check above only confirms the umu configuration. Record the GPU vendor, runtime path, Proton version, and redacted log lines on [TES-12](/TES/issues/TES-12). Mark missing or ambiguous EAC evidence inconclusive. Static hash verification is not proof that Bellum's protected session works in Linux mode; that live evidence belongs to TES-12.
+Test a fresh install where possible, and an update of an existing install
+(run the same command on it).
 
-The installer and launcher never add, copy, or replace DLLs (#11). The pinned Proton runtime stages AMD's FSR4 driver component itself on supported RDNA2–RDNA4 GPUs; the launcher additionally sets `PROTON_FSR4_UPGRADE=1` on RDNA4. DLSS DLL upgrades and the NGX updater stay off (see [runtime pins](runtime-pins.md)). MangoHud, vkBasalt, and gamescope are opt-in through `BELLUM_MANGOHUD=1`, `BELLUM_VKBASALT=1`, and `BELLUM_GAMESCOPE=1` on the wrapper command.
+## Checklist
 
-Match EAC evidence to product `087dc666152349c68aa8e1962237c472`, sandbox `84c3e73046e546d282c07eee30ac3162`, and deployment `1ec8679293294023bb158112821a4041`. Do not infer success from these IDs alone.
+**Install**
 
-## Launcher lifecycle and private data
+- [ ] The banner shows the candidate version and the pinned Proton,
+  umu-launcher and winetricks versions.
+- [ ] The system check reports the GPU (vendor and generation), the display
+  session and the Proton EasyAntiCheat Runtime correctly.
+- [ ] The install finishes with *Bellum is installed*, with no `✖` lines.
+- [ ] The launcher update step reports `Astarte Launcher vX.Y.Z is up to date`
+  or `updated to vX.Y.Z`.
+- [ ] `<prefix>` is mode `0700`; `launch_vars.env` and `launcher.log` are
+  `0600`.
+- [ ] WebView2 is installed: `msedgewebview2.exe` exists under
+  `<prefix>/drive_c/Program Files (x86)/Microsoft/EdgeWebView/Application/`
+  (or `Program Files`). The installer checks this itself.
 
-The Astarte Launcher must remain running while Bellum runs because it authenticates the game. Verify that the wrapper installs a newer launcher release before start (`launcher.log` shows `Astarte Launcher … is up to date` or `updated to …`) so the launcher never runs its own updater, which loops under Wine; that the umu container survives tray minimization and the launcher's initial process handoff; confirm the protected game stays alive until Quit. A second wrapper click must return promptly with an already-running message. Confirm that Quit ends the session and a later click starts it again. Verify WebView2's `msedgewebview2.exe` is present after install; a bootstrapper alone is insufficient. Confirm the prefix is `0700` and `launch_vars.env` plus `launcher.log` are `0600`.
+**Launcher**
 
-The prefix contains saved login credentials, access certificates, and WebView2 cookies. Redact usernames, tokens, certificate material, and cookies from logs or screenshots before attaching QA evidence.
+- [ ] The shortcut opens the Astarte Launcher once, with no update-and-restart
+  loop. `launcher.log` shows the launcher-update line before the launcher
+  starts.
+- [ ] Signing in works and the game downloads through the launcher.
+- [ ] A second click on the shortcut while it's running returns at once
+  (*Bellum is already running*).
+- [ ] Quitting the launcher ends the session, and the next click starts it
+  again.
+
+**Easy Anti-Cheat**
+
+- [ ] The game starts from the launcher, and the EAC splash or initialisation
+  passes.
+- [ ] Joining an **online match** works, and it lasts for a meaningful session
+  (note how long) without an EAC error, kick or disconnect.
+- [ ] Fresh EAC logs under
+  `<prefix>/drive_c/users/steamuser/AppData/Roaming/EasyAntiCheat/` show the
+  Linux module loading and the session being admitted. Match the IDs below;
+  the IDs alone don't prove success.
+- [ ] The game stays running until you quit it.
+
+**Graphics (optional but useful)**
+
+- [ ] AMD: with `PROTON_FSR4_INDICATOR=1` in `launch_vars.env`, the FSR
+  watermark appears when FSR is selected in game.
+- [ ] Rough performance notes: resolution, preset, upscaler, typical FPS.
+
+EAC identifiers for Bellum: product `087dc666152349c68aa8e1962237c472`,
+sandbox `84c3e73046e546d282c07eee30ac3162`, deployment
+`1ec8679293294023bb158112821a4041`.
+
+## Useful commands
+
+```bash
+# Launcher, updates and game output for the last launch
+tail -n 200 ~/Games/Bellum/launcher.log
+
+# The EAC and umu lines only
+grep -iE 'umu|proton|easyanticheat|eac|anti.cheat' ~/Games/Bellum/launcher.log
+
+# More detail on the next launch
+PROTON_LOG=1 UMU_LOG=1 Bellum
+```
+
+## Recording the evidence
+
+Write one record per item in `docs/release-evidence/<candidate SHA>/`
+(`qa.md`, `eac.md`) and link it from [RELEASE-GATE.md](../RELEASE-GATE.md).
+Include:
+
+- the candidate tag and full commit SHA;
+- the date, and who tested;
+- hardware and software: CPU, GPU, driver (Mesa or NVIDIA version), distro and
+  kernel, desktop and session (X11, Wayland or gamescope), and whether Steam is
+  native or Flatpak;
+- the Proton EasyAntiCheat Runtime build (Steam shows it; the installer logs
+  its digest);
+- each checklist item as passed, failed or not tested, with notes;
+- short, **redacted** log excerpts.
+
+Mark anything missing or ambiguous as inconclusive rather than passed.
+
+## Privacy
+
+The prefix holds your launcher login, access certificates and WebView2
+cookies. Before sharing logs or screenshots, remove usernames, account and
+session IDs, tokens, certificate material and cookies.
+
+## EAC runtime updates
+
+Steam updates the Proton EasyAntiCheat Runtime (app `1826330`) on its own.
+The installer requires all six runtime files. If their combined digest is new,
+it logs the digest as a warning and continues. After a candidate passes this
+checklist on that runtime, add the digest to `EACRuntimeSHA256Allowlist` in
+`pkg/config/versions.go`.

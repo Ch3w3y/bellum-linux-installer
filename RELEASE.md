@@ -1,122 +1,129 @@
-# Release process — Bellum Linux Installer
+# Releasing
 
-This document describes how to build, verify, and publish a release, and the
-binary/provenance policy that applies to every artifact.
+How a release is built, tested on real hardware, gated and published. The
+installer is never run in CI; it is tested by hand through release candidates.
 
-## Release gate (hard requirements before tagging an RC)
+## Overview
 
-A release candidate must NOT be tagged until all of the following are complete:
+1. **Merge to `main`** with CI green (gofmt, vet, tests, module pinning,
+   builds, `install.sh` shellcheck and dry run).
+2. **Cut a release candidate** `vX.Y.Z-rc.N` (see [Starting a
+   release](#starting-a-release)). The workflow builds both architectures,
+   attests them and publishes a GitHub **pre-release**. Candidates skip the
+   evidence gate because they exist to gather it.
+3. **Test the candidate on real hardware** with the one-line installer:
 
-1. **QA evidence** — [TES-12](/TES/issues/TES-12)
-   records the production release matrix and remaining limitations.
-2. **EAC gate** — per the TES-13 scope update: game-directory-write removal,
-   the common umu/Proton EAC path, and all Security high/medium findings fixed.
-3. **CI green** — the `CI` workflow (gofmt, go vet, go test, module pinning,
-   compile-only builds for amd64/arm64) passes on the release commit.
-4. **Release verification** — `make release` produces the tarball, `MANIFEST.md`,
-   and `SHA256SUMS`; `make verify-release` passes; rebuilding from a clean tree
-   yields a byte-identical tarball (see "Reproducibility" below).
-5. **Pinned artifact provenance/checksum checks** — every bundled package is
-   a pinned, named version. Its sha256 in `MANIFEST.md`/`SHA256SUMS` is checked
-   against its provenance and pin. Runtime component provenance and the
-   integrated Proton component policy are recorded in
-   [`docs/runtime-pins.md`](docs/runtime-pins.md). New or replaced packages
-   require an updated pin and a fresh checksum entry — never an unverified
-   re-download.
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version vX.Y.Z-rc.N
+   ```
 
-## Building a release locally
+   Follow the [QA and EAC checklist](docs/eac-qa.md). Any fix means a new
+   candidate.
+4. **Record the evidence** for the tested candidate commit in
+   [`RELEASE-GATE.md`](RELEASE-GATE.md) and `docs/release-evidence/<candidate
+   SHA>/` (QA, EAC, security review, provenance of the pins), in one commit on
+   `main` that changes nothing else.
+5. **Cut the final release** `vX.Y.Z`. The workflow runs the gate, builds,
+   attests and waits for approval on the `release` environment, then
+   publishes a **draft** release.
+6. **Review and publish the draft.** The one-line installer only picks up
+   published, non-pre-release versions (GitHub's "latest release").
+
+## The evidence gate
+
+`scripts/check-release-gate.sh` runs for every final release and fails
+closed. It requires:
+
+- a `Candidate:` line naming the full SHA of the tested release candidate;
+- that candidate to be an ancestor of the release commit, with **nothing but
+  `RELEASE-GATE.md` and `docs/release-evidence/` changed since**, so the
+  released code is exactly the code that was tested;
+- all four items (QA, EAC, Security, Provenance) checked, each with an HTTPS
+  link that contains the candidate SHA and isn't a placeholder.
+
+A link is not an approval. The reviewer on the `release` environment must
+read each record before approving. Configure **Settings → Environments →
+release → Required reviewers**; don't publish a final release without it.
+
+`scripts/test-release.sh` covers the gate (valid, unchecked, placeholder,
+stale and missing-candidate evidence, and code changed after the candidate),
+the dirty-tree check, archive tampering and the asset-set check.
+
+## Starting a release
+
+From the Actions tab: **Tagged release → Run workflow**, enter the tag (for
+example `v2.2.0-rc.6` or `v2.2.0`). This creates the tag at the head of the
+chosen branch. Pushing a `v*` tag does the same.
+
+The workflow checks that the tag matches, the tree is clean and the gate
+passes (final releases only). It then runs `make check` and `govulncheck`,
+builds `amd64` and `arm64` with `make release`, verifies each archive,
+creates GitHub build-provenance attestations, and publishes once the asset
+set is complete.
+
+## Building locally
 
 ```bash
-# 1. Run the same checks CI runs
-make check
-
-# 2. Build the reproducible release from a clean checkout
-make release VERSION=2.1.0 GOARCH=amd64
-
-# 3. Verify checksums of the staged artifacts (uses the last release version)
-make verify-release GOARCH=amd64
+make check                        # what CI runs
+make release VERSION=2.2.0        # needs a clean tree; GOARCH=arm64 for ARM
+make verify-release               # re-check the last staged release
+scripts/test-release.sh           # release tooling regression tests
 ```
 
-Outputs (in `dist/`):
+Outputs in `dist/`:
 
-- `bellum-installer-linux-<GOARCH>-<VERSION>.tar.gz` — the release archive
-- `dist/bellum-installer-linux-amd64-<VERSION>/MANIFEST.md` — versioned
-  manifest: version, build metadata, per-file sha256 + size, provenance notes
-- `dist/bellum-installer-linux-amd64-<VERSION>/SHA256SUMS` — checksums for the
-  staged files (excluding itself)
+- `bellum-installer-linux-<arch>-<version>.tar.gz`, containing `installer`,
+  `uninstaller`, `MANIFEST.md` (version, commit, Go toolchain, per-file SHA-256
+  and sizes), `SHA256SUMS` and the tracked files in `packages/`;
+- `SHA256SUMS` for the archives.
 
-The archive contains `installer`, `uninstaller`, `MANIFEST.md`, `SHA256SUMS`,
-and tracked files from `packages/`. `make release` rejects a dirty tree.
-`make verify-release` checks staged checksums and compares the extracted
-tarball with the staged directory, so a changed archive fails verification.
+`config.InstallerVersion` is stamped into the binaries with `-ldflags -X`.
+`make release` refuses a dirty tree, and `make verify-release` fails if the
+archive differs from the staged files.
 
 ## Reproducibility
 
-`make release` is deterministic for the same source tree and `VERSION`:
+`make release` is deterministic for the same source tree, `VERSION` and Go
+toolchain:
 
-- Go builds use `-trimpath -mod=readonly` and fixed ldflags; no timestamps or
-  paths are embedded.
-- `go mod tidy` is never run as a build side effect. `go.mod`/`go.sum` are
-  pinned by hand; `go mod tidy -diff` (in `make check`) fails the build if
-  they drift.
-- The tarball is packed with fixed metadata: `--owner=0 --group=0
-  --numeric-owner`, `--mtime` from `SOURCE_DATE_EPOCH` (default
-  `946684800`, i.e. 2000-01-01T00:00:00Z), `--sort=name`, and a fixed mode.
-- `LC_ALL=C` and a stable `find | sort` order make file lists deterministic.
+- builds use `-trimpath -mod=readonly` and fixed ldflags, so no timestamps or
+  local paths are embedded;
+- `go.mod` and `go.sum` are maintained by hand; `make check` fails if
+  `go mod tidy -diff` finds drift;
+- the tarball is packed with fixed owner, group, mode and order, and an mtime
+  from `SOURCE_DATE_EPOCH` (default 2000-01-01);
+- `LC_ALL=C` and sorted file lists keep ordering stable.
 
-The successful release version is recorded in `dist/.last-version`, so
-`make verify-release` checks that release. Pass `VERSION=<v>` to verify a
-different staged release.
+Building twice from a clean tree must give the same tarball SHA-256; a
+mismatch blocks the release.
 
-Verification: run `make release VERSION=<v>` twice from a clean tree; the
-tarball sha256 must match. CI and the release checklist treat any mismatch as
-a release blocker.
+## Verifying a published release
 
-## Binary / provenance policy (visible summary)
+```bash
+v=2.2.0
+base=https://github.com/Ch3w3y/bellum-linux-installer/releases/download/v$v
+curl -fLO "$base/bellum-installer-linux-amd64-$v.tar.gz" -fLO "$base/bellum-installer-linux-arm64-$v.tar.gz" -fLO "$base/SHA256SUMS"
+sha256sum --check --strict SHA256SUMS
+gh attestation verify "bellum-installer-linux-amd64-$v.tar.gz" --repo Ch3w3y/bellum-linux-installer
+gh attestation verify "bellum-installer-linux-arm64-$v.tar.gz" --repo Ch3w3y/bellum-linux-installer
+```
 
-- **Binaries** are built by `make release` from the exact commit recorded in
-  `MANIFEST.md` (`commit:` field) with the Go toolchain version recorded
-  alongside. Prebuilt binaries are never committed to the repository.
-- **Bundled packages** in `packages/` are pinned versions of upstream
-  artifacts (currently only the launcher icon; winetricks comes from the
-  pinned Proton archive). Their sha256 is
-  recorded in the release manifest; provenance/pinning policy and version
-  pins live in `pkg/config/versions.go` and `docs/runtime-pins.md`. Proton is
-  downloaded with a pinned checksum; DXVK, vkd3d-proton, and dxvk-nvapi come
-  from that Proton runtime rather than separately overlaid bundles. A checksum
-  mismatch on any bundled or downloaded artifact fails closed.
-- **The installer and uninstaller are never executed by CI, the Makefile, or
-  release tooling.** They touch Wine prefixes, download runtime artifacts,
-  and mutate the host; that is exercised only by the manual QA matrix in
-  TES-12. CI and `make release` are compile/package-only.
-- **No RC without the gate**: tagging is blocked on the checklist above —
-  QA evidence, EAC fixes, green CI, reproducibility, and provenance checks.
+Keep the output, the archive digests, the workflow run, tag and source commit
+with the release review record.
 
-## Local build troubleshooting
+## Provenance policy
 
-If a local Go build reports `error obtaining VCS status`, ensure a real Git
-executable is first in `PATH`. The Paperclip git shim can shadow Git in some
-agent environments. Keep VCS stamping enabled for release provenance.
-
-## Publishing
-
-Current state (2026-09-27): the only published releases are `v2.0.1` and
-`2.0.1` (2026-05-13), which predate the September hardening on `main`. The
-next release should bump `VERSION` (for example `2.1.0`). Note that
-`make release` names the tarball `bellum-installer-linux-amd64-<VERSION>.tar.gz`
-with no `v` prefix unless `VERSION` includes one. Keep one tag convention going
-forward.
-
-Links of the form `/TES/issues/...` in this document point to the internal
-tracker.
-
-1. Confirm every release-gate item above is checked on the release commit.
-2. `make release VERSION=<final-version> && make verify-release`
-3. Record evidence links in `RELEASE-GATE.md` and configure required reviewers
-   on the GitHub `release` environment. The tagged workflow enforces these
-   checks and waits for environment approval.
-4. Tag `v<version>` on the verified commit. The workflow builds both
-   architectures, verifies each archive, publishes the tarballs, and creates
-   GitHub build provenance attestations. Verify a downloaded archive with
-   `gh attestation verify bellum-installer-linux-<GOARCH>-<VERSION>.tar.gz
-   --repo <owner>/<repo>` and compare its SHA256 with the release asset.
+- Binaries are built only by `make release` from the commit recorded in
+  `MANIFEST.md`. Prebuilt binaries are never committed.
+- The only bundled file is the launcher icon in `packages/`, recorded in the
+  manifest.
+- Proton-CachyOS and umu-launcher are downloaded at install time and pinned by
+  SHA-256 in `pkg/config/versions.go`. Pins are proposed by the daily
+  [`update-pins`](.github/workflows/update-pins.yml) workflow only after the
+  checks in [runtime pins](docs/runtime-pins.md#automated-pin-updates) pass.
+- DXVK, vkd3d-proton, dxvk-nvapi and winetricks come from the pinned Proton
+  archive, never from separate downloads.
+- The Astarte Launcher is accepted on its Authenticode signature from
+  `ASTARTE INDUSTRIES INC.`; known build digests are recorded, and an unknown
+  one only warns.
+- Any checksum or signature failure stops the install.

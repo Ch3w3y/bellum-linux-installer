@@ -1,28 +1,142 @@
-# Installer workflow boundary audit
+# Installer side-effect audit
 
-Reviewed against `main` on 2026-09-27. The defects from the September board
-review (#7–#10) are fixed; remaining risks are listed below.
+Every change the installer, the `Bellum` wrapper and the uninstaller make to
+the host, and the checks around them. Reviewed against `main` for v2.2.0.
 
-## Current effects and mutations
+## Files written
 
-- **Host discovery** runs through the injectable `precheckHost` (commands, files, GPU detection, prompts, free space, EAC verification, launcher staging), so the whole precheck phase is tested against fakes. The writable-directory probe uses `access(2)` and writes nothing.
-- **Prechecks are read-only.** `RunPrechecks` checks the prefix path, the only required host tools (`python3` 3.10+ and `flock`), the EAC runtime and free disk space, and reports every problem in one message with the distro install command. It writes nothing to `$HOME`, creates no prefix and downloads nothing; a `--launcher-installer` file is verified into a private temporary copy. The pinned umu-launcher zipapp and Proton are downloaded and verified by `AcquireRuntime` only after `ConfirmProceed`. If the EAC runtime is missing and Steam is installed, prechecks offer to launch `steam steam://install/1826330` (Steam asks for its own confirmation) and poll for up to 20 minutes. The GUI picker does not create `<picked>/Bellum`; only `RunInstaller` creates the prefix.
-- **Installation** uses `AcquirePackage` for launcher download and verification (SHA-256 allowlist plus an in-process Go Authenticode verification: image digest, PKCS#7 signature, RFC 3161 or legacy timestamp, chain to the system trust store plus the pinned GlobalSign Code Signing Root R45 (`pkg/packages/trust/`) with the code-signing EKU, and an exact single-CN signer; no revocation check. Downloads use Go's HTTP client into a private temporary directory)., `MutatePrefix` for prefix commands, and `GenerateLauncher` for the wrapper and desktop files. It writes `.bellum-manifest.json` into the prefix first. It sets process environment variables directly (`PROTONPATH`, `WINEPREFIX`, `STEAM_COMPAT_*`, `GAMEID`). Every prefix command (`wineboot --init`, winetricks verbs, `reg add`, the launcher installer) runs through `umu-run` and the pinned Proton; winetricks is the copy in Proton's `protonfixes/`. System Wine is not used. No separate DXVK/vkd3d overlay is installed; those components come from the pinned Proton.
-- **Update mode**: on a finished install (manifest, no incomplete marker) prechecks offer an update instead of refusing. After confirmation it downloads the current pins, regenerates the wrapper and desktop entry, and rewrites `launch_vars.env` and the registry overrides. It never runs winetricks or the launcher installer, and it never touches other prefix contents.
-- **Rollback and retry**: prefix-path resolution (`ResolvePrefixPath`) appends `Bellum` in one place for the flag, the environment variable and the GUI. A failed install removes the prefix only if this run created it; no precheck creates it, so this covers the GUI path too. The prefix carries `.bellum-install-incomplete` from creation until configuration finishes. A configuration failure discards the prefix and its launcher assets, and an interrupted run is offered a restart on the next run. The replacement happens only after confirmation. A failed launcher-generation step restores any wrapper, desktop and icon files that existed before.
-- **Configuration** runs Wine registry commands through `MutatePrefix` and writes `launch_vars.env` through `GuardGameTreeWrites`. Registry changes: system DLL overrides (`d3d12`, `d3d12core`, `d3d10core`, `d3d9`, `d3d8` → `native,builtin`), and per-application `d3d11`/`dxgi` overrides for `AstarteLauncher.exe` (builtin) and `Bellum-Win64-Shipping.exe` (native). These change prefix registry state, not files.
-- **Game-directory mutation inventory**: the installer writes no files into the game tree and never copies or replaces DLLs anywhere (board policy, #11). `GuardGameTreeWrites` is a regression guard for installer writes, not a sandbox. Upscaler DLLs that the pinned Proton runtime stages itself at launch are Proton behaviour; see `docs/runtime-pins.md`.
-- **Launcher package** (`pkg/launchers`) owns its own file writes: `~/.local/bin/Bellum` (wrapper), `~/.local/share/applications/Bellum.desktop`, `~/Desktop/Bellum.desktop` (if `~/Desktop` exists), and `~/.local/share/icons/hicolor/256x256/apps/bellum.png`. It also runs `gio`/`update-desktop-database` when they are available. Desktop and wrapper generation are the same for every GPU vendor, including an unrecognised one, which gets the generic `launch_vars.env`.
-- **Uninstallation** (`RunUninstallationWithBoundaries`) requires an absolute path named `Bellum` that contains `system.reg`, `drive_c`, and `.bellum-manifest.json`, and it refuses `/`, `$HOME`, and symlinks. After an explicit `y` it recursively deletes the prefix, then removes the wrapper, desktop entries and icon only when they reference that prefix. Shared Proton remains, as does `~/.local/bin/winetricks` from installs made before winetricks moved into Proton. Re-running uninstall after the prefix is gone is safe. `--dry-run` reports the target and changes nothing.
+| Path | Written by | Contents |
+| --- | --- | --- |
+| `~/.local/share/bellum-installer/<version>/` | `install.sh` | the unpacked release (installer, uninstaller, manifest, icon) and `logs/installer.log` |
+| `~/.local/share/bellum/proton/<version>/` | installer | pinned Proton-CachyOS, unmodified, with a content-digest stamp |
+| `~/.local/share/bellum/umu/<version>/` | installer | pinned umu-launcher zipapp |
+| `~/.local/share/bellum/bin/bellum-installer` | installer | a copy of the installer that the wrapper runs to install launcher updates |
+| `<prefix>/` (default `~/Games/Bellum`, mode `0700`) | installer, Proton | the Wine prefix, the Astarte Launcher and the game |
+| `<prefix>/.bellum-manifest.json` | installer | ownership record naming this exact prefix; every delete requires it |
+| `<prefix>/.bellum-install-incomplete` | installer | present from prefix creation until configuration finishes |
+| `<prefix>/.bellum-launcher-release` | installer, wrapper | the launcher release Bellum installed and its SHA-256 |
+| `<prefix>/launch_vars.env` (`0600`) | installer | the launch settings for this GPU vendor |
+| `<prefix>/launcher.log` (`0600`) | wrapper | launcher, game and launcher-update output |
+| `~/.local/bin/Bellum` | installer | the launch wrapper |
+| `~/.local/share/applications/Bellum.desktop`, `~/Desktop/Bellum.desktop` | installer | shortcuts (the second only if `~/Desktop` exists), mode `0644` |
+| `~/.local/share/icons/hicolor/256x256/apps/bellum.png` | installer | the shortcut icon |
 
-## Hard-coded paths and remaining risks
+Nothing is written outside `$HOME`, except packages you agree to install with
+your package manager.
 
-- The wrapper is `~/.local/bin/Bellum`; that directory is not on `PATH` by default on every distro, so the success message prints the command to add it for the user's shell. Desktop and icon paths use fixed `$HOME/.local/share` layouts.
-- The EAC runtime is located via `PROTON_EAC_RUNTIME`, then `appmanifest_1826330.acf` in every Steam library listed by `libraryfolders.vdf` under the native (`~/.local/share/Steam`, `~/.steam/steam`, `~/.steam/root`) and Flatpak Steam roots. All six runtime files must exist; an unknown combined digest only warns. The launcher's Authenticode signer is mandatory; an unknown launcher SHA-256 only warns.
-- `STEAM_COMPAT_CLIENT_INSTALL_PATH` is set to `$HOME/.steam/steam` during install and to an empty string in the NVIDIA `launch_vars.env`.
-- Several command errors are deliberately ignored (`winetricks win11` and the RawInput registry write).
+## Phases
+
+- **Bootstrap (`install.sh`).** It refuses root and non-x86_64 systems, then
+  downloads the release archive and its `SHA256SUMS` over HTTPS (curl or
+  wget). It checks the archive, then every file inside against the archive's
+  own checksums. Only after that does it offer `sudo <package manager>` for a
+  missing `python3` 3.10+ or `flock`, asking `[Y/n]` first. It then unpacks and
+  runs the installer with the terminal as input.
+- **Prechecks are read-only.** `RunPrechecks` (host effects injected through
+  `precheckHost`, so the phase is tested against fakes) resolves the prefix
+  path, detects the GPU and display session, and checks the tools, free space
+  and the EAC runtime. It reports every problem in one message. It creates
+  nothing and downloads nothing. A `--launcher-installer` file is verified into
+  a private temporary copy. If the EAC runtime is missing and Steam is
+  installed, it offers to run `steam steam://install/1826330` (Steam asks for
+  its own confirmation) and waits up to 20 minutes.
+- **Runtime.** After the user confirms the summary, `AcquireRuntime` downloads
+  umu-launcher and Proton with Go's HTTP client, checks their SHA-256 pins,
+  and unpacks Proton into a staging directory. Unpacking rejects path
+  traversal, absolute paths, and links that leave the tree or sit under
+  another link; device files and other special entries are skipped, never
+  created. The staged tree is stamped and renamed into place.
+- **Install.** `RunInstaller` creates the prefix (`0700`), writes the manifest
+  and the incomplete marker, and runs every prefix command through `umu-run`
+  and the pinned Proton: `wineboot`, the winetricks verbs (Proton's own
+  `protonfixes/winetricks`), the Astarte Launcher installer and `reg add`.
+  System Wine is never used. The launcher installer is downloaded to a private
+  temporary directory and needs a valid Authenticode signature from
+  `ASTARTE INDUSTRIES INC.` (PE digest, PKCS#7, timestamp when present, a
+  code-signing chain to the system roots plus the pinned GlobalSign Code
+  Signing Root R45, exactly one signer common name; no revocation check). The
+  WebView2 runtime must be present afterwards.
+- **Launcher update.** Right after the launcher installer, and in update mode,
+  `UpdateLauncherInPrefix` reads Astarte's release list
+  (`releases.astarte.industries/…/RELEASES`). It picks the newest stable
+  version and accepts only the official per-version `AstarteLauncher.exe` URL.
+  If the prefix's `.bellum-launcher-release` record doesn't match that
+  version and the file's current SHA-256, it downloads the exe next to the
+  installed one, requires the same Authenticode signer, and renames it into
+  place. A failure only warns.
+- **Configuration.** Registry changes through `umu-run reg add`:
+  - `d3d12`, `d3d12core`, `d3d10core`, `d3d9` and `d3d8` set to
+    `native,builtin`;
+  - per-application `d3d11` and `dxgi` overrides for `AstarteLauncher.exe`
+    (builtin) and `Bellum-Win64-Shipping.exe` (native);
+  - DirectInput `RawInput=1`.
+
+  It then writes `launch_vars.env` through `GuardGameTreeWrites`, which
+  refuses any write into the game directory. The installer never adds,
+  copies or replaces DLLs (#11). Finally it removes the incomplete marker.
+- **Launcher files.** `pkg/launchers` writes the wrapper, desktop entries and
+  icon, and runs `gio` and `update-desktop-database` when available. If
+  generation fails, the previous files are restored. The same wrapper serves
+  every GPU vendor.
+- **Wrapper (each launch).** It sources `launch_vars.env` and checks the EAC
+  runtime, Proton and umu-run. It takes a non-blocking `flock` on the prefix,
+  so a second click returns at once. It runs `bellum-installer
+  update-launcher <prefix>` (a failure is logged, and the launch continues),
+  then `umu-run` on the launcher with `PROTON_VERB=waitforexitandrun`, logging
+  to `launcher.log`.
+- **Update mode.** On a finished install (manifest present, no incomplete
+  marker) the installer offers an update instead of refusing. It downloads the
+  current pins, regenerates the wrapper and desktop files, rewrites
+  `launch_vars.env` and the registry overrides, and updates the launcher. It
+  never reruns winetricks or the launcher installer.
+
+## Deletes
+
+Every recursive delete of a prefix goes through `removeBellumPrefix`
+(`pkg/workflow/prefix_guard.go`). That covers the uninstall, replacing an
+unfinished install, and rolling back a failed install. Before deleting
+anything it requires:
+
+- an absolute path named `Bellum`, that is not `/`, not the home folder or a
+  folder containing it, and not inside `/proc`, `/sys`, `/dev`, `/run`,
+  `/boot`, `/etc`, `/usr`, `/bin`, `/sbin`, `/lib` or `/lib64`;
+- no symlink anywhere in the path, and a real directory owned by the current
+  user;
+- `.bellum-manifest.json` as a regular file naming this exact path;
+- the contents the caller expects: a Wine prefix or the incomplete marker for
+  an uninstall, the incomplete marker when replacing an unfinished install;
+- no other filesystem mounted anywhere inside (checked by walking the tree
+  first).
+
+A rollback whose manifest was never written only removes an empty directory.
+Links inside the prefix (such as Wine's `dosdevices/z:` → `/`) are removed,
+never followed.
+
+The uninstaller asks before deleting (default No; `--dry-run` changes nothing).
+It then removes the wrapper, desktop entries and icon only when they point at
+that prefix. Shared files in `~/.local/share/bellum` and
+`~/.local/share/bellum-installer` are kept. Running it again after the prefix
+is gone is safe.
+
+## Remaining risks
+
+- `~/.local/bin` isn't on `PATH` by default everywhere; the finish message
+  prints the line that adds it for the user's shell.
+- The EAC runtime is located through `PROTON_EAC_RUNTIME`, then
+  `appmanifest_1826330.acf` in every Steam library listed in
+  `libraryfolders.vdf` under the native and Flatpak Steam roots. All six
+  runtime files must exist; an unknown combined digest only warns, because
+  Steam updates the runtime.
+- The launcher is accepted on its signer. An unknown launcher digest only
+  warns, because Astarte's download URL always serves the current build.
+- Some command errors are deliberately non-fatal: `winetricks win11`, the
+  RawInput registry write, and the launcher update (retried at every launch).
 
 ## Verification
 
-- `go vet ./...` and `go test ./...` pass on `master` @ cd10936 (go1.24).
-- Earlier revision evidence is recorded in the TES-6 tracker comment (internal).
+`make check` (gofmt, `go vet`, `go test ./...`, module pinning) and
+`scripts/test-release.sh` pass on `main`. The behaviour above is covered by
+tests in `pkg/workflow` (prechecks, install transaction, update mode, prefix
+guard, uninstall), `pkg/packages` (extraction, pins, Authenticode, launcher
+updates) and `pkg/launchers` (wrapper behaviour, run in bash). Live installs
+are verified on hardware per [the QA checklist](docs/eac-qa.md).

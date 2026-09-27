@@ -1,11 +1,11 @@
 # Runtime pins and provenance
 
-Snapshot reviewed 2026-09-26. The installer downloads the CachyOS Proton SLR
-runtime and verifies its SHA-256 before extraction. DXVK, vkd3d-proton, and
-dxvk-nvapi are supplied by that Proton runtime; Bellum does not install
-separate copies into the prefix. The component versions below are upstream
-comparison pins from the TES-3 research, not independently downloaded
-artifacts or claims that Bellum has been integration-tested against them.
+The installer downloads a pinned CachyOS Proton SLR build and a pinned
+umu-launcher, and verifies both by SHA-256 before use. DXVK, vkd3d-proton,
+dxvk-nvapi and winetricks come from that Proton build; Bellum never installs
+separate copies. The Astarte Launcher is accepted on its Authenticode
+signature. The upscaler notes below were checked against the pinned Proton
+archive itself.
 
 Current pins, kept up to date by the
 [`update-pins` workflow](../.github/workflows/update-pins.yml) (see
@@ -26,6 +26,7 @@ Current pins, kept up to date by the
 | DXVK, vkd3d-proton, dxvk-nvapi | Integrated in the pinned Proton; never overlaid separately | zlib, LGPL-2.1-or-later and MIT respectively, shipped by the Proton archive. |
 | winetricks | `protonfixes/winetricks` inside the pinned Proton, run as `umu-run winetricks` | [Winetricks](https://github.com/Winetricks/winetricks), LGPL-2.1-or-later, shipped by the Proton archive. |
 | umu-launcher | Self-contained zipapp, downloaded, SHA-256 verified, installed to `~/.local/share/bellum/umu/<version>`; needs only python3 3.10+ | [umu-launcher releases](https://github.com/Open-Wine-Components/umu-launcher/releases), GPL-3.0, downloaded at install time rather than redistributed. |
+| Astarte Launcher updates | Before each launch and at install and update time, the newest stable `AstarteLauncher.exe` from Astarte's release list (`…/windows-amd64/RELEASES`); only the official per-version URL is accepted, the same Authenticode signer is required, and the exe is replaced from Linux because the launcher can't replace itself under Wine | Downloaded from the official Astarte release endpoint; the installed release and SHA-256 are recorded in `<prefix>/.bellum-launcher-release`. |
 | Astarte Launcher installer | Official unversioned URL; the Authenticode signature from `ASTARTE INDUSTRIES INC.` is required, the digest allowlist only records inspected builds | Downloaded from the official Astarte release endpoint. It is signed through GlobalSign GCC R45 EV CodeSigning CA 2020, whose root (GlobalSign Code Signing Root R45) is code-signing-only and absent from Linux CA bundles, so that root ships in `pkg/packages/trust/`, pinned by SHA-256 `7b9d553e…97df86`, and is added to the system roots for launcher verification only. |
 
 The SHA-256 pins are content pins for the exact downloaded files. A missing or
@@ -102,8 +103,8 @@ BELLUM_PROTON_DIR=<extracted tree> go test ./pkg/workflow -run ContractAgainstTr
 
 **Reaching existing installs.** Running the installer (or the one-line
 command) again on a finished install offers an update. It downloads the
-newly pinned Proton and umu-launcher, and rewrites the launcher wrapper and
-`launch_vars.env`. The prefix, the game and the launcher login are kept, and
+newly pinned Proton and umu-launcher, rewrites the launcher wrapper and
+`launch_vars.env`, and updates the Astarte Launcher. The prefix, the game and the launcher login are kept, and
 Proton upgrades the prefix on the next launch.
 
 ## Upscaler behaviour of the pinned Proton
