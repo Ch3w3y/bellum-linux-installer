@@ -32,7 +32,7 @@ func PrintInstallerSummary(protonVer, winetricksVer, vkd3dVer, dxvkVer,
 	fmt.Printf("%s       WINEPREFIX%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, Colorize(wineprefix, ColorBoldYellow), ColorReset, ColorReset)
 	fmt.Printf("%s Bellum Installer%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, launcherSummary, ColorReset, ColorReset)
 	fmt.Printf("\n%s         GPU TYPE%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, gpuType, ColorReset, ColorReset)
-	fmt.Printf("%s   Preset, extras%s:   %s%s%s%s\n\n", ColorBoldCyan, ColorReset, ColorBold, choices, ColorReset, ColorReset)
+	fmt.Printf("%s    Configuration%s:   %s%s%s%s\n\n", ColorBoldCyan, ColorReset, ColorBold, choices, ColorReset, ColorReset)
 
 	// Print note
 	fmt.Printf("%sNOTE:%s The game will be installed into the specified WINEPREFIX path.\n", ColorBoldYellow, ColorReset)

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"bellum-installer/pkg/core"
 	"bellum-installer/pkg/packages"
@@ -79,7 +80,7 @@ func assertEmptyDir(t *testing.T, dir string) {
 }
 
 func TestPrechecksReportEveryMissingToolAtOnce(t *testing.T) {
-	home, host, opts := newPrecheckFixture(t, "wget")
+	home, host, opts := newPrecheckFixture(t, "flock")
 	host.FindEAC = func() (EACRuntime, error) { return findEACRuntime(home, "", host.Files) }
 	logger, _ := core.NewLogger("")
 	_, err := runPrechecksWith(opts, logger, host)
@@ -87,7 +88,7 @@ func TestPrechecksReportEveryMissingToolAtOnce(t *testing.T) {
 		t.Fatal("expected prechecks to fail")
 	}
 	msg := err.Error()
-	for _, want := range []string{"2 precheck problem(s)", "umu-run", "osslsigncode", "dnf install osslsigncode", "steam://install/1826330", "nothing was changed"} {
+	for _, want := range []string{"2 precheck problem(s)", "python3", "dnf install python3", "steam://install/1826330", "nothing was changed"} {
 		if !strings.Contains(msg, want) {
 			t.Errorf("error lacks %q: %s", want, msg)
 		}
@@ -102,7 +103,7 @@ func TestPrechecksReportEveryMissingToolAtOnce(t *testing.T) {
 }
 
 func TestPrechecksAreReadOnlyAndIndependentOfWorkingDirectory(t *testing.T) {
-	home, host, opts := newPrecheckFixture(t, "umu-run", "osslsigncode", "wget")
+	home, host, opts := newPrecheckFixture(t, "python3", "flock")
 	elsewhere := t.TempDir()
 	t.Chdir(elsewhere)
 	logger, _ := core.NewLogger("")
@@ -121,11 +122,43 @@ func TestPrechecksAreReadOnlyAndIndependentOfWorkingDirectory(t *testing.T) {
 }
 
 func TestPrechecksRejectLowDiskSpace(t *testing.T) {
-	_, host, opts := newPrecheckFixture(t, "umu-run", "osslsigncode", "wget")
+	_, host, opts := newPrecheckFixture(t, "python3", "flock")
 	host.FreeBytes = func(string) (uint64, error) { return 1 << 30, nil }
 	logger, _ := core.NewLogger("")
 	_, err := runPrechecksWith(opts, logger, host)
 	if err == nil || !strings.Contains(err.Error(), "Not enough free space") {
 		t.Fatalf("expected a disk space problem, got %v", err)
+	}
+}
+
+func TestPrechecksOfferToInstallEACThroughSteam(t *testing.T) {
+	home, host, opts := newPrecheckFixture(t, "python3", "flock", "steam")
+	host.FindEAC = func() (EACRuntime, error) { return findEACRuntime(home, "", host.Files) }
+	var requested []string
+	host.RequestEAC = func(argv []string) error {
+		requested = argv
+		return nil
+	}
+	polls := 0
+	host.Sleep = func(time.Duration) {
+		// Steam finishes the install after a few polls.
+		if polls++; polls == 3 {
+			installEAC(t, filepath.Join(home, ".local", "share", "Steam"), "4")
+		}
+	}
+	logger, _ := core.NewLogger("")
+	if _, err := runPrechecksWith(opts, logger, host); err != nil {
+		t.Fatalf("prechecks failed: %v", err)
+	}
+	if strings.Join(requested, " ") != "steam steam://install/1826330" {
+		t.Fatalf("requested %q", requested)
+	}
+
+	// Without Steam there is nothing to ask; the problem is reported instead.
+	home2, host2, opts2 := newPrecheckFixture(t, "python3", "flock")
+	host2.FindEAC = func() (EACRuntime, error) { return findEACRuntime(home2, "", host2.Files) }
+	host2.RequestEAC = func([]string) error { t.Fatal("Steam requested without Steam"); return nil }
+	if _, err := runPrechecksWith(opts2, logger, host2); err == nil || !strings.Contains(err.Error(), "steam://install/1826330") {
+		t.Fatalf("expected the EAC problem, got %v", err)
 	}
 }

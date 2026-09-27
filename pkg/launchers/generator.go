@@ -62,7 +62,9 @@ source "$LAUNCH_VARS"
 set +a
 [ -d "${PROTON_EAC_RUNTIME:-}" ] || { echo "Proton EasyAntiCheat Runtime is missing: ${PROTON_EAC_RUNTIME:-unset}" >&2; exit 1; }
 [ -x "$PROTONPATH/proton" ] || { echo "Pinned Proton is missing: $PROTONPATH" >&2; exit 1; }
-command -v umu-run >/dev/null || { echo "umu-run is required" >&2; exit 1; }
+# The installer pins its own umu-launcher; fall back to one on PATH.
+UMU_RUN="${BELLUM_UMU_RUN:-$(command -v umu-run || true)}"
+[ -n "$UMU_RUN" ] && [ -x "$UMU_RUN" ] || { echo "umu-run is missing: ${UMU_RUN:-not found}. Re-run the Bellum installer." >&2; exit 1; }
 command -v flock >/dev/null || { echo "flock is required" >&2; exit 1; }
 umask 077
 chmod 0700 "$WINEPREFIX"
@@ -80,7 +82,7 @@ export UMU_LOG=1
 export PROTON_VERB=waitforexitandrun
 if [ "${BELLUM_MANGOHUD:-0}" = 1 ]; then export MANGOHUD=1; fi
 if [ "${BELLUM_VKBASALT:-0}" = 1 ]; then export ENABLE_VKBASALT=1; fi
-cmd=(umu-run "$LAUNCHER_EXE" "$@")
+cmd=("$UMU_RUN" "$LAUNCHER_EXE" "$@")
 if [ "${BELLUM_GAMEMODE:-0}" = 1 ]; then
   command -v gamemoderun >/dev/null || { echo "gamemoderun is required for BELLUM_GAMEMODE=1" >&2; exit 1; }
   cmd=(gamemoderun "${cmd[@]}")

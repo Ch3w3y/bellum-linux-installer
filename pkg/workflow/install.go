@@ -186,10 +186,14 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	return nil
 }
 
+// umuRunBinary is the pinned umu-run installed by AcquireRuntime. It
+// defaults to "umu-run" on PATH so tests and older callers still work.
+var umuRunBinary = "umu-run"
+
 // umuRun builds a command that runs inside the prefix through umu-run and the
 // Proton selected by PROTONPATH.
 func umuRun(args ...string) []string {
-	return append([]string{"umu-run"}, args...)
+	return append([]string{umuRunBinary}, args...)
 }
 
 // checkWebView2Runtime rejects a bootstrapper-only installation. The launcher

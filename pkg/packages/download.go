@@ -5,9 +5,12 @@ import (
 	"encoding/hex"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
+	"time"
 
 	"bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
@@ -309,25 +312,72 @@ func protonStamp(treeDigest string) string {
 	return fmt.Sprintf("version=%s\nsha256=%s\ntree=%s\n", config.DefaultVersions.ProtonVer, config.DefaultVersions.ProtonSHA256, treeDigest)
 }
 
-// downloadFile downloads a file using wget
+// downloadFile fetches url into dest (which must not exist) over HTTPS with
+// Go's HTTP client, so no wget or curl is needed. It honours the usual proxy
+// environment variables and prints coarse progress for large files.
 func downloadFile(dest, url, logFile string, logger *core.Logger) error {
 	if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
-
 	if _, err := os.Lstat(dest); err == nil {
 		return fmt.Errorf("refusing to download over existing path")
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	if err := core.RunCommand(core.RunModeSilent, []string{"wget", "-O", dest, url}, logger, logFile); err != nil {
+	if err := fetchURL(dest, url, logger); err != nil {
 		logger.Error(fmt.Sprintf("Failed to download %s", url))
 		return fmt.Errorf("failed to download %s: %w", url, err)
 	}
-
-	if _, err := os.Stat(dest); os.IsNotExist(err) {
-		return fmt.Errorf("download verification failed: %s not found", dest)
-	}
-
 	return nil
+}
+
+// downloadClient allows slow connections but not a stalled one forever.
+var downloadClient = &http.Client{Timeout: 2 * time.Hour}
+
+func fetchURL(dest, url string, logger *core.Logger) error {
+	if !strings.HasPrefix(url, "https://") {
+		return fmt.Errorf("refusing non-HTTPS download")
+	}
+	resp, err := downloadClient.Get(url)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("server answered %s", resp.Status)
+	}
+	f, err := os.OpenFile(dest, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
+	if err != nil {
+		return err
+	}
+	progress := &downloadProgress{total: resp.ContentLength, logger: logger, name: filepath.Base(dest)}
+	_, copyErr := io.Copy(f, io.TeeReader(resp.Body, progress))
+	closeErr := f.Close()
+	if err := firstErr(copyErr, closeErr); err != nil {
+		os.Remove(dest)
+		return err
+	}
+	if resp.ContentLength > 0 && progress.done != resp.ContentLength {
+		os.Remove(dest)
+		return fmt.Errorf("download truncated: got %d of %d bytes", progress.done, resp.ContentLength)
+	}
+	return nil
+}
+
+type downloadProgress struct {
+	total, done int64
+	lastPercent int
+	name        string
+	logger      *core.Logger
+}
+
+func (p *downloadProgress) Write(b []byte) (int, error) {
+	p.done += int64(len(b))
+	if p.total > 50<<20 { // only report for large downloads
+		if pct := int(p.done * 100 / p.total); pct >= p.lastPercent+10 {
+			p.lastPercent = pct - pct%10
+			p.logger.Info(fmt.Sprintf("Downloading %s: %d%% of %d MB", p.name, p.lastPercent, p.total>>20))
+		}
+	}
+	return len(b), nil
 }

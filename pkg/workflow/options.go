@@ -9,145 +9,57 @@ import (
 	"bellum-installer/pkg/core"
 )
 
-// Preset selects optional Proton-CachyOS features. Both presets get the same
-// vendor settings (DLSS on NVIDIA and FSR4 on supported AMD GPUs come from
-// Proton's defaults either way). Performance adds the low-latency DXVK and
-// vkd3d-proton builds that ship inside the pinned Proton. No preset adds or
-// replaces DLLs itself (#11).
-type Preset string
+// There is one configuration: the most stable one, then the fastest that
+// stays stable. It differs only by GPU vendor (see configure.go); nothing is
+// left for the user to choose. Every setting is a Proton or driver feature;
+// the installer never adds or replaces DLLs (#11).
 
-const (
-	PresetStable      Preset = "stable"
-	PresetPerformance Preset = "performance"
-)
-
-// InstallOptions are the guided choices written into launch_vars.env.
-type InstallOptions struct {
-	Preset    Preset
-	MangoHud  bool
-	Gamescope bool
-	GameMode  bool
+// ConfigSummary describes, for the confirmation screen, what the launch
+// settings will be on this GPU.
+func ConfigSummary(caps core.GPUCapabilities) string {
+	switch {
+	case caps.Vendor == core.GPUNVIDIA && caps.NVAPI:
+		return "NVIDIA: DLSS and Reflex through the driver (NVAPI), CUDA/NVENC bridges"
+	case caps.Vendor == core.GPUNVIDIA:
+		return "NVIDIA (no RTX features): standard Proton settings"
+	case caps.Vendor == core.GPUAMD && caps.Generation == "RDNA4" && !caps.Ambiguous && caps.FSR41:
+		return "AMD RDNA4: native FSR4 (FP8) through Proton"
+	case caps.Vendor == core.GPUAMD:
+		return "AMD: FSR4 through Proton where your GPU supports it"
+	case caps.Vendor == core.GPUIntel:
+		return "Intel: standard Proton settings"
+	}
+	return "Unrecognised GPU: standard Proton settings"
 }
 
-// DefaultInstallOptions is what pressing Enter through every question gives.
-func DefaultInstallOptions() InstallOptions {
-	return InstallOptions{Preset: PresetStable}
+// DisplaySession names the graphical session. Bellum runs through XWayland
+// on Wayland sessions (the pinned Proton only uses its Wayland driver when
+// PROTON_ENABLE_WAYLAND is set, which stays off because it's experimental),
+// so the launch settings are the same on X11, Wayland and gamescope.
+func DisplaySession() string {
+	return displaySession(os.Getenv)
 }
 
-// PerformanceFeatures lists, in plain language, what the Performance preset
-// turns on. The low-latency builds are part of the pinned Proton archive
-// (files/lib/wine/{dxvk,vkd3d}-low-latency) and apply to every GPU vendor.
-func PerformanceFeatures(caps core.GPUCapabilities) []string {
-	return []string{
-		"Proton-CachyOS low-latency vkd3d-proton (D3D12, used by the game) and DXVK builds (PROTON_VKD3D_LOWLATENCY=1, PROTON_DXVK_LOWLATENCY=1). Experimental: not yet tested with Bellum and Easy Anti-Cheat",
+func displaySession(env func(string) string) string {
+	desktop := env("XDG_CURRENT_DESKTOP")
+	switch {
+	case strings.EqualFold(desktop, "gamescope") || env("GAMESCOPE_WAYLAND_DISPLAY") != "":
+		return "gamescope (Steam Deck / Game Mode)"
+	case env("WAYLAND_DISPLAY") != "" || strings.EqualFold(env("XDG_SESSION_TYPE"), "wayland"):
+		return strings.TrimSpace("Wayland " + desktop + " (the game runs through XWayland)")
+	case env("DISPLAY") != "":
+		return strings.TrimSpace("X11 " + desktop)
 	}
+	return "no graphical session detected"
 }
 
-// presetVars returns the launch variables the preset adds.
-func (o InstallOptions) presetVars() string {
-	if o.Preset != PresetPerformance {
-		return ""
-	}
-	return "# Performance preset: Proton-CachyOS low-latency builds\n" +
-		"export PROTON_VKD3D_LOWLATENCY=\"1\"\n" +
-		"export PROTON_DXVK_LOWLATENCY=\"1\"\n"
-}
-
-// optionalExtra is a tool the wrapper can wrap the game with.
-type optionalExtra struct {
-	binary, label, envVar, pkg string
-	enable                     func(*InstallOptions)
-}
-
-var optionalExtras = []optionalExtra{
-	{"mangohud", "MangoHud performance overlay (FPS, frame times)", "BELLUM_MANGOHUD", "mangohud", func(o *InstallOptions) { o.MangoHud = true }},
-	{"gamemoderun", "Feral GameMode (asks the system for performance mode while playing)", "BELLUM_GAMEMODE", "gamemode", func(o *InstallOptions) { o.GameMode = true }},
-	{"gamescope", "gamescope compositor (runs the game in its own session; advanced)", "BELLUM_GAMESCOPE", "gamescope", func(o *InstallOptions) { o.Gamescope = true }},
-}
-
-// ChooseInstallOptions asks for the preset and optional extras. Every
-// question has a default, so pressing Enter throughout gives Stable with no
-// extras.
-func ChooseInstallOptions(caps core.GPUCapabilities, logger *core.Logger) InstallOptions {
-	return chooseInstallOptionsWith(caps, logger, core.Prompt, DefaultBoundaries.Commands)
-}
-
-func chooseInstallOptionsWith(caps core.GPUCapabilities, logger *core.Logger, prompt func(string, string) string, commands CommandRunner) InstallOptions {
-	opts := DefaultInstallOptions()
-	fmt.Println()
-	features := PerformanceFeatures(caps)
-	if len(features) == 0 {
-		logger.Info("Preset: Stable. Your GPU has no vendor-specific extras to enable.")
-	} else {
-		fmt.Println("Choose a preset:")
-		fmt.Println("  1) Stable (recommended): the standard Proton builds. DLSS and FSR4 work the same in both presets.")
-		fmt.Println("  2) Performance: also enables")
-		for _, f := range features {
-			fmt.Println("       - " + f)
-		}
-		for {
-			answer := strings.TrimSpace(prompt("Preset [1]: ", "1"))
-			switch strings.ToLower(answer) {
-			case "1", "s", "stable":
-				opts.Preset = PresetStable
-			case "2", "p", "performance":
-				opts.Preset = PresetPerformance
-			default:
-				fmt.Println("Please type 1 or 2.")
-				continue
-			}
-			break
-		}
-	}
-
-	fmt.Println()
-	for _, extra := range optionalExtras {
-		if DiscoverExecutable(extra.binary, commands) == "" {
-			logger.Info(fmt.Sprintf("Optional: install the %s package for the %s. You can turn it on later with %s=1 in launch_vars.env.", extra.pkg, extra.label, extra.envVar))
-			continue
-		}
-		answer := strings.ToLower(strings.TrimSpace(prompt(fmt.Sprintf("Enable the %s? (y/N): ", extra.label), "n")))
-		if answer == "y" || answer == "yes" {
-			extra.enable(&opts)
-		}
-	}
-	return opts
-}
-
-// Summary describes the choices for the confirmation screen.
-func (o InstallOptions) Summary() string {
-	preset := "Stable"
-	if o.Preset == PresetPerformance {
-		preset = "Performance"
-	}
-	var extras []string
-	if o.MangoHud {
-		extras = append(extras, "MangoHud")
-	}
-	if o.GameMode {
-		extras = append(extras, "GameMode")
-	}
-	if o.Gamescope {
-		extras = append(extras, "gamescope")
-	}
-	if len(extras) == 0 {
-		return preset + ", no extras"
-	}
-	return preset + " + " + strings.Join(extras, ", ")
-}
-
-// launchVarsExtras returns the BELLUM_* toggles the wrapper reads.
-func (o InstallOptions) launchVarsExtras() string {
-	flag := func(on bool) string {
-		if on {
-			return "1"
-		}
-		return "0"
-	}
-	return "# Optional extras (set to 1 to enable)\n" +
-		"export BELLUM_MANGOHUD=\"" + flag(o.MangoHud) + "\"\n" +
-		"export BELLUM_GAMEMODE=\"" + flag(o.GameMode) + "\"\n" +
-		"export BELLUM_GAMESCOPE=\"" + flag(o.Gamescope) + "\"\n"
+// launchVarsToggles documents the optional wrapper extras. They stay off:
+// each one adds a layer that hasn't been validated with Easy Anti-Cheat.
+func launchVarsToggles() string {
+	return "# Optional extras, off by default (set to 1 to try them)\n" +
+		"export BELLUM_MANGOHUD=\"0\"   # MangoHud overlay\n" +
+		"export BELLUM_GAMEMODE=\"0\"   # Feral GameMode\n" +
+		"export BELLUM_GAMESCOPE=\"0\"  # run inside gamescope\n"
 }
 
 // DefaultInstallLocation is where Bellum goes when the user just presses Enter.

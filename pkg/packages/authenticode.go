@@ -2,31 +2,43 @@ package packages
 
 import (
 	"crypto/sha256"
+	"crypto/x509"
 	"encoding/hex"
 	"fmt"
 	"io"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"bellum-installer/pkg/config"
 )
 
-// VerifyLauncherAuthenticode requires a valid signature and the approved signer.
+// VerifyLauncherAuthenticode requires a valid Authenticode signature, chained
+// to the system's trusted roots, whose leaf certificate has exactly one
+// common name equal to the approved signer (case-sensitive).
 func VerifyLauncherAuthenticode(path string) error {
-	signer := config.DefaultVersions.LauncherSigner
-	if signer == "" {
+	roots, err := x509.SystemCertPool()
+	if err != nil {
+		return fmt.Errorf("load the system's trusted certificates: %w", err)
+	}
+	return verifyLauncherAuthenticodeWith(path, config.DefaultVersions.LauncherSigner, roots, time.Now())
+}
+
+func verifyLauncherAuthenticodeWith(path, approvedSigner string, roots *x509.CertPool, now time.Time) error {
+	if approvedSigner == "" {
 		return fmt.Errorf("missing AstarteLauncher Authenticode signer pin")
 	}
-	if _, err := exec.LookPath("osslsigncode"); err != nil {
-		return fmt.Errorf("osslsigncode is required for launcher Authenticode verification: %w", err)
+	image, err := os.ReadFile(path)
+	if err != nil {
+		return err
 	}
-	output, err := exec.Command("osslsigncode", "verify", "-in", path).CombinedOutput()
+	sig, err := VerifyAuthenticode(image, roots, now)
 	if err != nil {
 		return fmt.Errorf("AstarteLauncher Authenticode verification failed: %w", err)
 	}
-	if !hasApprovedLeafSubject(string(output), signer) {
+	cn, err := SignerCommonName(sig.Signer)
+	if err != nil || cn != approvedSigner {
 		return fmt.Errorf("AstarteLauncher signer does not match approved signer")
 	}
 	return nil
@@ -132,81 +144,4 @@ func firstErr(errs ...error) error {
 		}
 	}
 	return nil
-}
-
-func hasApprovedLeafSubject(output, approvedCN string) bool {
-	lines := strings.Split(output, "\n")
-	inLeaf, foundLeaf, match := false, false, false
-	subjectCount := 0
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, "Signer #") {
-			if inLeaf {
-				break
-			}
-			inLeaf = line == "Signer #0:"
-			foundLeaf = inLeaf
-			continue
-		}
-		if inLeaf && strings.HasPrefix(line, "Subject:") {
-			subjectCount++
-			subject := strings.TrimSpace(strings.TrimPrefix(line, "Subject:"))
-			cn, count := subjectCommonNames(subject)
-			match = count == 1 && cn == approvedCN
-		}
-	}
-	return foundLeaf && subjectCount == 1 && match
-}
-
-// subjectCommonNames parses both RFC 2253 (comma-separated) and the older
-// OpenSSL X509_NAME_oneline slash-separated subject format. Escaped separators
-// stay inside their RDN value, so a fake CN embedded in another attribute is
-// never treated as an actual common name.
-func subjectCommonNames(subject string) (string, int) {
-	separator := byte(',')
-	plusSeparators := true
-	if strings.HasPrefix(subject, "/") {
-		separator = '/'
-		plusSeparators = false
-		subject = subject[1:]
-	}
-	var rdns []string
-	start, escaped := 0, false
-	for i := 0; i < len(subject); i++ {
-		if escaped {
-			escaped = false
-			continue
-		}
-		if subject[i] == '\\' {
-			escaped = true
-			continue
-		}
-		if subject[i] == separator || (plusSeparators && subject[i] == '+') {
-			rdns = append(rdns, subject[start:i])
-			start = i + 1
-		}
-	}
-	rdns = append(rdns, subject[start:])
-	var commonName string
-	count := 0
-	for _, rdn := range rdns {
-		key, value, ok := strings.Cut(rdn, "=")
-		if !ok || strings.TrimSpace(key) != "CN" {
-			continue
-		}
-		count++
-		commonName = unescapeSubjectValue(strings.TrimSpace(value))
-	}
-	return commonName, count
-}
-
-func unescapeSubjectValue(value string) string {
-	var b strings.Builder
-	for i := 0; i < len(value); i++ {
-		if value[i] == '\\' && i+1 < len(value) {
-			i++
-		}
-		b.WriteByte(value[i])
-	}
-	return strings.TrimSpace(b.String())
 }

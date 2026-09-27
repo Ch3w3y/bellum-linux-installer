@@ -12,7 +12,7 @@ import (
 func TestAllVendorsUseUMUAndEAC(t *testing.T) {
 	for _, vendor := range []string{"AMD", "NVIDIA", "Intel"} {
 		script := generateWrapperContent(LauncherConfig{Wineprefix: "/tmp/Bellum's prefix", Protonpath: "/proton", GPUType: vendor})
-		if !strings.Contains(script, `cmd=(umu-run "$LAUNCHER_EXE" "$@")`) || !strings.Contains(script, `exec "${cmd[@]}"`) || !strings.Contains(script, "PROTON_EAC_RUNTIME") {
+		if !strings.Contains(script, `cmd=("$UMU_RUN" "$LAUNCHER_EXE" "$@")`) || !strings.Contains(script, `exec "${cmd[@]}"`) || !strings.Contains(script, "PROTON_EAC_RUNTIME") {
 			t.Fatalf("%s wrapper does not require umu and EAC", vendor)
 		}
 		if strings.Contains(script, "wineboot") || strings.Contains(script, "\nwine ") || strings.Contains(script, "cd \"$GAME_DIR\"") {
@@ -143,7 +143,7 @@ func TestWrapperChainsGameModeAndGamescope(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := "gamescope -- gamemoderun umu-run " + launcher + " --arg"; !strings.Contains(string(log), want) {
+	if want := "gamescope -- gamemoderun " + filepath.Join(bin, "umu-run") + " " + launcher + " --arg"; !strings.Contains(string(log), want) {
 		t.Fatalf("launch chain = %q, want %q", log, want)
 	}
 }
