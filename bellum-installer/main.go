@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
+	"bellum-installer/pkg/packages"
 	"bellum-installer/pkg/workflow"
 )
 
@@ -18,8 +20,6 @@ func main() {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)
 	}
-	// Print banner
-	printInstallerBanner()
 
 	// Parse command line arguments
 	// Accepted for compatibility with older instructions; system Wine is no
@@ -71,7 +71,11 @@ func main() {
 	}
 	defer logger.Close()
 
-	logger.Info("Bellum Linux Installer")
+	printInstallerBanner(workdir)
+	logger.Record("Bellum Linux Installer " + config.InstallerVersion)
+
+	const steps = 5
+	core.Step(1, steps, "Install location")
 
 	// Determine WINEPREFIX. Flag, environment and GUI all resolve through
 	// workflow.ResolvePrefixPath, which appends "Bellum" when needed.
@@ -94,6 +98,7 @@ func main() {
 	}
 
 	// Read-only prechecks: nothing is downloaded or written to $HOME yet.
+	core.Step(2, steps, "Checking your system")
 	launcherPath := *launcherInstaller
 	if launcherPath != "" {
 		if abs, absErr := filepath.Abs(launcherPath); absErr == nil {
@@ -110,6 +115,8 @@ func main() {
 	}
 
 	logger.Info("Display session: " + workflow.DisplaySession())
+
+	core.Step(3, steps, "Review")
 
 	// Print installer summary
 	core.PrintInstallerSummary(
@@ -151,7 +158,7 @@ func main() {
 	}
 
 	// Acquire the pinned Proton only now that the user has confirmed.
-	logger.Info("Preparing Proton...")
+	core.Step(4, steps, "Downloading the runtime")
 	if err := workflow.AcquireRuntime(result, workdir, logger); err != nil {
 		if result.LauncherTempDir != "" {
 			_ = os.RemoveAll(result.LauncherTempDir)
@@ -160,12 +167,13 @@ func main() {
 	}
 
 	if result.Update {
+		core.Step(5, steps, "Updating Bellum")
 		runUpdate(result, installConfig, workdir, logFile, logger)
 		return
 	}
 
 	// Run installation
-	logger.Info("Starting installation phase...")
+	core.Step(5, steps, "Installing Bellum")
 	installErr := workflow.RunInstaller(installConfig, logger)
 	if result.LauncherTempDir != "" {
 		_ = os.RemoveAll(result.LauncherTempDir)
@@ -196,29 +204,49 @@ func main() {
 	}
 
 	logger.Info("Installation complete!")
-	fmt.Println()
-	fmt.Printf("%sInstallation completed successfully!%s\n", core.ColorBoldGreen, core.ColorReset)
-	fmt.Println()
-	fmt.Println("You can now launch Bellum in any of these ways:")
-	fmt.Printf("%s", core.Colorize(" - Desktop Shortcut (Recommended)\n", core.Bold))
-	fmt.Println(" - Applications Menu -> Games -> Bellum")
-	if hint := workflow.LocalBinPathHint(); hint != "" {
-		fmt.Println(" - Terminal Command: `Bellum` (after adding ~/.local/bin to your PATH:")
-		fmt.Printf("     %s )\n", hint)
-	} else {
-		fmt.Println(" - Terminal Command: `Bellum`")
-	}
-	fmt.Println()
-	fmt.Printf("Launch Environment Variable File: %s/launch_vars.env\n", configureConfig.WINEPREFIX)
-	fmt.Println()
+	printFinish("Bellum is installed", configureConfig.WINEPREFIX)
 }
 
-func printInstallerBanner() {
-	banner := `=======================================================================================
-|                     Linux Wine-Proton Installer for Bellum                          |
-======================================================================================`
-	fmt.Printf("%s%s%s\n", core.ColorBoldBlue, banner, core.ColorReset)
+// printFinish shows the closing screen with the ways to start the game.
+func printFinish(title, prefix string) {
 	fmt.Println()
+	fmt.Printf("  %s✔ %s%s\n\n", core.ColorBoldGreen, title, core.ColorReset)
+	fmt.Println("  Start it from:")
+	fmt.Printf("    %s▸%s the %sBellum%s shortcut on your desktop\n", core.ColorBoldCyan, core.ColorReset, core.Bold, core.ColorReset)
+	fmt.Printf("    %s▸%s your app menu, under Games\n", core.ColorBoldCyan, core.ColorReset)
+	if hint := workflow.LocalBinPathHint(); hint != "" {
+		fmt.Printf("    %s▸%s the %sBellum%s command, after adding ~/.local/bin to your PATH:\n", core.ColorBoldCyan, core.ColorReset, core.Bold, core.ColorReset)
+		fmt.Printf("        %s%s%s\n", core.ColorGrayBold, hint, core.ColorReset)
+	} else {
+		fmt.Printf("    %s▸%s the %sBellum%s command in a terminal\n", core.ColorBoldCyan, core.ColorReset, core.Bold, core.ColorReset)
+	}
+	fmt.Println()
+	fmt.Printf("  %sKeep the Astarte Launcher open while you play. Settings: %s/launch_vars.env%s\n", core.ColorGrayBold, prefix, core.ColorReset)
+	fmt.Printf("  %sTo update later, run the same install command again.%s\n\n", core.ColorGrayBold, core.ColorReset)
+}
+
+// printInstallerBanner shows the Bellum "B" (rendered from the launcher icon)
+// next to the installer and runtime versions.
+func printInstallerBanner(workdir string) {
+	icon := filepath.Join(workdir, "packages", "launcher_1_256x256x32.png")
+	var logo []string
+	if packages.VerifySHA256(icon, packages.IconSHA256) == nil {
+		logo = core.LogoLines(icon, 26)
+	}
+	proton := strings.TrimSuffix(strings.TrimPrefix(config.DefaultVersions.ProtonVer, "proton-cachyos-"), "-x86_64")
+	winetricks := strings.TrimSuffix(strings.TrimPrefix(config.DefaultVersions.WinetricksVer, "bundled with pinned Proton ("), ")")
+	dim := func(s string) string { return core.ColorGrayBold + s + core.ColorReset }
+	core.Banner(logo, []string{
+		core.ColorBold + "B E L L U M" + core.ColorReset,
+		core.ColorBoldCyan + "Linux Installer" + core.ColorReset + " " + dim(config.InstallerVersion),
+		"",
+		dim("Proton-CachyOS ") + proton,
+		dim("umu-launcher   ") + config.DefaultVersions.UMUVersion,
+		dim("winetricks     ") + winetricks,
+		"",
+		dim("Community project, not affiliated with Astarte Industries"),
+		dim("github.com/Ch3w3y/bellum-linux-installer"),
+	})
 }
 
 // fail reports a fatal error in plain language: what went wrong, the detail,
@@ -230,8 +258,8 @@ func fail(logger *core.Logger, logFile, what string, err error, fix string) {
 	if !errors.As(err, &precheckErr) {
 		logger.Error(fmt.Sprintf("Details: %v", err))
 	}
-	fmt.Printf("%sWhat to do:%s %s\n", core.ColorBoldYellow, core.ColorReset, fix)
-	fmt.Printf("Full log: %s\n", logFile)
+	fmt.Printf("\n  %sWhat to do:%s %s\n", core.ColorBoldYellow, core.ColorReset, fix)
+	fmt.Printf("  %sFull log: %s%s\n\n", core.ColorGrayBold, logFile, core.ColorReset)
 	os.Exit(1)
 }
 
@@ -257,6 +285,5 @@ func runUpdate(result *workflow.PrecheckResult, installConfig workflow.InstallCo
 		fail(logger, logFile, "Writing Bellum's updated launch settings failed", err, "Run the installer again to retry. The game and your login are untouched.")
 	}
 	logger.Info("Update complete!")
-	fmt.Println()
-	fmt.Printf("%sBellum is up to date.%s Launch it as usual; Proton updates the prefix on the first start.\n", core.ColorBoldGreen, core.ColorReset)
+	printFinish("Bellum is up to date", result.WINEPREFIX)
 }

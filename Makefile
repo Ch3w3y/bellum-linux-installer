@@ -54,7 +54,7 @@ DIST_DIR := dist
 
 # Deterministic ldflags: no paths, no timestamps. Version stamping is via
 # -X ldflags on config vars when present; empty by default to stay stable.
-GO_LDFLAGS := -s -w
+GO_LDFLAGS := -s -w -X bellum-installer/pkg/config.InstallerVersion=$(VERSION)
 
 GO_BUILD_FLAGS := -buildvcs=false -trimpath -mod=readonly -ldflags "$(GO_LDFLAGS)"
 

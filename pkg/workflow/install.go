@@ -111,57 +111,52 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	// single Wine build owns the prefix. umu-run waits for the Wine server to
 	// exit, so no separate wineserver -k is needed between steps. winetricks
 	// is the copy shipped in Proton's protonfixes, pinned by the archive hash.
-	if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("wineboot", "--init"), logger, logFile); err != nil {
+	// step runs one prefix command behind a spinner.
+	step := func(label string, args []string) error {
+		task := core.StartTask(label)
+		err := boundaries.MutatePrefix(core.RunModeSilent, args, logger, logFile)
+		task.Done(err)
+		return err
+	}
+
+	if err := step("Creating the Wine prefix with Proton", umuRun("wineboot", "--init")); err != nil {
 		logger.Error("Proton prefix initialisation (wineboot --init) failed")
 		return err
 	}
 
-	// Install required winedlls
-	logger.Info("Installing required winedlls")
-	for _, dll := range requiredWinetricksVerbs {
-		if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("winetricks", "-q", dll), logger, logFile); err != nil {
-			logger.Error(fmt.Sprintf("Failed to install %s", dll))
+	for _, verb := range requiredWinetricksVerbs {
+		if err := step("Installing "+winetricksLabel(verb), umuRun("winetricks", "-q", verb)); err != nil {
+			logger.Error(fmt.Sprintf("Failed to install %s", verb))
 			return err
 		}
-		logger.Info(fmt.Sprintf("[OK] %s", dll))
 	}
 
 	fmt.Println()
-	logger.Info("Time to install the launcher! Follow the on screen prompts once the GUI pops up.")
-
+	logger.Info("The Astarte Launcher installer opens next. Follow its prompts; this window waits for it.")
 	// Run the launcher installer the same way the Bellum wrapper runs the game.
-	if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun(launcherInstaller), logger, logFile); err != nil {
+	if err := step("Running the Astarte Launcher installer", umuRun(launcherInstaller)); err != nil {
 		logger.Error("Launcher installation failed.")
 		return err
 	}
 	if err := checkWebView2Runtime(config.WINEPREFIX); err != nil {
 		return err
 	}
+	logger.Warn("Almost done. Don't start the game or close this window yet.")
 
-	logger.Info("Astarte Launcher install completed successfully! Few more steps to go...")
-	logger.Warn("I'm not done! Don't launch game or close this script just yet")
-
-	// Set Windows 11
-	if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("winetricks", "-q", "win11"), logger, logFile); err != nil {
+	if err := step("Setting Windows 11 mode", umuRun("winetricks", "-q", "win11")); err != nil {
 		logger.Warn("winetricks win11 failed (may be expected)")
 	}
-
-	fmt.Println()
 
 	// Proton's pinned build supplies DXVK, vkd3d-proton, and dxvk-nvapi.
 	// Do not overlay a separate DXVK build into the prefix: retain one coherent
 	// runtime set and its upstream integrity guarantees for every GPU vendor.
-
-	// Configure WINEPREFIX
-	logger.Info("Configuring WINEPREFIX with things Bellum likes")
-	if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("winetricks", "-q", "grabfullscreen=y", "windowmanagerdecorated=n", "mwo=disable"), logger, logFile); err != nil {
+	if err := step("Tuning window and input settings", umuRun("winetricks", "-q", "grabfullscreen=y", "windowmanagerdecorated=n", "mwo=disable")); err != nil {
 		logger.Error("Winetricks configuration failed.")
 		return err
 	}
 
-	// Remove mono for AMD GPUs
 	if config.IsAMDGPU {
-		if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("winetricks", "-q", "remove_mono"), logger, logFile); err != nil {
+		if err := step("Removing Wine Mono (AMD)", umuRun("winetricks", "-q", "remove_mono")); err != nil {
 			logger.Error("Mono removal failed.")
 			return err
 		}
@@ -176,6 +171,24 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	boundaries.MutatePrefix(core.RunModeSilent, umuRun("reg", "add", `HKCU\Software\Wine\DirectInput`, "/v", "RawInput", "/t", "REG_DWORD", "/d", "1", "/f"), logger, logFile)
 
 	return nil
+}
+
+// winetricksLabel names a winetricks verb for the progress display.
+func winetricksLabel(verb string) string {
+	names := map[string]string{
+		"vcrun2022":      "Visual C++ 2015-2022 runtime",
+		"d3dcompiler_43": "D3D compiler 43",
+		"d3dcompiler_47": "D3D compiler 47",
+		"faudio":         "FAudio",
+		"msls31":         "Microsoft Line Services",
+		"dotnet9":        ".NET 9 runtime",
+		"dotnetdesktop9": ".NET 9 desktop runtime",
+		"mfc140":         "MFC 14 runtime",
+	}
+	if n, ok := names[verb]; ok {
+		return n
+	}
+	return verb
 }
 
 // setPrefixEnv points umu-run and Proton at the Bellum prefix for the

@@ -22,9 +22,43 @@ set -euo pipefail
 REPO="Ch3w3y/bellum-linux-installer"
 DATA_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/bellum-installer"
 
-say()  { printf '\033[1;34m[bellum]\033[0m %s\n' "$*"; }
-warn() { printf '\033[1;33m[bellum]\033[0m %s\n' "$*" >&2; }
-die()  { printf '\033[1;31m[bellum]\033[0m %s\n' "$*" >&2; exit 1; }
+if [ -t 1 ] && [ -z "${NO_COLOR:-}" ] && [ "${TERM:-}" != dumb ]; then
+  fancy=1 B=$'\033[1m' DIM=$'\033[90m' BLUE=$'\033[1;34m' CYAN=$'\033[1;36m' GREEN=$'\033[1;32m' YELLOW=$'\033[1;33m' RED=$'\033[1;31m' R=$'\033[0m'
+else
+  fancy=0 B='' DIM='' BLUE='' CYAN='' GREEN='' YELLOW='' RED='' R=''
+fi
+say()  { printf '  %s•%s %s\n' "$BLUE" "$R" "$*"; }
+ok()   { printf '  %s✔%s %s\n' "$GREEN" "$R" "$*"; }
+warn() { printf '  %s▲%s %s\n' "$YELLOW" "$R" "$*" >&2; }
+die()  { printf '  %s✖%s %s\n' "$RED" "$R" "$*" >&2; exit 1; }
+
+# spin LABEL CMD...: runs CMD behind a spinner (a plain line without a
+# terminal) and leaves a ✔ or ✖ line. Returns CMD's status.
+spin() {
+  local label=$1 status=0 i=0 frames='⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏'
+  shift
+  if [ "$fancy" != 1 ]; then
+    printf '  … %s\n' "$label"
+    "$@" || status=$?
+  else
+    "$@" & local pid=$!
+    while kill -0 "$pid" 2>/dev/null; do
+      printf '\r\033[2K  %s%s%s %s' "$CYAN" "${frames:i++%10:1}" "$R" "$label"
+      sleep 0.09
+    done
+    wait "$pid" || status=$?
+    printf '\r\033[2K'
+  fi
+  if [ "$status" -eq 0 ]; then ok "$label"; else printf '  %s✖%s %s\n' "$RED" "$R" "$label" >&2; fi
+  return "$status"
+}
+
+banner() {
+  printf '\n  %s▗▄▄▖ ▗▄▄▄▖▗▖   ▗▖   ▗▖ ▗▖▗▖  ▗▖%s\n' "$B" "$R"
+  printf '  %s▐▌ ▐▌▐▌   ▐▌   ▐▌   ▐▌ ▐▌▐▛▚▞▜▌%s\n' "$B" "$R"
+  printf '  %s▐▛▀▚▖▐▛▀▀▘▐▌   ▐▌   ▐▌ ▐▌▐▌  ▐▌%s   %sLinux installer%s\n' "$B" "$R" "$CYAN" "$R"
+  printf '  %s▐▙▄▞▘▐▙▄▄▖▐▙▄▄▖▐▙▄▄▖▝▚▄▞▘▐▌  ▐▌%s   %sgithub.com/%s%s\n\n' "$B" "$R" "$DIM" "$REPO" "$R"
+}
 
 usage() {
   cat <<'EOF_USAGE'
@@ -53,6 +87,8 @@ while [ $# -gt 0 ]; do
 done
 
 # --- Host checks -------------------------------------------------------------
+
+banner
 
 [ "$dry_run" = 1 ] || [ "$(id -u)" -ne 0 ] || die "Don't run this as root or with sudo. Run it as your normal user; it asks before anything needs sudo."
 
@@ -142,7 +178,6 @@ install_packages() {
 # --- Download and verify -------------------------------------------------------
 
 if [ -z "$version" ]; then
-  say "Looking up the latest release..."
   version="$(fetch_stdout "https://api.github.com/repos/$REPO/releases/latest" \
     | sed -n 's/^[[:space:]]*"tag_name":[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)" || true
   [ -n "$version" ] || die "Couldn't find the latest release on github.com/$REPO. Check your internet connection, or pass --version vX.Y.Z."
@@ -163,26 +198,26 @@ stem="${tarball%.tar.gz}"
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
-say "Downloading Bellum installer $version..."
-fetch "$base/$tarball" "$work/$tarball" || die "Download failed: $base/$tarball. Check your connection and that release $version exists."
+spin "Downloading the Bellum installer $version" fetch "$base/$tarball" "$work/$tarball" \
+  || die "Download failed: $base/$tarball. Check your connection and that release $version exists."
 fetch "$base/SHA256SUMS" "$work/SHA256SUMS" || die "Download failed: $base/SHA256SUMS."
 
-say "Verifying checksum..."
 expected="$(awk -v f="$tarball" '$2 == f || $2 == "*"f {print $1}' "$work/SHA256SUMS")"
 [ -n "$expected" ] || die "SHA256SUMS has no entry for $tarball. Not installing an unverified download."
 actual="$(sha256sum "$work/$tarball" | awk '{print $1}')"
 [ "$expected" = "$actual" ] || die "Checksum mismatch for $tarball (expected $expected, got $actual). The download is corrupt or was tampered with; nothing was installed."
 
-tar -xzf "$work/$tarball" -C "$work"
-[ -d "$work/$stem" ] || die "The release archive doesn't contain $stem/."
-(cd "$work/$stem" && sha256sum --check --strict --quiet SHA256SUMS) \
-  || die "Files inside the release archive failed their checksums; nothing was installed."
-say "Checksums OK."
+verify_inner() {
+  tar -xzf "$work/$tarball" -C "$work" && [ -d "$work/$stem" ] &&
+    (cd "$work/$stem" && sha256sum --check --strict --quiet SHA256SUMS)
+}
+spin "Verifying checksums" verify_inner \
+  || die "The release archive is incomplete or failed its checksums; nothing was installed."
 
 install_packages
 
 if [ "$dry_run" = 1 ]; then
-  say "Dry run complete: $tarball downloaded and verified. Nothing was installed or run."
+  ok "Dry run complete: $tarball downloaded and verified. Nothing was installed or run."
   exit 0
 fi
 
@@ -194,7 +229,7 @@ rm -rf "$dest.tmp"
 mv "$work/$stem" "$dest.tmp"
 rm -rf "$dest"
 mv "$dest.tmp" "$dest"
-say "Unpacked to $dest"
+ok "Unpacked to $dest"
 
 rm -rf "$work"
 trap - EXIT

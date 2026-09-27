@@ -44,7 +44,10 @@ func RunConfigurationWithBoundaries(config ConfigureConfig, logger *core.Logger,
 	logger.Info("Starting configuration phase...")
 
 	// Update DLL overrides
-	if err := updateDLLsWith(boundaries.MutatePrefix, logger); err != nil {
+	task := core.StartTask("Setting DLL overrides")
+	err := updateDLLsWith(boundaries.MutatePrefix, logger)
+	task.Done(err)
+	if err != nil {
 		return err
 	}
 
@@ -78,7 +81,6 @@ func UpdateDLLs(logger *core.Logger) error {
 }
 
 func updateDLLsWith(mutate func(core.RunMode, []string, *core.Logger, string) error, logger *core.Logger) error {
-	logger.Info("Setting DLL overrides")
 
 	logFile := ""
 

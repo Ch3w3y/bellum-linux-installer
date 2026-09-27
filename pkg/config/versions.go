@@ -1,5 +1,9 @@
 package config
 
+// InstallerVersion is stamped at build time with -ldflags "-X
+// bellum-installer/pkg/config.InstallerVersion=<version>" (see Makefile).
+var InstallerVersion = "dev"
+
 // Versions holds all version strings and paths for the installer
 type Versions struct {
 	Workdir                   string

@@ -188,7 +188,10 @@ func EnsureProtonWithLog(protonDir, protonVer string, logPath string, logger *co
 		return err
 	}
 	defer os.RemoveAll(stage)
-	if err := ExtractPackageTo(archivePath, stage, 1); err != nil {
+	unpack := core.StartTask("Unpacking Proton")
+	err = ExtractPackageTo(archivePath, stage, 1)
+	unpack.Done(err)
+	if err != nil {
 		return fmt.Errorf("failed to extract Proton: %w", err)
 	}
 	if info, err := os.Stat(filepath.Join(stage, "proton")); err != nil || !info.Mode().IsRegular() {
@@ -354,34 +357,39 @@ func fetchURL(dest, url string, logger *core.Logger) error {
 	if err != nil {
 		return err
 	}
-	progress := &downloadProgress{total: resp.ContentLength, logger: logger, name: filepath.Base(dest)}
-	_, copyErr := io.Copy(f, io.TeeReader(resp.Body, progress))
+	progress := core.NewProgress(downloadLabel(filepath.Base(dest)), resp.ContentLength)
+	_, copyErr := io.Copy(f, io.TeeReader(resp.Body, progressWriter{progress}))
 	closeErr := f.Close()
-	if err := firstErr(copyErr, closeErr); err != nil {
+	err = firstErr(copyErr, closeErr)
+	if err == nil && resp.ContentLength > 0 && progressDone(progress) != resp.ContentLength {
+		err = fmt.Errorf("download truncated: got %d of %d bytes", progressDone(progress), resp.ContentLength)
+	}
+	progress.Finish(err)
+	if err != nil {
 		os.Remove(dest)
 		return err
-	}
-	if resp.ContentLength > 0 && progress.done != resp.ContentLength {
-		os.Remove(dest)
-		return fmt.Errorf("download truncated: got %d of %d bytes", progress.done, resp.ContentLength)
 	}
 	return nil
 }
 
-type downloadProgress struct {
-	total, done int64
-	lastPercent int
-	name        string
-	logger      *core.Logger
+type progressWriter struct{ p *core.Progress }
+
+func (w progressWriter) Write(b []byte) (int, error) {
+	w.p.Add(int64(len(b)))
+	return len(b), nil
 }
 
-func (p *downloadProgress) Write(b []byte) (int, error) {
-	p.done += int64(len(b))
-	if p.total > 50<<20 { // only report for large downloads
-		if pct := int(p.done * 100 / p.total); pct >= p.lastPercent+10 {
-			p.lastPercent = pct - pct%10
-			p.logger.Info(fmt.Sprintf("Downloading %s: %d%% of %d MB", p.name, p.lastPercent, p.total>>20))
-		}
+func progressDone(p *core.Progress) int64 { return p.Done() }
+
+// downloadLabel turns a download's file name into what the user sees.
+func downloadLabel(name string) string {
+	switch {
+	case strings.HasPrefix(name, "proton-"):
+		return "Proton-CachyOS " + strings.TrimSuffix(strings.TrimPrefix(strings.TrimSuffix(name, ".tar.xz"), "proton-cachyos-"), "-x86_64")
+	case strings.HasPrefix(name, "umu"):
+		return "umu-launcher " + config.DefaultVersions.UMUVersion
+	case strings.HasPrefix(name, "AstarteLauncher"), strings.HasPrefix(name, "launcher"):
+		return "Astarte Launcher installer"
 	}
-	return len(b), nil
+	return name
 }

@@ -4,8 +4,10 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
+	"time"
 )
 
 // ANSI color codes
@@ -82,8 +84,15 @@ func (l *Logger) Info(msg string) {
 }
 
 // Warn logs a warning message
+// Record writes msg to the log file only.
+func (l *Logger) Record(msg string) {
+	if l.logFile != nil && msg != "" {
+		fmt.Fprintf(l.logFile, "%s %-5s %s\n", time.Now().Format("2006-01-02 15:04:05"), "INFO", stripANSI(msg))
+	}
+}
+
 func (l *Logger) Warn(msg string) {
-	l.log("warn", msg, ColorReset)
+	l.log("warn", msg, ColorYellow)
 }
 
 // Error logs an error message
@@ -100,50 +109,44 @@ func (l *Logger) log(level, msg, color string) {
 	if msg == "" {
 		return
 	}
-
-	prefix := ""
+	// Terminal: a coloured glyph per level. "[OK] " messages become a green ✔.
+	glyph := ColorBoldBlue + "•" + ColorReset
+	text := msg
 	switch level {
 	case "error":
-		prefix = ColorBoldRed + " [ERROR]" + ColorReset
+		glyph = ColorBoldRed + "✖" + ColorReset
 	case "warn":
-		prefix = ColorBoldYellow + " [WARN]" + ColorReset
-	case "info":
-		prefix = ColorBoldBlue + " [INFO]" + ColorReset
+		glyph = ColorBoldYellow + "▲" + ColorReset
 	case "cmd":
-		prefix = ColorBoldBlue + "  [CMD]" + ColorReset
+		glyph = ColorGrayBold + "$" + ColorReset
+	case "info":
+		if rest, ok := strings.CutPrefix(msg, "[OK] "); ok {
+			glyph = ColorBoldGreen + "✔" + ColorReset
+			text = rest
+		}
 	}
+	lines := splitLines(text, 110)
 
-	prefixBase := ColorGrayBold + "[Bellum-Linux-Installer]" + ColorReset + ":" + prefix
-	indentBase := "[Bellum-Linux-Installer]:[ERROR]"
-	indent := make([]byte, len(indentBase))
-	for i := range indent {
-		indent[i] = ' '
-	}
-
-	msg = ColorizeSubstr(msg, "WINEPREFIX", ColorBold, color)
-	msg = ColorizeSubstr(msg, "WINEPREFIX:", ColorBold, color)
-	msg = ColorizeSubstr(msg, "[OK]", ColorGreen, color)
-
-	// Split into lines and wrap if necessary
-	lines := splitLines(msg, 125)
-
+	termMu.Lock()
+	clearLineLocked()
 	for i, line := range lines {
-		var indentStr string
-		if i == 0 {
-			indentStr = prefixBase + color + "  "
-		} else {
-			indentStr = string(indent) + color + "  "
+		lead := "  " + glyph + " "
+		if i > 0 {
+			lead = "    "
 		}
+		fmt.Println(lead + color + line + ColorReset)
+	}
+	termMu.Unlock()
 
-		output := indentStr + line + ColorReset
-
-		fmt.Println(output)
-
-		if l.logFile != nil {
-			fmt.Fprintln(l.logFile, output)
-		}
+	// Log file: plain text with a timestamp and level, no colour codes.
+	if l.logFile != nil {
+		fmt.Fprintf(l.logFile, "%s %-5s %s\n", time.Now().Format("2006-01-02 15:04:05"), strings.ToUpper(level), stripANSI(msg))
 	}
 }
+
+var ansiRe = regexp.MustCompile(`\x1b\[[0-9;]*m`)
+
+func stripANSI(s string) string { return ansiRe.ReplaceAllString(s, "") }
 
 func lastSlash(s string) int {
 	for i := len(s) - 1; i >= 0; i-- {
