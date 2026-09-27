@@ -10,6 +10,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	// Register the hashes Authenticode signatures use.
@@ -178,7 +179,7 @@ func VerifyAuthenticode(image []byte, roots *x509.CertPool, now time.Time) (*Aut
 		CurrentTime:   verifyAt,
 		KeyUsages:     []x509.ExtKeyUsage{x509.ExtKeyUsageCodeSigning},
 	}); err != nil {
-		return nil, fmt.Errorf("signer certificate is not trusted: %w", err)
+		return nil, fmt.Errorf("signer certificate is not trusted: %w (%s)", err, describeChain(signer, certs))
 	}
 	return result, nil
 }
@@ -494,4 +495,18 @@ func signatureAlgorithm(oid asn1.ObjectIdentifier, h crypto.Hash) (x509.Signatur
 		return ec[h], nil
 	}
 	return 0, fmt.Errorf("unsupported signature algorithm %v", oid)
+}
+
+// describeChain names the signer and the certificates the signature carries,
+// so a trust failure says which issuer is missing from the trust store.
+func describeChain(signer *x509.Certificate, certs []*x509.Certificate) string {
+	var parts []string
+	parts = append(parts, fmt.Sprintf("signer %q issued by %q", signer.Subject.String(), signer.Issuer.String()))
+	for _, c := range certs {
+		if c == signer {
+			continue
+		}
+		parts = append(parts, fmt.Sprintf("included %q issued by %q", c.Subject.String(), c.Issuer.String()))
+	}
+	return strings.Join(parts, "; ")
 }
