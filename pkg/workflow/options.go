@@ -9,9 +9,11 @@ import (
 	"bellum-installer/pkg/core"
 )
 
-// Preset selects how much of Proton's vendor-specific upscaler support the
-// launch settings turn on. Both presets use only Proton's own flags; the
-// installer never adds or replaces DLLs (#11).
+// Preset selects optional Proton-CachyOS features. Both presets get the same
+// vendor settings (DLSS on NVIDIA and FSR4 on supported AMD GPUs come from
+// Proton's defaults either way). Performance adds the low-latency DXVK and
+// vkd3d-proton builds that ship inside the pinned Proton. No preset adds or
+// replaces DLLs itself (#11).
 type Preset string
 
 const (
@@ -33,17 +35,22 @@ func DefaultInstallOptions() InstallOptions {
 }
 
 // PerformanceFeatures lists, in plain language, what the Performance preset
-// turns on for this GPU. An empty list means the GPU has no vendor extras and
-// only the Stable preset is offered.
+// turns on. The low-latency builds are part of the pinned Proton archive
+// (files/lib/wine/{dxvk,vkd3d}-low-latency) and apply to every GPU vendor.
 func PerformanceFeatures(caps core.GPUCapabilities) []string {
-	var features []string
-	if caps.Vendor == core.GPUNVIDIA && caps.NVAPI {
-		features = append(features, "NVAPI and the NVIDIA driver libraries, so the game can offer DLSS and Reflex (PROTON_ENABLE_NVAPI=1, PROTON_NVIDIA_LIBS=1)")
+	return []string{
+		"Proton-CachyOS low-latency vkd3d-proton (D3D12, used by the game) and DXVK builds (PROTON_VKD3D_LOWLATENCY=1, PROTON_DXVK_LOWLATENCY=1). Experimental: not yet tested with Bellum and Easy Anti-Cheat",
 	}
-	if caps.Vendor == core.GPUAMD && caps.Generation == "RDNA4" && !caps.Ambiguous && caps.FSR41 {
-		features = append(features, "Proton's FSR4 upgrade for RDNA4 (PROTON_FSR4_UPGRADE=1)")
+}
+
+// presetVars returns the launch variables the preset adds.
+func (o InstallOptions) presetVars() string {
+	if o.Preset != PresetPerformance {
+		return ""
 	}
-	return features
+	return "# Performance preset: Proton-CachyOS low-latency builds\n" +
+		"export PROTON_VKD3D_LOWLATENCY=\"1\"\n" +
+		"export PROTON_DXVK_LOWLATENCY=\"1\"\n"
 }
 
 // optionalExtra is a tool the wrapper can wrap the game with.
@@ -73,7 +80,7 @@ func chooseInstallOptionsWith(caps core.GPUCapabilities, logger *core.Logger, pr
 		logger.Info("Preset: Stable. Your GPU has no vendor-specific extras to enable.")
 	} else {
 		fmt.Println("Choose a preset:")
-		fmt.Println("  1) Stable (recommended): Proton defaults that work on every setup.")
+		fmt.Println("  1) Stable (recommended): the standard Proton builds. DLSS and FSR4 work the same in both presets.")
 		fmt.Println("  2) Performance: also enables")
 		for _, f := range features {
 			fmt.Println("       - " + f)

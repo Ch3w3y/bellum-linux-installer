@@ -70,20 +70,62 @@ re-check the upscaler behaviour described below.
 
 Board policy (#11): **the installer never adds, copies, or replaces DLLs.**
 Upscaler features built into the pinned Proton runtime are accepted as Proton
-behaviour.
+behaviour. Everything below was verified on 2026-09-27 against the pinned
+archive itself: the `proton` script, `protonfixes/upscalers.py`, and a
+disassembly of `files/lib/wine/x86_64-windows/amdxc64.dll`.
 
-- Since [`cachyos-11.0-20260702-slr`](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260702-slr),
-  Proton-CachyOS copies AMD's `amdxcffx64.dll` FSR4 driver component
-  automatically on supported RDNA2–RDNA4 discrete GPUs. The release notes say
-  `PROTON_FSR4_UPGRADE` is no longer needed but can still select a DLL version,
-  and that `PROTON_FSR4_RDNA3_UPGRADE` was removed.
-- In the pinned tag's protonfixes patch
-  [`0004-upscalers-update-handling-for-FSR4-4.1.1.patch`](https://github.com/CachyOS/proton-cachyos/blob/cachyos-11.0-20260703-slr/patches/protonfixes/0002-upscalers/0004-upscalers-update-handling-for-FSR4-4.1.1.patch),
-  the FSR4 entry is unconditionally enabled (`('fsr4', fsr4_version, True)`).
-  The DLL is staged under `drive_c/windows/system32/umu/` and registered through
-  `WINE_UPSCALER_REPLACE`. `get_version()` treats `0` and `1` identically, so
-  no environment value disables it.
-- The installer exports `PROTON_FSR4_UPGRADE=1` only for an unambiguous RDNA4
-  GPU (`launch_vars.env`). It exports `PROTON_DLSS_UPGRADE=0` for NVIDIA and
-  generic GPUs and `PROTON_ENABLE_NGX_UPDATER=0` for NVIDIA, and it never
-  requests DLSS/XeSS DLL upgrades. MLFG is not enabled.
+**FSR4 (AMD).**
+
+- At every launch, `setup_upscalers()` downloads AMD's FSR4 driver component
+  `amdxcffx64.dll` (4.1.1 by default). It comes from the
+  `loathingkernel.github.io/proton-upscalers` manifest, is MD5-checked,
+  cached, and written to the prefix's `drive_c/windows/system32/`. The entry
+  is hard-coded on (`('fsr4', fsr4_version, True)`) and has **no GPU check**,
+  so this happens on NVIDIA and Intel too. `get_version()` treats `0` and `1`
+  alike, so no value of `PROTON_FSR4_UPGRADE` turns the download off; any
+  other value selects a DLL version.
+- Proton's `amdxc64.dll` stands in for AMD's D3D12 driver extension. When a
+  D3D12 game using the FidelityFX API (FSR 3.1 or later) asks for an upgraded
+  provider, it loads `amdxcffx64` and offers FSR4:
+  - **automatically** when the GPU passes a vkd3d-proton capability check;
+  - **always** when `FSR4_UPGRADE=1`. Proton sets this only when
+    `PROTON_FSR4_UPGRADE` is non-zero. Any other value, including an explicit
+    `0`, behaves as unset, so the flag *forces* FSR4 but can't disable it.
+  - The newer 4.1.x entry point is used when the DLL exports it; the older
+    one requires FP8 support ("FSR4 not supported on this system!" otherwise).
+- `DXIL_SPIRV_CONFIG=wmma_rdna3_workaround` makes `amdxc64` treat FP16
+  emulation as the FP8 path. It logs "FSR4 FP16 emulation is not recommended,
+  please use FSR 4.1.1". The
+  [20260702 release notes](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260702-slr)
+  say it "is not required any more in most cases", and that
+  `PROTON_FSR4_RDNA3_UPGRADE` was removed.
+- **What the installer sets:** `PROTON_FSR4_UPGRADE=1` on an unambiguous
+  RDNA4 only (native FP8), and never the RDNA3 workaround there. Other AMD
+  GPUs keep `PROTON_FSR4_UPGRADE=0`, which leaves Proton's automatic check in
+  charge, plus the workaround, which is the existing behaviour. This is the
+  same in both presets.
+- Whether the game gets FSR4 also depends on Bellum using the FidelityFX API
+  on D3D12. The game ships D3D12 (Unreal Engine 5); its FSR version is **not
+  yet verified**. Check in game with `PROTON_FSR4_INDICATOR=1`, which sets
+  `FSR_WATERMARK=1`.
+
+**DLSS (NVIDIA).** NVAPI is on by default; only `PROTON_DISABLE_NVAPI`
+turns it off, and Proton sets `DXVK_ENABLE_NVAPI=1` itself. `nvngx.dll` and
+`_nvngx.dll` are copied from the NVIDIA driver's `nvidia/wine` directory
+whenever it is found. So a game can offer DLSS with no extra flags.
+`PROTON_NVIDIA_LIBS=1` (set on RTX and GTX 16-series) adds the CUDA, NVENC,
+NVML and OptiX bridges. `PROTON_DLSS_UPGRADE=0` stays set: when enabled, it
+downloads newer DLSS DLLs from the same third-party manifest at launch.
+`PROTON_ENABLE_NVAPI`, `PROTON_ENABLE_NGX_UPDATER` and `PROTON_VKD3D_HEAP`
+are not read by this Proton build and are no longer written.
+
+**Performance preset.** It sets `PROTON_VKD3D_LOWLATENCY=1` and
+`PROTON_DXVK_LOWLATENCY=1`, which make Proton install the
+`files/lib/wine/vkd3d-low-latency` and `dxvk-low-latency` builds shipped in
+the pinned archive in place of the standard ones. The DXVK variant also
+disables async shader compilation and tunes compiler threads. Neither is yet
+tested with Bellum and Easy Anti-Cheat, so the preset is labelled
+experimental.
+
+**EAC.** Wine's `ntdll.so` in the pinned build reads `PROTON_EAC_RUNTIME`
+directly, which is how `launch_vars.env` points the game at Valve's runtime.

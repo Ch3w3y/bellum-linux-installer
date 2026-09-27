@@ -29,7 +29,7 @@ Then press **Enter** at each question to accept the defaults. The installer:
    for your distro and asks before running it (it never uses `sudo` on its
    own);
 3. asks where to install (default `~/Games/Bellum`), which preset to use
-   (**Stable** by default, or **Performance** if your GPU has vendor extras),
+   (**Stable** by default, or the experimental low-latency **Performance**),
    and whether to turn on MangoHud, GameMode or gamescope if you have them;
 4. shows one summary and asks you to confirm. **Nothing is downloaded or
    changed before that.**
@@ -149,8 +149,8 @@ Check that you're on **this** repository's Releases page; the original
 2. **Prechecks.** The installer detects your GPU and checks tools, the EAC
    runtime and free disk space. Nothing is downloaded or changed yet, and every
    problem is reported together.
-3. **Preset and extras.** Stable (default) or, if your GPU has vendor extras,
-   Performance. Then MangoHud, GameMode and gamescope, if they're installed.
+3. **Preset and extras.** Stable (default) or the experimental Performance
+   preset (Proton-CachyOS low-latency builds). Then MangoHud, GameMode and gamescope, if they're installed.
    All of these can be changed later in `<prefix>/launch_vars.env`.
 4. **Confirm the summary.**
 5. **Downloads and prefix setup.** It downloads and verifies Proton (several
@@ -223,16 +223,22 @@ message ends with the log's exact path.
   the process Easy Anti-Cheat protects.
 - DXVK, vkd3d-proton and dxvk-nvapi come from the pinned Proton-CachyOS build.
   See [runtime pins](docs/runtime-pins.md).
-- **NVIDIA (RTX and GTX 16-series):** the **Performance** preset enables NVAPI
-  and the real driver libraries (`PROTON_ENABLE_NVAPI=1`,
-  `PROTON_NVIDIA_LIBS=1`), so the game can offer DLSS. **Stable** leaves them
-  off. Older NVIDIA cards get the generic settings. Proton's DLSS DLL upgrade
-  (which downloads DLLs at launch) and the NGX updater are always off. GTX
-  16-series cards have no DLSS.
-- **AMD:** the pinned Proton build automatically provides AMD's FSR4 driver
-  component on supported RDNA2–RDNA4 discrete GPUs. This is Proton's built-in
-  behaviour, not something the installer does. On RDNA4 the **Performance**
-  preset also sets Proton's `PROTON_FSR4_UPGRADE=1` flag.
+- **NVIDIA:** DLSS is available through Proton's defaults (NVAPI on, and
+  `nvngx.dll` taken from your NVIDIA driver). RTX and GTX 16-series cards also
+  get `PROTON_NVIDIA_LIBS=1` (CUDA, NVENC and OptiX bridges). Proton's DLSS
+  DLL upgrade, which downloads DLLs at launch, is off. GTX 16-series cards
+  have no DLSS.
+- **AMD:** the pinned Proton downloads AMD's FSR4 driver component at every
+  launch and offers FSR4 to D3D12 games that use AMD's FidelityFX API (FSR 3.1
+  or later) when your GPU supports it. This is Proton's built-in behaviour, not
+  something the installer does. On RDNA4 the installer also sets
+  `PROTON_FSR4_UPGRADE=1`, which forces the offer. Set `PROTON_FSR4_INDICATOR=1`
+  in `launch_vars.env` to see an on-screen FSR watermark confirming it's
+  active. [Details](docs/runtime-pins.md#upscaler-behaviour-of-the-pinned-proton).
+- **Presets:** both presets get the settings above. **Performance** adds
+  Proton-CachyOS's low-latency vkd3d-proton and DXVK builds
+  (`PROTON_VKD3D_LOWLATENCY=1`, `PROTON_DXVK_LOWLATENCY=1`). It's
+  experimental: not yet tested with Bellum and Easy Anti-Cheat.
 - **Intel and other GPUs:** generic Proton settings.
 
 ### NVIDIA RTX 50-series (Blackwell) driver note

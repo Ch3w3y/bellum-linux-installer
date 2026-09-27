@@ -37,76 +37,13 @@ func TestEnterThroughDefaultsGivesStableWithoutExtras(t *testing.T) {
 func TestPerformancePresetAndExtras(t *testing.T) {
 	logger, _ := core.NewLogger("")
 	all := precheckCommands{available: map[string]bool{"mangohud": true, "gamemoderun": true, "gamescope": true}}
-	got := chooseInstallOptionsWith(rdna4, logger, scripted("oops", "2", "y", "yes", "n"), all)
+	got := chooseInstallOptionsWith(core.GPUCapabilities{Vendor: core.GPUIntel}, logger, scripted("oops", "2", "y", "yes", "n"), all)
 	want := InstallOptions{Preset: PresetPerformance, MangoHud: true, GameMode: true}
 	if got != want {
 		t.Fatalf("got %+v, want %+v", got, want)
 	}
 	if got.Summary() != "Performance + MangoHud, GameMode" {
 		t.Fatalf("summary %q", got.Summary())
-	}
-}
-
-func TestExtrasAreOnlyOfferedWhenInstalled(t *testing.T) {
-	logger, _ := core.NewLogger("")
-	asked := 0
-	prompt := func(p, def string) string {
-		asked++
-		return "y"
-	}
-	got := chooseInstallOptionsWith(core.GPUCapabilities{Vendor: core.GPUIntel}, logger, prompt, precheckCommands{})
-	if asked != 0 || got != DefaultInstallOptions() {
-		t.Fatalf("asked %d questions, got %+v", asked, got)
-	}
-}
-
-func TestPerformanceFeaturesPerVendor(t *testing.T) {
-	if f := PerformanceFeatures(rtx); len(f) != 1 || !strings.Contains(f[0], "DLSS") {
-		t.Fatalf("RTX: %v", f)
-	}
-	if f := PerformanceFeatures(rdna4); len(f) != 1 || !strings.Contains(f[0], "PROTON_FSR4_UPGRADE") {
-		t.Fatalf("RDNA4: %v", f)
-	}
-	for _, caps := range []core.GPUCapabilities{
-		{Vendor: core.GPUAMD, Generation: "RDNA3"},
-		{Vendor: core.GPUNVIDIA},
-		{Vendor: core.GPUIntel},
-		{Vendor: core.GPUUnknown},
-	} {
-		if f := PerformanceFeatures(caps); len(f) != 0 {
-			t.Fatalf("%+v should have no performance extras: %v", caps, f)
-		}
-	}
-}
-
-func TestLaunchVarsFollowPreset(t *testing.T) {
-	logger, _ := core.NewLogger("")
-	for _, tc := range []struct {
-		name   string
-		caps   core.GPUCapabilities
-		preset Preset
-		want   []string
-	}{
-		{"rtx stable", rtx, PresetStable, []string{`PROTON_ENABLE_NVAPI="0"`, `PROTON_NVIDIA_LIBS="0"`}},
-		{"rtx performance", rtx, PresetPerformance, []string{`PROTON_ENABLE_NVAPI="1"`, `PROTON_NVIDIA_LIBS="1"`, `DXVK_ENABLE_NVAPI="1"`}},
-		{"rdna4 stable", rdna4, PresetStable, []string{`PROTON_FSR4_UPGRADE="0"`}},
-		{"rdna4 performance", rdna4, PresetPerformance, []string{`PROTON_FSR4_UPGRADE="1"`}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			files := fakeFileStore{written: map[string][]byte{}}
-			boundaries := WorkflowBoundaries{Commands: fakeCommands{}, Files: files, MutatePrefix: func(core.RunMode, []string, *core.Logger, string) error { return nil }}
-			config := ConfigureConfig{WINEPREFIX: "/prefix", ProtonPath: "/proton", GPUCapabilities: tc.caps, IsFSR41: tc.caps.FSR41,
-				Options: InstallOptions{Preset: tc.preset, GameMode: true}}
-			if err := RunConfigurationWithBoundaries(config, logger, boundaries); err != nil {
-				t.Fatal(err)
-			}
-			content := string(files.written["/prefix/launch_vars.env"])
-			for _, want := range append(tc.want, `BELLUM_GAMEMODE="1"`, `BELLUM_MANGOHUD="0"`) {
-				if !strings.Contains(content, want) {
-					t.Errorf("launch_vars.env lacks %s:\n%s", want, content)
-				}
-			}
-		})
 	}
 }
 
@@ -130,5 +67,59 @@ func TestInstallLocationPrompt(t *testing.T) {
 	pick := func(*core.Logger) (string, error) { picked = true; return "/picked/Bellum", nil }
 	if got, err := promptInstallLocationWith(logger, scripted("b"), pick); err != nil || !picked || got != "/picked/Bellum" {
 		t.Fatalf("browse: %q, %v, picked=%t", got, err, picked)
+	}
+}
+
+func TestExtrasAreOnlyOfferedWhenInstalled(t *testing.T) {
+	logger, _ := core.NewLogger("")
+	var prompts []string
+	prompt := func(p, def string) string {
+		prompts = append(prompts, p)
+		return def
+	}
+	got := chooseInstallOptionsWith(core.GPUCapabilities{Vendor: core.GPUIntel}, logger, prompt, precheckCommands{})
+	if len(prompts) != 1 || !strings.HasPrefix(prompts[0], "Preset") || got != DefaultInstallOptions() {
+		t.Fatalf("prompts %q, got %+v", prompts, got)
+	}
+}
+
+func TestLaunchVarsMatchPinnedProton(t *testing.T) {
+	logger, _ := core.NewLogger("")
+	rdna3 := core.GPUCapabilities{Vendor: core.GPUAMD, Generation: "RDNA3"}
+	for _, tc := range []struct {
+		name         string
+		caps         core.GPUCapabilities
+		preset       Preset
+		want, absent []string
+	}{
+		// DLSS works through Proton's default NVAPI + nvngx copy in both presets.
+		{"rtx stable", rtx, PresetStable, []string{`PROTON_NVIDIA_LIBS="1"`, `DXVK_ENABLE_NVAPI="1"`}, []string{"LOWLATENCY", "PROTON_ENABLE_NVAPI", "PROTON_ENABLE_NGX_UPDATER", "PROTON_VKD3D_HEAP"}},
+		{"rtx performance", rtx, PresetPerformance, []string{`PROTON_NVIDIA_LIBS="1"`, `PROTON_VKD3D_LOWLATENCY="1"`, `PROTON_DXVK_LOWLATENCY="1"`}, nil},
+		// RDNA4 gets the forced FSR4 offer and never the FP16 emulation switch.
+		{"rdna4 stable", rdna4, PresetStable, []string{`PROTON_FSR4_UPGRADE="1"`}, []string{"wmma_rdna3_workaround", "PROTON_FSR4_RDNA3_UPGRADE", "LOWLATENCY"}},
+		{"rdna4 performance", rdna4, PresetPerformance, []string{`PROTON_FSR4_UPGRADE="1"`, `PROTON_VKD3D_LOWLATENCY="1"`}, []string{"wmma_rdna3_workaround"}},
+		{"rdna3 stable", rdna3, PresetStable, []string{`PROTON_FSR4_UPGRADE="0"`, "wmma_rdna3_workaround"}, []string{"PROTON_FSR4_RDNA3_UPGRADE"}},
+		{"intel performance", core.GPUCapabilities{Vendor: core.GPUIntel}, PresetPerformance, []string{`PROTON_VKD3D_LOWLATENCY="1"`}, []string{"PROTON_FSR4_RDNA3_UPGRADE"}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			files := fakeFileStore{written: map[string][]byte{}}
+			boundaries := WorkflowBoundaries{Commands: fakeCommands{}, Files: files, MutatePrefix: func(core.RunMode, []string, *core.Logger, string) error { return nil }}
+			config := ConfigureConfig{WINEPREFIX: "/prefix", ProtonPath: "/proton", GPUCapabilities: tc.caps, IsFSR41: tc.caps.FSR41,
+				Options: InstallOptions{Preset: tc.preset, GameMode: true}}
+			if err := RunConfigurationWithBoundaries(config, logger, boundaries); err != nil {
+				t.Fatal(err)
+			}
+			content := string(files.written["/prefix/launch_vars.env"])
+			for _, want := range append(tc.want, `BELLUM_GAMEMODE="1"`, `BELLUM_MANGOHUD="0"`) {
+				if !strings.Contains(content, want) {
+					t.Errorf("launch_vars.env lacks %s:\n%s", want, content)
+				}
+			}
+			for _, bad := range tc.absent {
+				if strings.Contains(content, bad) {
+					t.Errorf("launch_vars.env should not contain %s:\n%s", bad, content)
+				}
+			}
+		})
 	}
 }
