@@ -128,7 +128,7 @@ func TestRDNA4EnablesOnlyNativeFSR4DriverComponent(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := string(files.written["/prefix/launch_vars.env"])
-	if !strings.Contains(content, `PROTON_FSR4_UPGRADE="1"`) || !strings.Contains(content, `PROTON_FSR4_RDNA3_UPGRADE="0"`) {
+	if !strings.Contains(content, `PROTON_FSR4_UPGRADE="1"`) || strings.Contains(content, "PROTON_FSR4_RDNA3_UPGRADE") {
 		t.Fatalf("wrong RDNA4 defaults: %s", content)
 	}
 }
