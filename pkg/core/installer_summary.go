@@ -17,28 +17,20 @@ func PrintInstallerSummary(protonVer, winetricksVer, vkd3dVer, dxvkVer,
 		launcherSummary = launcherInstallerPath
 	}
 
-	// Print the summary header
-	fmt.Printf("%s======================================================\n", ColorBoldCyan)
-	fmt.Printf("#              Bellum Installer Summary              #\n")
-	fmt.Printf("======================================================%s\n\n", ColorReset)
-
-	// Print version information
-	fmt.Printf("%s   Proton Version%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, protonVer, ColorReset, ColorReset)
-	fmt.Printf("%s   Winetricks Ver%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, winetricksVer, ColorReset, ColorReset)
-	fmt.Printf("%s        VKD3D Ver%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, vkd3dVer, ColorReset, ColorReset)
-	fmt.Printf("%s         DXVK Ver%s:   %s%s%s%s\n\n", ColorBoldCyan, ColorReset, ColorBold, dxvkVer, ColorReset, ColorReset)
-
-	// Print paths and configuration
-	fmt.Printf("%s       WINEPREFIX%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, Colorize(wineprefix, ColorBoldYellow), ColorReset, ColorReset)
-	fmt.Printf("%s Bellum Installer%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, launcherSummary, ColorReset, ColorReset)
-	fmt.Printf("\n%s         GPU TYPE%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, gpuType, ColorReset, ColorReset)
-	fmt.Printf("%s    Configuration%s:   %s%s%s%s\n\n", ColorBoldCyan, ColorReset, ColorBold, choices, ColorReset, ColorReset)
-
-	// Print note
-	fmt.Printf("%sNOTE:%s The game will be installed into the specified WINEPREFIX path.\n", ColorBoldYellow, ColorReset)
-	fmt.Println("Nothing has been downloaded or changed yet. After you confirm, the installer")
-	fmt.Println("downloads Proton (several hundred MB, only if not already present) and the")
-	fmt.Println("Astarte Launcher, then builds the prefix.")
+	row := func(key, value string) {
+		fmt.Printf("  %s%-15s%s %s\n", ColorGrayBold, key, ColorReset, value)
+	}
+	row("Install to", ColorBoldYellow+wineprefix+ColorReset)
+	row("GPU", gpuType)
+	row("Configuration", choices)
+	row("Proton", protonVer)
+	row("winetricks", winetricksVer)
+	row("DXVK / VKD3D", dxvkVer)
+	row("Launcher", launcherSummary)
+	fmt.Println()
+	fmt.Printf("  %sNothing has been downloaded or changed yet.%s After you confirm, the installer\n", Bold, ColorReset)
+	fmt.Println("  downloads Proton (several hundred MB, once) and the Astarte Launcher, then")
+	fmt.Println("  builds Bellum's own prefix.")
 }
 
 // ConfirmProceed prompts the user to confirm they want to continue with the installation.
@@ -47,7 +39,7 @@ func ConfirmProceed() bool {
 	fmt.Println()
 	reader := NewReader()
 
-	fmt.Print("Do you want to proceed with the installation? (Y/n): ")
+	fmt.Printf("  Continue? %s[Y/n]%s %s›%s ", ColorGrayBold, ColorReset, ColorBoldCyan, ColorReset)
 	if AssumeYes {
 		fmt.Println("y")
 		return true

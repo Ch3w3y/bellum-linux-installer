@@ -102,7 +102,7 @@ func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileSt
 		return "", false, false, fmt.Errorf("WINEPREFIX must be an absolute path ending in Bellum: %q", wineprefix)
 	}
 	wineprefix = filepath.Clean(wineprefix)
-	logger.Info(fmt.Sprintf("WINEPREFIX: %s", core.Colorize(wineprefix, core.ColorBoldYellow)))
+	logger.Info(fmt.Sprintf("Install folder: %s", core.Colorize(wineprefix, core.ColorBoldYellow)))
 
 	// Find the nearest existing ancestor; the prefix is created beneath it later.
 	parent := wineprefix
@@ -138,12 +138,12 @@ func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileSt
 	if !isWritable(parent) {
 		return "", false, false, fmt.Errorf("WINEPREFIX parent directory is not writable: %s", parent)
 	}
-	logger.Info("[OK] WINEPREFIX path is valid and writable")
+	logger.Info("[OK] Install folder is writable")
 
 	if isSSD(parent, logger) {
-		logger.Info("[OK] WINEPREFIX device is an SSD/NVME (optimal performance)")
+		logger.Info("[OK] Install folder is on an SSD/NVMe drive")
 	} else {
-		logger.Warn("WINEPREFIX device is NOT an SSD/NVME (may have performance issues)")
+		logger.Warn("Install folder is NOT on an SSD/NVMe drive; loading may be slow")
 		if !ask("Astarte Developers strongly recommend using NVMe or SSD for the game. Are you sure you want to proceed? (Y/n): ") {
 			return "", false, false, fmt.Errorf("installation cancelled by user")
 		}
@@ -307,8 +307,6 @@ func RunPrechecks(opts PrecheckOptions, logger *core.Logger) (*PrecheckResult, e
 }
 
 func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHost) (*PrecheckResult, error) {
-	logger.Info("Starting precheck phase...")
-	fmt.Println()
 
 	gpuCaps, err := host.DetectGPU()
 	if err != nil {
@@ -321,7 +319,17 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	isAMD := gpuCaps.Vendor == core.GPUAMD
 	// RDNA4 needs the Proton driver component for the game's native FSR4.
 	useFSR41 := gpuCaps.Vendor == core.GPUAMD && gpuCaps.Generation == "RDNA4" && !gpuCaps.Ambiguous
-	logger.Info(fmt.Sprintf("GPU Vendor: %s (generation: %s, ambiguous: %t)", gpuType, gpuCaps.Generation, gpuCaps.Ambiguous))
+	gpuLine := "GPU: " + gpuType
+	if gpuCaps.Generation != "" {
+		gpuLine += " " + gpuCaps.Generation
+	}
+	if gpuCaps.Renderer != "" && !strings.HasPrefix(gpuCaps.Renderer, "undetected") {
+		gpuLine += core.ColorGrayBold + "  (" + gpuCaps.Renderer + ")" + core.ColorReset
+	}
+	if gpuCaps.Vendor != core.GPUUnknown {
+		gpuLine = "[OK] " + gpuLine
+	}
+	logger.Info(gpuLine)
 	if gpuCaps.Vendor == core.GPUUnknown {
 		logger.Warn("Your GPU wasn't recognised (common in VMs and on some hybrid laptops). Bellum will use generic Proton settings without vendor-specific features.")
 	}
@@ -408,8 +416,7 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 		logger.Info(fmt.Sprintf("[OK] Launcher installer verified: %s", opts.LauncherInstaller))
 	}
 
-	logger.Info("[OK] All prechecks passed!")
-	fmt.Println()
+	logger.Info("[OK] Your system is ready")
 
 	return &PrecheckResult{
 		WINEPREFIX:        wineprefix,

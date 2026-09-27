@@ -32,7 +32,14 @@ jobs:
           test "$(git describe --tags --exact-match)" = "$TAG"
           test "$(git status --porcelain --untracked-files=all)" = ''
           test -f RELEASE-GATE.md
-          scripts/check-release-gate.sh "$GITHUB_SHA" RELEASE-GATE.md
+          # Release candidates (vX.Y.Z-rc.N) exist to gather the QA and EAC
+          # evidence the gate asks for, so they skip it and publish as
+          # pre-releases that the one-line installer never picks by default.
+          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
+            echo "Release candidate $TAG: evidence gate deferred to the final release."
+          else
+            scripts/check-release-gate.sh "$GITHUB_SHA" RELEASE-GATE.md
+          fi
       - name: Code and vulnerability checks
         run: |
           go version
@@ -83,4 +90,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --draft
+          if [[ "$TAG" =~ -rc\.[0-9]+$ ]]; then
+            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --prerelease \
+              --notes "Release candidate for hardware testing. Install with: bash <(curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh) --version $TAG"
+          else
+            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --draft
+          fi

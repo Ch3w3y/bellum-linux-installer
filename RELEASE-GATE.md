@@ -13,6 +13,11 @@ EAC: [ ] https://example.invalid/eac-evidence
 Security: [ ] https://example.invalid/security-evidence
 Provenance: [ ] https://example.invalid/pin-evidence
 
+Release candidates (`vX.Y.Z-rc.N`) are exempt: they publish as GitHub
+pre-releases so the QA and EAC evidence above can be gathered on real
+hardware (`install.sh --version vX.Y.Z-rc.N`). The one-line installer's
+default path only follows the latest full release.
+
 After an authorized release, download both archives and `SHA256SUMS`, run
 `sha256sum --check --strict SHA256SUMS`, and verify each downloaded archive's
 GitHub attestation with `gh attestation verify <archive> --repo

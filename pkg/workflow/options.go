@@ -79,9 +79,9 @@ func PromptInstallLocation(logger *core.Logger) (string, error) {
 
 func promptInstallLocationWith(logger *core.Logger, prompt func(string, string) string, pick func(*core.Logger) (string, error)) (string, error) {
 	def := DefaultInstallLocation()
-	fmt.Println()
-	fmt.Println("Where should Bellum be installed? Use a fast SSD with plenty of free space.")
-	answer := strings.TrimSpace(prompt(fmt.Sprintf("Press Enter for %s, type a folder, or type b to browse: ", def), def))
+	fmt.Println("  Where should Bellum be installed? Use a fast SSD with plenty of free space.")
+	fmt.Printf("  %sEnter%s for %s%s%s, type another folder, or %sb%s to browse.\n", core.Bold, core.ColorReset, core.ColorBoldYellow, def, core.ColorReset, core.Bold, core.ColorReset)
+	answer := strings.TrimSpace(prompt("  "+core.ColorBoldCyan+"›"+core.ColorReset+" ", def))
 	switch {
 	case strings.EqualFold(answer, "b"):
 		return pick(logger)
