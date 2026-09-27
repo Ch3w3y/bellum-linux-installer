@@ -5,24 +5,26 @@ on:
     tags: ['v*']
 
 permissions:
-  contents: write
-  id-token: write
-  attestations: write
+  contents: read
 
 jobs:
-  release:
+  build:
     runs-on: ubuntu-latest
-    environment: release
     strategy:
+      fail-fast: false
       matrix:
         arch: [amd64, arm64]
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
-          go-version-file: go.mod
+          go-version: '1.26.8'
       - name: Check tag and release gate
         env:
           TAG: ${{ github.ref_name }}
@@ -30,14 +32,13 @@ jobs:
           test "$(git describe --tags --exact-match)" = "$TAG"
           test "$(git status --porcelain --untracked-files=all)" = ''
           test -f RELEASE-GATE.md
-          grep -Eq '^QA: \[x\] https?://' RELEASE-GATE.md
-          grep -Eq '^EAC: \[x\] https?://' RELEASE-GATE.md
-          grep -Eq '^Security: \[x\] https?://' RELEASE-GATE.md
-          grep -Eq '^Provenance: \[x\] https?://' RELEASE-GATE.md
+          scripts/check-release-gate.sh "$GITHUB_SHA" RELEASE-GATE.md
       - name: Code and vulnerability checks
         run: |
+          go version
           make check
-          go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+          go install golang.org/x/vuln/cmd/govulncheck@v1.1.4
+          GOARCH=${{ matrix.arch }} "$(go env GOPATH)/bin/govulncheck" ./...
       - name: Build and verify release
         env:
           GOARCH: ${{ matrix.arch }}
@@ -45,14 +46,41 @@ jobs:
         run: |
           make release VERSION="${TAG#v}"
           make verify-release VERSION="${TAG#v}"
-          sha256sum dist/*.tar.gz > dist/TARBALL-SHA256SUMS
+          go version -m "dist/bellum-installer-linux-${GOARCH}-${TAG#v}/installer"
       - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
         with:
           subject-path: dist/*.tar.gz
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: release-${{ matrix.arch }}
+          path: dist/*.tar.gz
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: release
+    permissions:
+      contents: write
+      attestations: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+      - name: Verify complete asset set and checksums
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          scripts/check-release-assets.sh "${TAG#v}" dist
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
         run: |
-          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --generate-notes
-          gh release upload "$TAG" dist/*.tar.gz --clobber
+          gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --draft

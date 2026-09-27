@@ -1,6 +1,6 @@
 module bellum-installer
 
-go 1.24
+go 1.26.8
 
 toolchain go1.24.9
 
