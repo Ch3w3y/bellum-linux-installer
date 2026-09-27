@@ -321,6 +321,9 @@ Installs are tested by hand on real hardware through release candidates.
 
 ## License
 
-This repository does not yet declare a license. Until it does, the code is
-shared for use and review, but not licensed for redistribution. Third-party
-components keep their own licenses; see [Credits](CREDITS.md).
+[MIT](LICENSE) for the work in this repository since it became a successor
+project. Code originally written by Joheb Rahman for the
+[original installer](https://github.com/joepaji/bellum-linux-installer) was
+published without a license. It remains his, is included here with credit,
+and is covered by the MIT license only once he agrees. Third-party components
+keep their own licenses; see [Credits](CREDITS.md).

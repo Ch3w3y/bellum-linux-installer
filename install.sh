@@ -188,9 +188,9 @@ case "$version" in
   *) version="v$version" ;;
 esac
 plain="${version#v}"
-case "$plain" in
-  ''|*[!0-9A-Za-z._-]*) die "'$version' is not a valid release version." ;;
-esac
+# Strictly X.Y.Z or X.Y.Z-rc.N: the version becomes a directory name that is
+# replaced below, so nothing like ".." may get through.
+[[ "$plain" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || die "'$version' is not a valid release version (expected something like v2.2.0)."
 
 base="${BELLUM_RELEASE_BASE:-https://github.com/$REPO/releases/download/$version}"
 tarball="bellum-installer-linux-amd64-$plain.tar.gz"

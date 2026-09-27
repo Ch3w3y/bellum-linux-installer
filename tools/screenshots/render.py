@@ -97,7 +97,7 @@ body{{margin:0;background:transparent;padding:24px}}
 .s{{padding:14px 18px 18px;font:15px/1 'DejaVu Sans Mono',monospace}}
 .l{{height:19px;white-space:pre;display:flex}}
 .c{{display:inline-block;width:9.04px;height:19px;line-height:19px;text-align:center}}
-</style><div class="w"><div class="t"><span class="d" style="background:#f38ba8"></span><span class="d" style="background:#f9e2af"></span><span class="d" style="background:#a6e3a1"></span><span class="n">player@steammachine: ~</span></div><div class="s">{''.join(lines)}</div></div>"""
+</style><div class="w"><div class="t"><span class="d" style="background:#f38ba8"></span><span class="d" style="background:#f9e2af"></span><span class="d" style="background:#a6e3a1"></span><span class="n">player@linux: ~</span></div><div class="s">{''.join(lines)}</div></div>"""
 
 
 def main():
