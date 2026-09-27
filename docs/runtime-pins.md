@@ -21,3 +21,23 @@ from the release payload; its old installer helper is not part of the runtime
 setup path. Runtime
 availability does not establish Bellum EAC compatibility; the game-directory
 integrity boundary remains enforced separately.
+
+## Effective FSR behavior in the pinned runtime
+
+The pinned Proton-CachyOS tag [cachyos-11.0-20260703-slr](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260703-slr)
+is based on the 2026-07-02 runtime changes that automatically copy
+`amdxcffx64.dll` for supported discrete RDNA2-RDNA4 GPUs. The release notes say
+`PROTON_FSR4_UPGRADE` is no longer required for those GPUs and remove
+`PROTON_FSR4_RDNA3_UPGRADE`. They do not document a switch that disables the
+automatic RDNA3 staging. The tag's [upscaler source patch](https://github.com/CachyOS/proton-cachyos/blob/cachyos-11.0-20260703-slr/patches/protonfixes/0002-upscalers/0004-upscalers-update-handling-for-FSR4-4.1.1.patch)
+marks FSR4 DLL setup enabled unconditionally, but only exports the FSR upgrade
+activation when the compatibility configuration requests `fsr3` or `fsr4`.
+Thus auto-staging is not the same as forcing every game's upscaler, and an
+environment variable alone does not give Bellum a deterministic RDNA3 disable.
+The launcher's `PROTON_FSR4_UPGRADE=1` preference is exported only for an
+unambiguous RDNA4 renderer. The source patch also gates the effective
+`FSR4_UPGRADE` activation on Proton's `fsr3`/`fsr4` compatibility config; Bellum
+does not claim that this request forces the game's upscaler path on. This also
+does not guarantee RDNA3 native FSR paths are untouched.
+The runtime's MLFG option is separate from FSR upscaling and is not enabled by
+Bellum.

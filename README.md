@@ -28,9 +28,14 @@ cd bellum-installer-linux-amd64-v2.0.1
 ```
 
 
-Runtime FSR and DLSS upgrades are disabled by default; the game uses its shipped
-upscalers. No DLLs are copied into the game directory. The generated launcher
-uses umu-launcher, Proton, and the Proton EasyAntiCheat Runtime for every GPU.
+The launcher never copies DLLs into the game directory. The pinned CachyOS
+Proton runtime automatically stages `amdxcffx64.dll` for supported discrete
+RDNA2-RDNA4 GPUs. Bellum explicitly requests `PROTON_FSR4_UPGRADE=1` only for
+an unambiguous RDNA4 adapter. The runtime does not provide a deterministic
+environment switch to prevent its automatic RDNA3 staging, so Bellum cannot
+promise that native FSR3/4 paths remain unchanged on RDNA3. Runtime FSR and
+DLSS replacement downloads remain disabled. The generated launcher uses
+umu-launcher, Proton, and the Proton EasyAntiCheat Runtime for every GPU.
 Set `PROTON_EAC_RUNTIME` to the installed runtime directory if it is outside
 Steam's default location. The launcher logs to `launcher.log` in the prefix;
 check that log for EAC initialization when validating Linux mode.
@@ -132,8 +137,9 @@ If Bellum fails to load shaders or renders a black screen on a 5000 series GPU w
 
 ## Implementation Notes
 
-- Runtime FSR/DLSS DLL upgrades are off by default; no DLLs are copied into the game directory. RDNA4 enables Proton's FSR4 driver component; RDNA3 stays off.
-- DXVK, vkd3d-proton and dxvk-nvapi come from the pinned CachyOS Proton runtime (see [runtime pins](docs/runtime-pins.md)). DLSS/Frame Generation availability depends on that runtime and your driver; it has not been validated against Bellum.
+- No DLLs are copied into the game directory. The pinned CachyOS Proton runtime auto-stages AMD's `amdxcffx64.dll` for supported RDNA2-RDNA4 discrete GPUs; this is independent of Bellum's RDNA4-only `PROTON_FSR4_UPGRADE=1` request. RDNA3 auto-staging cannot be deterministically disabled through the documented runtime settings. See [runtime pins](docs/runtime-pins.md).
+- FSR upscaling and ML frame generation are separate capabilities. NVIDIA RTX 40 series has single frame generation; RTX 50 adds multi-frame generation. GTX 16 has no DLSS. Availability still depends on the runtime, driver, and game implementation; Bellum has not validated these features in-game.
+- DXVK, vkd3d-proton and dxvk-nvapi come from the pinned CachyOS Proton runtime (see [runtime pins](docs/runtime-pins.md)).
 - The launcher uses umu-launcher with the Proton EasyAntiCheat Runtime (see [EAC QA](docs/eac-qa.md)).
 - The installer and uninstaller are Go binaries; packages are bundled in the release tarball, not embedded.
 - All install logging is written to `logs/installer.log`; the uninstaller writes `uninstaller.log`.

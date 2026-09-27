@@ -91,7 +91,7 @@ func main() {
 	}
 
 	// Run prechecks with absolute paths
-	result, err := workflow.RunPrechecks(selectedWINEPREFIX, *launcherInstaller, *forceWineVersion, false, logger)
+	result, err := workflow.RunPrechecks(selectedWINEPREFIX, *launcherInstaller, *forceWineVersion, logger)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Prechecks failed: %v", err))
 		os.Exit(1)
@@ -125,7 +125,7 @@ func main() {
 		IsAMDGPU:          result.IsAMDGPU,
 		LauncherInstaller: result.LauncherInstaller,
 		Workdir:           workdir,
-		IsFSR41:           result.UseFSR41,
+		IsFSR4:            result.UseFSR4,
 	}
 
 	// Run installation
@@ -143,7 +143,7 @@ func main() {
 		GPUCapabilities: result.GPUCapabilities,
 		IsAMDGPU:        result.IsAMDGPU,
 		Workdir:         workdir,
-		IsFSR41:         result.UseFSR41,
+		IsFSR4:          result.UseFSR4,
 	}
 
 	if err := workflow.RunConfiguration(configureConfig, logger); err != nil {

@@ -119,11 +119,11 @@ func GetProtonInstallPath(protonVer string) string {
 }
 
 // EnsureProton downloads and sets up the Proton directory
-func EnsureProton(protonDir, protonVer string, isAMD bool, isFSR41 bool, logger *core.Logger) error {
-	return EnsureProtonWithLog(filepath.Join(protonDir, protonVer), protonVer, isAMD, isFSR41, "", logger)
+func EnsureProton(protonDir, protonVer string, logger *core.Logger) error {
+	return EnsureProtonWithLog(filepath.Join(protonDir, protonVer), protonVer, "", logger)
 }
 
-func EnsureProtonWithLog(protonDir, protonVer string, isAMD bool, isFSR41 bool, logPath string, logger *core.Logger) error {
+func EnsureProtonWithLog(protonDir, protonVer string, logPath string, logger *core.Logger) error {
 	// Use proton-cachyos for all GPUs (AMD and NVIDIA)
 	protonURL := GetProtonURL(protonVer, config.DefaultVersions.ProtonBaseURL)
 
@@ -225,7 +225,7 @@ func EnsureProtonWithLog(protonDir, protonVer string, isAMD bool, isFSR41 bool, 
 	}
 
 	// Patch settings
-	if err := PatchProtonSettings(settingsFile, isAMD, isFSR41); err != nil {
+	if err := PatchProtonSettings(settingsFile); err != nil {
 		logger.Error("Failed to patch Proton user settings, removing and re-downloading Proton")
 		os.RemoveAll(actualProtonDir)
 		return fmt.Errorf("failed to patch Proton user settings: %w", err)

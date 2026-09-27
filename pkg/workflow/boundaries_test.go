@@ -128,7 +128,7 @@ func TestConfigurationWritesLaunchVarsThroughFileBoundary(t *testing.T) {
 	}
 }
 
-func TestRDNA4EnablesOnlyNativeFSR4DriverComponent(t *testing.T) {
+func TestRDNA4RequestsFSR4AndDoesNotUseRetiredRDNA3Switch(t *testing.T) {
 	files := fakeFileStore{written: map[string][]byte{}}
 	logger, err := core.NewLogger("")
 	if err != nil {
@@ -138,8 +138,23 @@ func TestRDNA4EnablesOnlyNativeFSR4DriverComponent(t *testing.T) {
 		t.Fatal(err)
 	}
 	content := string(files.written["/prefix/launch_vars.env"])
-	if !strings.Contains(content, `PROTON_FSR4_UPGRADE="1"`) || !strings.Contains(content, `PROTON_FSR4_RDNA3_UPGRADE="0"`) {
+	if !strings.Contains(content, `PROTON_FSR4_UPGRADE="1"`) || strings.Contains(content, `PROTON_FSR4_RDNA3_UPGRADE`) {
 		t.Fatalf("wrong RDNA4 defaults: %s", content)
+	}
+}
+
+func TestRDNA3DoesNotClaimRuntimeAutoStagingIsDisabled(t *testing.T) {
+	files := fakeFileStore{written: map[string][]byte{}}
+	logger, err := core.NewLogger("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := createLaunchVarsFileAMD("/prefix", "/proton", false, logger, files); err != nil {
+		t.Fatal(err)
+	}
+	content := string(files.written["/prefix/launch_vars.env"])
+	if strings.Contains(content, "PROTON_FSR4_UPGRADE") || strings.Contains(content, "PROTON_FSR4_RDNA3_UPGRADE") {
+		t.Fatalf("RDNA3 environment must not claim to disable the runtime-staged DLL: %s", content)
 	}
 }
 
@@ -156,7 +171,6 @@ func TestGenericLaunchVarsAreSourceable(t *testing.T) {
 		"export PROTONPATH='/proton'\"'\"'s build'\n",
 		"export WINEPREFIX='/prefix with spaces'\n",
 		"export PROTON_EAC_RUNTIME=",
-		"export PROTON_FSR4_UPGRADE=0\n",
 		"export PROTON_DLSS_UPGRADE=0\n",
 	} {
 		if !strings.Contains(content, line) {

@@ -24,7 +24,7 @@ type PrecheckResult struct {
 	GPUType           string
 	IsAMDGPU          bool
 	GPUCapabilities   core.GPUCapabilities
-	UseFSR41          bool
+	UseFSR4           bool
 	ProtonVer         string
 	ProtonPath        string
 }
@@ -261,7 +261,7 @@ func CheckUMURun(logger *core.Logger) error {
 
 func checkUMURun(commands CommandRunner, logger *core.Logger) error {
 	if DiscoverExecutable("umu-run", commands) == "" {
-		logger.Error("umu-run binary not found in PATH.\nGrab latest umu-launcher-1.3.0 for your distro: https://github.com/Open-Wine-Components/umu-launcher/releases/tag/1.3.0")
+		logger.Error("umu-run binary not found in PATH. Install the umu-launcher package provided by your Linux distribution, then retry.")
 		return fmt.Errorf("umu-run not found")
 	}
 
@@ -355,11 +355,10 @@ func CheckWinetricks(workdir string, logger *core.Logger) error {
 }
 
 // CheckProton ensures Proton is available
-func CheckProton(packageRoot string, gpuType string, isFSR41 bool, logger *core.Logger) (string, string, error) {
+func CheckProton(packageRoot string, logger *core.Logger) (string, string, error) {
 	if config.DefaultVersions.ProtonSHA256 == "" {
 		return "", "", fmt.Errorf("approved Proton SHA-256 pin is required")
 	}
-	isAMD := strings.Contains(strings.ToLower(gpuType), "amd") || strings.Contains(strings.ToLower(gpuType), "radeon")
 
 	if DiscoverExecutable("wget", DefaultBoundaries.Commands) == "" {
 		logger.Error("Proton is missing and wget is not available to download it.")
@@ -374,7 +373,7 @@ func CheckProton(packageRoot string, gpuType string, isFSR41 bool, logger *core.
 	// Get the actual proton install path
 	protonDir := packages.GetProtonInstallPath(protonVer)
 
-	if err := packages.EnsureProtonWithLog(protonDir, protonVer, isAMD, isFSR41, filepath.Join(filepath.Dir(packageRoot), "logs", "installer.log"), logger); err != nil {
+	if err := packages.EnsureProtonWithLog(protonDir, protonVer, filepath.Join(filepath.Dir(packageRoot), "logs", "installer.log"), logger); err != nil {
 		return "", "", err
 	}
 
@@ -394,7 +393,7 @@ func DetectGPU(logger *core.Logger) (string, error) {
 }
 
 // RunPrechecks runs all precheck validations
-func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineVersion bool, fsr41 bool, logger *core.Logger) (*PrecheckResult, error) {
+func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineVersion bool, logger *core.Logger) (*PrecheckResult, error) {
 	logger.Info("Starting precheck phase...")
 	fmt.Println()
 
@@ -409,10 +408,9 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 	}
 	isAMD := gpuCaps.Vendor == core.GPUAMD
 	// RDNA4 needs the Proton driver component for the game's native FSR4.
-	// The retired fsr41 CLI option is ignored; RDNA3 remains disabled.
-	useFSR41 := gpuCaps.Vendor == core.GPUAMD && gpuCaps.Generation == "RDNA4" && !gpuCaps.Ambiguous
+	// Enable the explicit FSR4 upgrade request on an unambiguous RDNA4 adapter.
+	useFSR4 := gpuCaps.Vendor == core.GPUAMD && gpuCaps.Generation == "RDNA4" && !gpuCaps.Ambiguous
 	logger.Info(fmt.Sprintf("GPU Vendor: %s (generation: %s, ambiguous: %t)", gpuType, gpuCaps.Generation, gpuCaps.Ambiguous))
-	_ = fsr41
 
 	// Validate WINEPREFIX
 	wineprefix, _, _, err := ValidateWINEPREFIX(wineprefixArg, logger)
@@ -456,7 +454,7 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 	}
 
 	// Check Proton
-	protonVer, protonPath, err := CheckProton(packageRoot, gpuType, useFSR41, logger)
+	protonVer, protonPath, err := CheckProton(packageRoot, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -476,7 +474,7 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 		GPUType:           gpuType,
 		IsAMDGPU:          isAMD,
 		GPUCapabilities:   gpuCaps,
-		UseFSR41:          useFSR41,
+		UseFSR4:           useFSR4,
 		ProtonVer:         protonVer,
 		ProtonPath:        protonPath,
 		ForceWineVersion:  forceWineVersion,

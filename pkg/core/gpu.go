@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -24,15 +25,17 @@ const (
 // only one adapter; Ambiguous is set only when the renderer explicitly includes
 // a PRIME/hybrid/mux marker. Absence of this flag does not prove there is one GPU.
 type GPUCapabilities struct {
-	Vendor          GPUVendor
-	Renderer        string
-	Generation      string
-	Ambiguous       bool
-	DLSS            bool
-	NVAPI           bool
-	FSR             bool
-	FSR41           bool
-	FrameGeneration bool
+	Vendor               GPUVendor
+	Renderer             string
+	Generation           string
+	Ambiguous            bool
+	DLSS                 bool
+	NVAPI                bool
+	FSR                  bool
+	FSR4                 bool
+	FrameGeneration      bool
+	MultiFrameGeneration bool
+	MLFrameGeneration    bool
 }
 
 // DetectGPUCapabilitiesWith makes renderer acquisition injectable for callers
@@ -84,6 +87,9 @@ func readRendererWithFallbackWith(
 ) (string, error) {
 	renderer, err := runGlxinfo()
 	if err == nil {
+		if strings.TrimSpace(renderer) == "" {
+			return "", fmt.Errorf("glxinfo output did not contain an OpenGL renderer")
+		}
 		return renderer, nil
 	}
 	if !glxinfoMissingError(err) {
@@ -122,18 +128,11 @@ func detectGPUCapabilitiesFromDRM() (GPUCapabilities, error) {
 			continue
 		}
 		vid := strings.TrimSpace(string(vendorID))
-		var vendor GPUVendor
-		switch vid {
-		case "0x10de":
-			vendor = GPUNVIDIA
-		case "0x1002", "0x1022":
-			vendor = GPUAMD
-		case "0x8086":
-			vendor = GPUIntel
-		default:
+		vendor := gpuVendorFromPCIID(vid)
+		if vendor == GPUUnknown {
 			continue
 		}
-		return GPUCapabilities{Vendor: vendor, Renderer: fmt.Sprintf("DRM device %s (vendor %s, no GL renderer)", name, vid)}, nil
+		return GPUCapabilities{Vendor: vendor, Renderer: fmt.Sprintf("DRM device %s (%s, vendor %s, no GL renderer)", name, vendor, vid)}, nil
 	}
 	return GPUCapabilities{}, fmt.Errorf("no supported DRM GPU device found")
 }
@@ -145,7 +144,7 @@ func readRendererFromLspci() (string, bool) {
 	if LookPath("lspci") == "" {
 		return "", false
 	}
-	output, err := RunCommandWithOutput([]string{"lspci", "-mm"})
+	output, err := RunCommandWithOutput([]string{"lspci", "-nn"})
 	if err != nil {
 		return "", false
 	}
@@ -161,27 +160,37 @@ func readRendererFromLspciOutput(output string) (string, bool) {
 	return "", false
 }
 
-// parseLspciRendererLine inspects one `lspci -mm` line. The bracketed hex
-// class code (e.g. [0300]) is what actually marks a GPU-class device, so the
-// check survives localized class labels like "Affichage" or "3D-Controller".
+// parseLspciRendererLine inspects one `lspci -nn` line. It uses the PCI class
+// and vendor IDs, not localized vendor or class names.
 func parseLspciRendererLine(line string) (string, bool) {
 	classCode := lspciClassCode(line)
 	if classCode == "" || (classCode != "0300" && classCode != "0302" && classCode != "0380") {
 		return "", false
 	}
-	lower := strings.ToLower(line)
-	switch {
-	case strings.Contains(lower, "nvidia"):
-		return "NVIDIA " + strings.TrimSpace(line), true
-	case strings.Contains(lower, "amd") || strings.Contains(lower, "ati ") || strings.Contains(lower, "radeon") || strings.Contains(lower, "advanced micro devices"):
-		return "AMD " + strings.TrimSpace(line), true
-	case strings.Contains(lower, "intel"):
-		return "Intel " + strings.TrimSpace(line), true
+	for _, match := range pciVendorID.FindAllStringSubmatch(line, -1) {
+		if vendor := gpuVendorFromPCIID(match[1]); vendor != GPUUnknown {
+			return string(vendor) + " " + strings.TrimSpace(line), true
+		}
 	}
 	return "", false
 }
 
-// lspciClassCode extracts the bracketed hex class code from an lspci -mm
+var pciVendorID = regexp.MustCompile(`\[([[:xdigit:]]{4}):[[:xdigit:]]{4}\]`)
+
+func gpuVendorFromPCIID(id string) GPUVendor {
+	switch strings.TrimPrefix(strings.ToLower(strings.TrimSpace(id)), "0x") {
+	case "10de":
+		return GPUNVIDIA
+	case "1002", "1022":
+		return GPUAMD
+	case "8086":
+		return GPUIntel
+	default:
+		return GPUUnknown
+	}
+}
+
+// lspciClassCode extracts the bracketed hex class code from an lspci -nn
 // line, e.g. `[0300]` -> `0300`. Returns "" when absent or malformed.
 func lspciClassCode(line string) string {
 	open := strings.Index(line, "[0")
@@ -233,33 +242,44 @@ func ClassifyGPUCapabilities(renderer string) GPUCapabilities {
 	if strings.Contains(r, "nvidia") || strings.Contains(r, "geforce") || strings.Contains(r, "quadro") {
 		c.Vendor = GPUNVIDIA
 		// RTX names encode architecture; GTX 16xx is Turing, GTX 10xx is Pascal.
-		if strings.Contains(r, "rtx 50") {
+		if modelMatch(r, `\brtx\s*50\d{2}\b`) {
 			c.Generation = "Blackwell"
-			c.DLSS, c.NVAPI, c.FrameGeneration = true, true, true
-		} else if strings.Contains(r, "rtx 40") {
+			c.DLSS, c.NVAPI, c.FrameGeneration, c.MultiFrameGeneration = true, true, true, true
+		} else if modelMatch(r, `\brtx\s*40\d{2}\b`) {
 			c.Generation = "Ada"
 			c.DLSS, c.NVAPI, c.FrameGeneration = true, true, true
-		} else if strings.Contains(r, "rtx 30") {
+		} else if modelMatch(r, `\brtx\s*30\d{2}\b`) {
 			c.Generation = "Ampere"
 			c.DLSS, c.NVAPI = true, true
-		} else if strings.Contains(r, "rtx 20") || strings.Contains(r, "gtx 16") {
+		} else if modelMatch(r, `\brtx\s*20\d{2}\b`) {
 			c.Generation = "Turing"
 			c.DLSS, c.NVAPI = true, true
+		} else if modelMatch(r, `\bgtx\s*16\d{2}\b`) {
+			c.Generation = "Turing"
+			c.NVAPI = true
 		}
 		c.FSR = true
 	} else if strings.Contains(r, "amd") || strings.Contains(r, "radeon") || strings.Contains(r, "advanced micro devices") {
 		c.Vendor = GPUAMD
-		if strings.Contains(r, "gfx12") || strings.Contains(r, "rx 90") {
+		if modelMatch(r, `\bgfx12\d{2}\b`) || modelMatch(r, `\brx\s*9\d{3}\b`) {
 			c.Generation = "RDNA4"
-			c.FSR, c.FSR41, c.FrameGeneration = true, true, true
-		} else if strings.Contains(r, "gfx11") || strings.Contains(r, "rx 7") {
+			c.FSR, c.FSR4, c.FrameGeneration, c.MLFrameGeneration = true, true, true, true
+		} else if modelMatch(r, `\bgfx11\d{2}\b`) || modelMatch(r, `\brx\s*7\d{3}\b`) {
 			c.Generation = "RDNA3"
+			c.FSR, c.FSR4, c.FrameGeneration, c.MLFrameGeneration = true, true, true, true
+		} else if modelMatch(r, `\bgfx10\d{2}\b`) {
+			if modelMatch(r, `\bgfx10[0-2]\d\b`) {
+				c.Generation = "RDNA1"
+			} else if modelMatch(r, `\bgfx103\d\b`) {
+				c.Generation = "RDNA2"
+				c.FSR4 = true
+			}
 			c.FSR = true
-		} else if strings.Contains(r, "gfx10") || strings.Contains(r, "rx 6") {
+		} else if modelMatch(r, `\brx\s*6\d{3}\b`) {
 			c.Generation = "RDNA2"
-			c.FSR = true
-		} else if strings.Contains(r, "gfx9") {
-			c.Generation = "RDNA1/CDNA"
+			c.FSR, c.FSR4 = true, true
+		} else if modelMatch(r, `\brx\s*5\d{3}\b`) {
+			c.Generation = "RDNA1"
 			c.FSR = true
 		} else {
 			c.FSR = true
@@ -274,9 +294,13 @@ func ClassifyGPUCapabilities(renderer string) GPUCapabilities {
 	if strings.Contains(r, "prime") || strings.Contains(r, "hybrid") || strings.Contains(r, "mux") {
 		c.Ambiguous = true
 		c.Generation = ""
-		c.DLSS, c.NVAPI, c.FSR41, c.FrameGeneration = false, false, false, false
+		c.DLSS, c.NVAPI, c.FrameGeneration, c.MultiFrameGeneration, c.MLFrameGeneration = false, false, false, false, false
 	}
 	return c
+}
+
+func modelMatch(value, pattern string) bool {
+	return regexp.MustCompile(pattern).MatchString(value)
 }
 
 func classifyGPU(renderer string) string {

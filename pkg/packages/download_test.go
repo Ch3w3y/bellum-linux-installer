@@ -39,7 +39,7 @@ user_settings = {
 	logger := &core.Logger{}
 
 	// Call EnsureProton
-	err = EnsureProton(tmpDir, "proton-test", true, true, logger)
+	err = EnsureProton(tmpDir, "proton-test", logger)
 	if err != nil {
 		t.Fatalf("EnsureProton failed: %v", err)
 	}
@@ -86,7 +86,7 @@ user_settings = {
 	logger := &core.Logger{}
 
 	// Call EnsureProton
-	err = EnsureProton(tmpDir, "proton-test", false, false, logger)
+	err = EnsureProton(tmpDir, "proton-test", logger)
 	if err != nil {
 		t.Fatalf("EnsureProton failed: %v", err)
 	}
@@ -130,7 +130,7 @@ func TestEnsureProtonMissingSettingsFile(t *testing.T) {
 	logger := &core.Logger{}
 
 	// Call EnsureProton - should fail at download time because no real server exists
-	err = EnsureProton(tmpDir, "proton-test", false, false, logger)
+	err = EnsureProton(tmpDir, "proton-test", logger)
 	// We expect an error because there's no real server to download from
 	if err == nil {
 		t.Error("Expected error for missing settings file (download failure), got nil")

@@ -8,11 +8,10 @@ import (
 	"strings"
 )
 
-// PatchProtonSettings patches the Proton user_settings.py file with GPU-specific settings
+// PatchProtonSettings patches common Proton user_settings.py options. GPU-specific
+// runtime policy is supplied by the launcher environment.
 // settingsFile: path to the user_settings.py file (can be user_settings.sample.py)
-// isAMD: true if the GPU is AMD, false otherwise
-// isFSR41: true only when a capability-gated runtime FSR upgrade was selected
-func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
+func PatchProtonSettings(settingsFile string) error {
 	if settingsFile == "" {
 		return fmt.Errorf("settings file path is empty")
 	}
@@ -66,18 +65,6 @@ func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 	desired["PROTON_DXVK_D3D8"] = "1"
 	desired["PROTON_NVIDIA_LIBS"] = "1"
 
-	// AMD-specific settings (FSR4 upgrade)
-	if isAMD {
-		// RDNA4 uses Proton's FSR4 driver component by default. RDNA3 stays off.
-		if isFSR41 {
-			desired["PROTON_FSR4_UPGRADE"] = "1"
-			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "0"
-		} else {
-			desired["PROTON_FSR4_UPGRADE"] = "0"
-			desired["PROTON_FSR4_RDNA3_UPGRADE"] = "0"
-		}
-	}
-
 	// Read and process the settings file
 	file, err := os.Open(settingsFile)
 	if err != nil {
@@ -114,6 +101,9 @@ func PatchProtonSettings(settingsFile string, isAMD bool, isFSR41 bool) error {
 
 		// Process lines within the settings block
 		if inSettingsBlock {
+			if strings.Contains(line, "\"PROTON_FSR4_RDNA3_UPGRADE\":") || strings.Contains(line, "\"PROTON_FSR4_UPGRADE\":") {
+				continue // FSR policy is exported by the launcher, not user_settings.py
+			}
 			matched := false
 			for key := range desired {
 				// Check if this line matches the key we're looking for

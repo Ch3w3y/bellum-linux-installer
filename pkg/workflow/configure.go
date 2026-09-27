@@ -18,7 +18,7 @@ type ConfigureConfig struct {
 	GPUCapabilities core.GPUCapabilities
 	IsAMDGPU        bool
 	Workdir         string
-	IsFSR41         bool
+	IsFSR4          bool
 }
 
 // RunConfiguration runs the post-install configuration phase
@@ -56,7 +56,7 @@ func RunConfigurationWithBoundaries(config ConfigureConfig, logger *core.Logger,
 		}
 		// dxvk_nvapi is included in Proton for NVIDIA
 	} else if config.GPUCapabilities.Vendor == core.GPUAMD {
-		if err := createLaunchVarsFileAMD(config.WINEPREFIX, config.ProtonPath, config.IsFSR41 && config.GPUCapabilities.FSR41, logger, boundaries.Files); err != nil {
+		if err := createLaunchVarsFileAMD(config.WINEPREFIX, config.ProtonPath, config.IsFSR4 && config.GPUCapabilities.FSR4, logger, boundaries.Files); err != nil {
 			return err
 		}
 	} else {
@@ -163,20 +163,24 @@ export CUDA_DISABLE_PERF_BOOST="1"
 }
 
 // CreateLaunchVarsFileAMD creates the launch environment file for AMD GPUs
-func CreateLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, logger *core.Logger) error {
-	return createLaunchVarsFileAMD(wineprefix, protonpath, isFSR41, logger, DefaultBoundaries.Files)
+func CreateLaunchVarsFileAMD(wineprefix, protonpath string, isFSR4 bool, logger *core.Logger) error {
+	return createLaunchVarsFileAMD(wineprefix, protonpath, isFSR4, logger, DefaultBoundaries.Files)
 }
 
-func createLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, logger *core.Logger, files FileStore) error {
+func createLaunchVarsFileAMD(wineprefix, protonpath string, isFSR4 bool, logger *core.Logger, files FileStore) error {
 	launchVars := filepath.Join(wineprefix, "launch_vars.env")
 	logger.Info(fmt.Sprintf("Creating launch environment file: %s", launchVars))
 
-	// RDNA4 needs Proton's FSR4 driver component for native game FSR4.
-	// RDNA3's upgrade remains disabled unless a separate opt-in is implemented.
-	fsr4Upgrade := "0"
-	fsr4Rdna3Upgrade := "0"
-	if isFSR41 {
+	// The pinned runtime auto-stages amdxcffx64.dll on supported RDNA2-RDNA4
+	// GPUs. Supply its FSR4 request/version preference only for RDNA4; absence
+	// on RDNA3 does not disable the runtime's automatic DLL staging.
+	fsr4Upgrade := ""
+	if isFSR4 {
 		fsr4Upgrade = "1"
+	}
+	fsr4Environment := ""
+	if fsr4Upgrade != "" {
+		fsr4Environment = `export PROTON_FSR4_UPGRADE="` + fsr4Upgrade + `"` + "\n"
 	}
 
 	content := `# Bellum Launch Variables (AMD)
@@ -185,13 +189,11 @@ func createLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, logger
 export PROTONPATH=` + quoteShellEnv(protonpath) + `
 export PROTON_EAC_RUNTIME=` + quoteShellEnv(eacRuntimePath()) + `
 export WINEPREFIX=` + quoteShellEnv(wineprefix) + `
-export PROTON_FSR4_UPGRADE="` + fsr4Upgrade + `"
-export PROTON_FSR4_RDNA3_UPGRADE="` + fsr4Rdna3Upgrade + `"
+` + fsr4Environment + `
 export STEAM_COMPAT_DATA_PATH=` + quoteShellEnv(wineprefix) + `
 export PROTON_VKD3D_HEAP="1"
 export VKD3D_CONFIG="descriptor_heap"
 export WINE_LARGE_ADDRESS_AWARE="1"
-export DXIL_SPIRV_CONFIG=wmma_rdna3_workaround
 `
 
 	if err := files.WriteFile(launchVars, []byte(content), 0600); err != nil {
@@ -219,7 +221,7 @@ func createLaunchVarsFileGeneric(wineprefix, protonpath string, files FileStore)
 		"export PROTON_EAC_RUNTIME=" + quoteShellEnv(eacRuntimePath()) + "\n" +
 		"export WINEPREFIX=" + quoteShellEnv(wineprefix) + "\n" +
 		"export STEAM_COMPAT_DATA_PATH=" + quoteShellEnv(wineprefix) + "\n" +
-		"export PROTON_FSR4_UPGRADE=0\nexport PROTON_FSR4_RDNA3_UPGRADE=0\nexport PROTON_DLSS_UPGRADE=0\n"
+		"export PROTON_DLSS_UPGRADE=0\n"
 	return files.WriteFile(filepath.Join(wineprefix, "launch_vars.env"), []byte(content), 0600)
 }
 

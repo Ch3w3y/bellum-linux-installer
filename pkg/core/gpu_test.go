@@ -9,23 +9,28 @@ import (
 
 func TestClassifyGPUCapabilities(t *testing.T) {
 	tests := []struct {
-		renderer                    string
-		vendor                      GPUVendor
-		generation                  string
-		dlss, nvapi, fsr, fsr41, fg bool
+		renderer                              string
+		vendor                                GPUVendor
+		generation                            string
+		dlss, nvapi, fsr, fsr4, fg, mfg, mlfg bool
 	}{
-		{"NVIDIA GeForce RTX 2080", GPUNVIDIA, "Turing", true, true, true, false, false},
-		{"NVIDIA GeForce RTX 4090", GPUNVIDIA, "Ada", true, true, true, false, true},
-		{"AMD Radeon RX 7900 XTX gfx1100", GPUAMD, "RDNA3", false, false, true, false, false},
-		{"AMD Radeon RX 9070 XT gfx1201", GPUAMD, "RDNA4", false, false, true, true, true},
-		{"Intel Arc A770", GPUIntel, "", false, false, true, false, false},
-		{"llvmpipe (LLVM 18.1.2)", GPUUnknown, "", false, false, false, false, false},
-		{"NVIDIA GeForce RTX 4090 PRIME hybrid", GPUNVIDIA, "", false, false, true, false, false},
+		{"NVIDIA GeForce RTX 2080", GPUNVIDIA, "Turing", true, true, true, false, false, false, false},
+		{"NVIDIA GeForce RTX 4090", GPUNVIDIA, "Ada", true, true, true, false, true, false, false},
+		{"NVIDIA GeForce RTX 5090", GPUNVIDIA, "Blackwell", true, true, true, false, true, true, false},
+		{"NVIDIA GeForce GTX 1660 SUPER", GPUNVIDIA, "Turing", false, true, true, false, false, false, false},
+		{"NVIDIA GeForce RTX 40900", GPUNVIDIA, "", false, false, true, false, false, false, false},
+		{"AMD Radeon RX 5700 XT gfx1010", GPUAMD, "RDNA1", false, false, true, false, false, false, false},
+		{"AMD Radeon RX 6800 XT gfx1030", GPUAMD, "RDNA2", false, false, true, true, false, false, false},
+		{"AMD Radeon RX 7900 XTX gfx1100", GPUAMD, "RDNA3", false, false, true, true, true, false, true},
+		{"AMD Radeon RX 9070 XT gfx1201", GPUAMD, "RDNA4", false, false, true, true, true, false, true},
+		{"Intel Arc A770", GPUIntel, "", false, false, true, false, false, false, false},
+		{"llvmpipe (LLVM 18.1.2)", GPUUnknown, "", false, false, false, false, false, false, false},
+		{"NVIDIA GeForce RTX 4090 PRIME hybrid", GPUNVIDIA, "", false, false, true, false, false, false, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.renderer, func(t *testing.T) {
 			got := ClassifyGPUCapabilities(tt.renderer)
-			if got.Vendor != tt.vendor || got.Generation != tt.generation || got.DLSS != tt.dlss || got.NVAPI != tt.nvapi || got.FSR != tt.fsr || got.FSR41 != tt.fsr41 || got.FrameGeneration != tt.fg {
+			if got.Vendor != tt.vendor || got.Generation != tt.generation || got.DLSS != tt.dlss || got.NVAPI != tt.nvapi || got.FSR != tt.fsr || got.FSR4 != tt.fsr4 || got.FrameGeneration != tt.fg || got.MultiFrameGeneration != tt.mfg || got.MLFrameGeneration != tt.mlfg {
 				t.Fatalf("got %+v", got)
 			}
 		})
@@ -35,7 +40,7 @@ func TestClassifyGPUCapabilities(t *testing.T) {
 func TestDetectGPUCapabilitiesWith(t *testing.T) {
 	want := "AMD Radeon RX 9070 gfx1200"
 	got, err := DetectGPUCapabilitiesWith(func() (string, error) { return want, nil })
-	if err != nil || got.Renderer != want || !got.FSR41 {
+	if err != nil || got.Renderer != want || !got.FSR4 || !got.MLFrameGeneration {
 		t.Fatalf("got %+v, err %v", got, err)
 	}
 }
@@ -57,9 +62,9 @@ func TestGLXInfoMissingError(t *testing.T) {
 
 func TestReadRendererFromLspciOutputPicksFirstGPU(t *testing.T) {
 	output := strings.Join([]string{
-		`00:00.0 "Host bridge [0600]" "Intel" "12th Gen Core Processor"`,
-		`01:00.0 "VGA compatible controller [0300]" "NVIDIA" "AD103 [GeForce RTX 4090]"`,
-		`02:00.0 "Non-Volatile memory controller [0108]" "Samsung" "NVMe SSD"`,
+		`00:00.0 Host bridge [0600]: Intel Corporation 12th Gen Core Processor [8086:4601]`,
+		`01:00.0 VGA compatible controller [0300]: NVIDIA Corporation AD103 [GeForce RTX 4090] [10de:2684]`,
+		`02:00.0 Non-Volatile memory controller [0108]: Samsung NVMe SSD [144d:a80a]`,
 	}, "\n")
 	renderer, ok := readRendererFromLspciOutput(output)
 	if !ok {
@@ -71,23 +76,51 @@ func TestReadRendererFromLspciOutputPicksFirstGPU(t *testing.T) {
 }
 
 func TestParseLspciRendererLineVendors(t *testing.T) {
-	if got, ok := parseLspciRendererLine(`01:00.0 "VGA compatible controller [0300]" "Advanced Micro Devices, Inc. [AMD/ATI]" "Navi 31 [Radeon RX 7900 XTX]"`); !ok || !strings.Contains(got, "AMD") {
+	if got, ok := parseLspciRendererLine(`01:00.0 VGA compatible controller [0300]: Advanced Micro Devices, Inc. [AMD/ATI] Navi 31 [Radeon RX 7900 XTX] [1002:744c]`); !ok || !strings.Contains(got, "AMD") {
 		t.Fatalf("AMD line: got %q ok=%v", got, ok)
 	}
-	if got, ok := parseLspciRendererLine(`00:02.0 "Display controller [0380]" "Intel" "Alder Lake-P GT2 [UHD Graphics]"`); !ok || !strings.Contains(got, "Intel") {
+	if got, ok := parseLspciRendererLine(`00:02.0 Display controller [0380]: Intel Corporation Alder Lake-P GT2 [UHD Graphics] [8086:46a6]`); !ok || !strings.Contains(got, "Intel") {
 		t.Fatalf("Intel line: got %q ok=%v", got, ok)
 	}
-	if got, ok := parseLspciRendererLine(`01:00.0 "VGA compatible controller [0300]" "NVIDIA" "AD103 [GeForce RTX 4090]"`); !ok || !strings.Contains(got, "NVIDIA") {
+	if got, ok := parseLspciRendererLine(`01:00.0 VGA compatible controller [0300]: NVIDIA Corporation AD103 [GeForce RTX 4090] [10de:2684]`); !ok || !strings.Contains(got, "NVIDIA") {
 		t.Fatalf("NVIDIA line: got %q ok=%v", got, ok)
 	}
-	if _, ok := parseLspciRendererLine(`03:00.0 "Non-Volatile memory controller [0108]" "Samsung" "NVMe SSD"`); ok {
+	if _, ok := parseLspciRendererLine(`03:00.0 Non-Volatile memory controller [0108]: Samsung NVMe SSD [144d:a80a]`); ok {
 		t.Fatal("NVMe device must not classify as GPU")
 	}
 }
 
 func TestParseLspciRendererLineLocalizedClassLabels(t *testing.T) {
-	if got, ok := parseLspciRendererLine(`01:00.0 "Affichage [0300]" "NVIDIA" "AD104 [GeForce RTX 4070]"`); !ok || !strings.Contains(got, "NVIDIA") {
+	if got, ok := parseLspciRendererLine(`01:00.0 Affichage [0300]: NVIDIA Corporation AD104 [GeForce RTX 4070] [10de:2786]`); !ok || !strings.Contains(got, "NVIDIA") {
 		t.Fatalf("localized class label must still match on class code, got %q ok=%v", got, ok)
+	}
+}
+
+func TestGPUVendorFromPCIID(t *testing.T) {
+	for _, tt := range []struct {
+		id   string
+		want GPUVendor
+	}{
+		{"0x10de", GPUNVIDIA}, {"10DE", GPUNVIDIA}, {"0x1002", GPUAMD},
+		{"0x1022", GPUAMD}, {"0x8086", GPUIntel}, {"0x1234", GPUUnknown},
+	} {
+		if got := gpuVendorFromPCIID(tt.id); got != tt.want {
+			t.Errorf("%s: got %s, want %s", tt.id, got, tt.want)
+		}
+	}
+}
+
+func TestReadRendererRejectsEmptyGlxinfoRenderer(t *testing.T) {
+	_, err := readRendererWithFallbackWith(
+		func() (string, error) { return "", nil },
+		func() (string, bool) { t.Fatal("empty glxinfo must not be accepted as a renderer"); return "", false },
+		func() (GPUCapabilities, error) {
+			t.Fatal("empty glxinfo must be rejected")
+			return GPUCapabilities{}, nil
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "did not contain") {
+		t.Fatalf("expected empty renderer error, got %v", err)
 	}
 }
 
@@ -136,7 +169,7 @@ func TestReadRendererWithFallbackUsesLspciWhenGlxinfoMissing(t *testing.T) {
 			return "", &exec.Error{Name: "glxinfo", Err: exec.ErrNotFound}
 		},
 		func() (string, bool) {
-			return readRendererFromLspciOutput(`01:00.0 "VGA compatible controller [0300]" "NVIDIA" "AD103 [GeForce RTX 4090]"`)
+			return readRendererFromLspciOutput(`01:00.0 VGA compatible controller [0300]: NVIDIA Corporation AD103 [GeForce RTX 4090] [10de:2684]`)
 		},
 		func() (GPUCapabilities, error) {
 			t.Fatal("DRM fallback must not run when lspci succeeds")
@@ -159,7 +192,7 @@ func TestReadRendererWithFallbackUsesDRMWhenOnlySysfsAvailable(t *testing.T) {
 		},
 		func() (string, bool) { return "", false },
 		func() (GPUCapabilities, error) {
-			return GPUCapabilities{Vendor: GPUAMD, Renderer: "DRM device card0 (vendor 0x1002, no GL renderer)"}, nil
+			return GPUCapabilities{Vendor: GPUAMD, Renderer: "DRM device card0 (AMD, vendor 0x1002, no GL renderer)"}, nil
 		},
 	)
 	if err != nil {
@@ -167,6 +200,9 @@ func TestReadRendererWithFallbackUsesDRMWhenOnlySysfsAvailable(t *testing.T) {
 	}
 	if !strings.Contains(renderer, "card0") || !strings.Contains(renderer, "0x1002") {
 		t.Fatalf("expected DRM renderer string, got %q", renderer)
+	}
+	if got := ClassifyGPUCapabilities(renderer).Vendor; got != GPUAMD {
+		t.Fatalf("DRM fallback renderer must preserve mapped vendor, got %s (%q)", got, renderer)
 	}
 }
 

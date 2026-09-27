@@ -84,6 +84,8 @@ func TestPatchProtonSettingsWithSampleFile(t *testing.T) {
 	sampleContent := `# Sample settings file
 user_settings = {
     "PROTON_LOG": "1",
+    "PROTON_FSR4_UPGRADE": "0",
+    "PROTON_FSR4_RDNA3_UPGRADE": "0",
 }
 `
 	samplePath := filepath.Join(tmpDir, "user_settings.sample.py")
@@ -92,7 +94,7 @@ user_settings = {
 	}
 
 	// Call PatchProtonSettings
-	err = PatchProtonSettings(samplePath, true, true)
+	err = PatchProtonSettings(samplePath)
 	if err != nil {
 		t.Fatalf("PatchProtonSettings failed: %v", err)
 	}
@@ -122,11 +124,12 @@ user_settings = {
 		"VKD3D_CONFIG",
 		"PROTON_DXVK_D3D8",
 		"PROTON_NVIDIA_LIBS",
-		"PROTON_FSR4_UPGRADE",
-		"PROTON_FSR4_RDNA3_UPGRADE",
 	}
 
 	contentStr := string(content)
+	if strings.Contains(contentStr, "PROTON_FSR4_UPGRADE") || strings.Contains(contentStr, "PROTON_FSR4_RDNA3_UPGRADE") {
+		t.Fatalf("FSR settings must be removed from user_settings.py: %s", contentStr)
+	}
 	for _, setting := range expectedSettings {
 		if !strings.Contains(contentStr, setting) {
 			t.Errorf("Patched file does not contain expected setting: %s", setting)
@@ -155,7 +158,7 @@ user_settings = {
 	}
 
 	// Call PatchProtonSettings
-	err = PatchProtonSettings(existingPath, false, false)
+	err = PatchProtonSettings(existingPath)
 	if err != nil {
 		t.Fatalf("PatchProtonSettings failed: %v", err)
 	}
@@ -174,7 +177,7 @@ user_settings = {
 
 // TestPatchProtonSettingsMissingFile tests error handling when file doesn't exist
 func TestPatchProtonSettingsMissingFile(t *testing.T) {
-	err := PatchProtonSettings("/nonexistent/path/user_settings.py", false, false)
+	err := PatchProtonSettings("/nonexistent/path/user_settings.py")
 	if err == nil {
 		t.Error("Expected error for missing file, got nil")
 	}
@@ -182,7 +185,7 @@ func TestPatchProtonSettingsMissingFile(t *testing.T) {
 
 // TestPatchProtonSettingsEmptyPath tests error handling when path is empty
 func TestPatchProtonSettingsEmptyPath(t *testing.T) {
-	err := PatchProtonSettings("", false, false)
+	err := PatchProtonSettings("")
 	if err == nil {
 		t.Error("Expected error for empty path, got nil")
 	}
