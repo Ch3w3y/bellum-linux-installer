@@ -34,6 +34,10 @@ jobs:
           grep -Eq '^EAC: \[x\] https?://' RELEASE-GATE.md
           grep -Eq '^Security: \[x\] https?://' RELEASE-GATE.md
           grep -Eq '^Provenance: \[x\] https?://' RELEASE-GATE.md
+      - name: Code and vulnerability checks
+        run: |
+          make check
+          go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
       - name: Build and verify release
         env:
           GOARCH: ${{ matrix.arch }}
