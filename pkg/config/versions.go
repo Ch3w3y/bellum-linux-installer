@@ -1,14 +1,5 @@
 package config
 
-// Binaries holds the paths to required binaries
-type Binaries struct {
-	Wine       string
-	Wineboot   string
-	Msidb      string
-	Winecfg    string
-	Wineserver string
-}
-
 // Versions holds all version strings and paths for the installer
 type Versions struct {
 	Workdir                   string
@@ -18,12 +9,10 @@ type Versions struct {
 	EACRuntimeSHA256Allowlist []string
 	LauncherSHA256Allowlist   []string
 	LauncherSigner            string
-	WineVer                   string
 	WinetricksVer             string
 	DXVKVer                   string
 	VKD3DVer                  string
 	DXVKNVAPIVer              string
-	Binaries                  Binaries
 }
 
 // DefaultVersions contains the version configuration
@@ -40,18 +29,12 @@ var DefaultVersions = Versions{
 	// Official Astarte updater download inspected on 2026-09-26.
 	LauncherSHA256Allowlist: []string{"2c2d17b724bee70883eae782d2ff9ead2533d2d339fd4ee1b9326c60bb3f064a"},
 	LauncherSigner:          "ASTARTE INDUSTRIES INC.",
-	WineVer:                 "wine-11.8",
-	WinetricksVer:           "20250102-modified",
+	// winetricks is the copy shipped in the pinned Proton archive's
+	// protonfixes directory; run through `umu-run winetricks`.
+	WinetricksVer: "bundled with pinned Proton (20260125-next)",
 	// The installer uses Proton's integrated components instead of independently
 	// pinned DLL overlays. The Proton archive hash is the reproducible content pin.
 	DXVKVer:      "integrated with pinned Proton",
 	VKD3DVer:     "integrated with pinned Proton",
 	DXVKNVAPIVer: "integrated with pinned Proton",
-	Binaries: Binaries{
-		Wine:       "wine",
-		Wineboot:   "wineboot",
-		Msidb:      "msidb",
-		Winecfg:    "winecfg",
-		Wineserver: "wineserver",
-	},
 }

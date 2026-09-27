@@ -78,7 +78,8 @@ a release blocker.
   `MANIFEST.md` (`commit:` field) with the Go toolchain version recorded
   alongside. Prebuilt binaries are never committed to the repository.
 - **Bundled packages** in `packages/` are pinned versions of upstream
-  artifacts (winetricks-modified and the launcher icon). Their sha256 is
+  artifacts (currently only the launcher icon; winetricks comes from the
+  pinned Proton archive). Their sha256 is
   recorded in the release manifest; provenance/pinning policy and version
   pins live in `pkg/config/versions.go` and `docs/runtime-pins.md`. Proton is
   downloaded with a pinned checksum; DXVK, vkd3d-proton, and dxvk-nvapi come

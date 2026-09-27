@@ -5,7 +5,6 @@ import (
 	"os"
 	"path/filepath"
 
-	cfg "bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
 	"bellum-installer/pkg/launchers"
 	"bellum-installer/pkg/packages"
@@ -51,11 +50,6 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 		boundaries.Files = DefaultBoundaries.Files
 	}
 	logger.Info("Starting Installation")
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	winetricks := filepath.Join(homeDir, ".local", "bin", "winetricks")
 	fmt.Println()
 
 	// Set environment variables
@@ -121,20 +115,19 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 		return fmt.Errorf("mark install as in progress: %w", err)
 	}
 	logFile := filepath.Join(config.Workdir, "logs", "installer.log")
-	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{"umu-run", cfg.DefaultVersions.Binaries.Msidb}, logger, logFile); err != nil {
-		logger.Warn("umu-run /usr/bin/msidb failed")
-		return err
-	}
-
-	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{cfg.DefaultVersions.Binaries.Wineboot, "--init"}, logger, logFile); err != nil {
-		logger.Error("wineboot --init failed")
+	// Every prefix operation goes through umu-run and the pinned Proton, so a
+	// single Wine build owns the prefix. umu-run waits for the Wine server to
+	// exit, so no separate wineserver -k is needed between steps. winetricks
+	// is the copy shipped in Proton's protonfixes, pinned by the archive hash.
+	if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("wineboot", "--init"), logger, logFile); err != nil {
+		logger.Error("Proton prefix initialisation (wineboot --init) failed")
 		return err
 	}
 
 	// Install required winedlls
 	logger.Info("Installing required winedlls")
 	for _, dll := range requiredWinetricksVerbs {
-		if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "-q", dll}, logger, logFile); err != nil {
+		if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("winetricks", "-q", dll), logger, logFile); err != nil {
 			logger.Error(fmt.Sprintf("Failed to install %s", dll))
 			return err
 		}
@@ -144,12 +137,8 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	fmt.Println()
 	logger.Info("Time to install the launcher! Follow the on screen prompts once the GUI pops up.")
 
-	// Kill wine server before running installer
-	boundaries.MutatePrefix(core.RunModeSilent, []string{"wineserver", "-k"}, logger, logFile)
-
-	// Run the launcher installer
-	proton := filepath.Join(config.ProtonPath, "proton")
-	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{proton, "run", launcherInstaller}, logger, logFile); err != nil {
+	// Run the launcher installer the same way the Bellum wrapper runs the game.
+	if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun(launcherInstaller), logger, logFile); err != nil {
 		logger.Error("Launcher installation failed.")
 		return err
 	}
@@ -161,7 +150,7 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	logger.Warn("I'm not done! Don't launch game or close this script just yet")
 
 	// Set Windows 11
-	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "win11"}, logger, logFile); err != nil {
+	if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("winetricks", "-q", "win11"), logger, logFile); err != nil {
 		logger.Warn("winetricks win11 failed (may be expected)")
 	}
 
@@ -173,14 +162,14 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 
 	// Configure WINEPREFIX
 	logger.Info("Configuring WINEPREFIX with things Bellum likes")
-	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "grabfullscreen=y", "windowmanagerdecorated=n", "mwo=disabled"}, logger, logFile); err != nil {
+	if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("winetricks", "-q", "grabfullscreen=y", "windowmanagerdecorated=n", "mwo=disable"), logger, logFile); err != nil {
 		logger.Error("Winetricks configuration failed.")
 		return err
 	}
 
 	// Remove mono for AMD GPUs
 	if config.IsAMDGPU {
-		if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "remove_mono"}, logger, logFile); err != nil {
+		if err := boundaries.MutatePrefix(core.RunModeSilent, umuRun("winetricks", "-q", "remove_mono"), logger, logFile); err != nil {
 			logger.Error("Mono removal failed.")
 			return err
 		}
@@ -192,12 +181,15 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	}
 
 	// Set DLL overrides
-	boundaries.MutatePrefix(core.RunModeSilent, []string{"wine", "reg", "add", `HKCU\Software\Wine\DirectInput`, "/v", "RawInput", "/t", "REG_DWORD", "/d", "1", "/f"}, logger, logFile)
-
-	// End wine session
-	boundaries.MutatePrefix(core.RunModeSilent, []string{"wineboot", "--end-session"}, logger, logFile)
+	boundaries.MutatePrefix(core.RunModeSilent, umuRun("reg", "add", `HKCU\Software\Wine\DirectInput`, "/v", "RawInput", "/t", "REG_DWORD", "/d", "1", "/f"), logger, logFile)
 
 	return nil
+}
+
+// umuRun builds a command that runs inside the prefix through umu-run and the
+// Proton selected by PROTONPATH.
+func umuRun(args ...string) []string {
+	return append([]string{"umu-run"}, args...)
 }
 
 // checkWebView2Runtime rejects a bootstrapper-only installation. The launcher

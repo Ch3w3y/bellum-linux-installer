@@ -8,7 +8,7 @@ import (
 
 // PrintInstallerSummary prints the installer summary after prechecks complete.
 // This mirrors the bash version's print_installer_summary function.
-func PrintInstallerSummary(protonVer, wineVer, winetricksVer, vkd3dVer, dxvkVer,
+func PrintInstallerSummary(protonVer, winetricksVer, vkd3dVer, dxvkVer,
 	wineprefix, launcherInstallerPath, gpuType string, workdir string) {
 
 	// Determine launcher summary
@@ -24,7 +24,6 @@ func PrintInstallerSummary(protonVer, wineVer, winetricksVer, vkd3dVer, dxvkVer,
 
 	// Print version information
 	fmt.Printf("%s   Proton Version%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, protonVer, ColorReset, ColorReset)
-	fmt.Printf("%s     Wine Version%s:   %s%s%s%s (Stable)\n", ColorBoldCyan, ColorReset, ColorBold, wineVer, ColorReset, ColorReset)
 	fmt.Printf("%s   Winetricks Ver%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, winetricksVer, ColorReset, ColorReset)
 	fmt.Printf("%s        VKD3D Ver%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, vkd3dVer, ColorReset, ColorReset)
 	fmt.Printf("%s         DXVK Ver%s:   %s%s%s%s\n\n", ColorBoldCyan, ColorReset, ColorBold, dxvkVer, ColorReset, ColorReset)
@@ -36,6 +35,9 @@ func PrintInstallerSummary(protonVer, wineVer, winetricksVer, vkd3dVer, dxvkVer,
 
 	// Print note
 	fmt.Printf("%sNOTE:%s The game will be installed into the specified WINEPREFIX path.\n", ColorBoldYellow, ColorReset)
+	fmt.Println("Nothing has been downloaded or changed yet. After you confirm, the installer")
+	fmt.Println("downloads Proton (several hundred MB, only if not already present) and the")
+	fmt.Println("Astarte Launcher, then builds the prefix.")
 }
 
 // ConfirmProceed prompts the user to confirm they want to continue with the installation.

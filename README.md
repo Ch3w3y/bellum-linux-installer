@@ -21,7 +21,7 @@ foundational installer and continues to own the original project. See
 | **Easy Anti-Cheat on Linux** | ✅ Astarte has enabled Proton/Linux EAC support for Bellum. |
 | **Latest published release** | ⚠️ [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1) (2026-05-13) **predates** the September hardening on `main`: pinned and verified downloads, the EAC-safe launcher, and ownership-checked uninstall. A new release is pending; until then, [build from `main`](#install-today-build-from-main). |
 | **One-command install** | 🚧 Planned. See [#6](https://github.com/Ch3w3y/bellum-linux-installer/issues/6). Not available yet. |
-| **Known blockers** | [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8), [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9), [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10). Workarounds are under [Known issues](#known-issues-and-workarounds). |
+| **Known blockers** | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9), [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10). Workarounds are under [Known issues](#known-issues-and-workarounds). |
 
 ## Where we're going
 
@@ -90,54 +90,45 @@ export PROTON_EAC_RUNTIME="$HOME/.var/app/com.valvesoftware.Steam/.local/share/S
 
 ### 2. Install host packages
 
-The installer checks for these tools before it starts and prints the install
-command for your distro, but it never runs your package manager for you.
+The installer checks for all of these before it changes anything, lists
+everything that's missing at once, and prints the install command for your
+distro. It never runs your package manager for you.
 
 | Tool | Why | Required? |
 | --- | --- | --- |
-| `wine` | Prefix bootstrap commands | Yes. The installer currently requires **exactly Wine 11.8**, see below |
-| `umu-run` (umu-launcher) | Runs the launcher and game inside Proton's runtime container | Yes |
+| `umu-run` (umu-launcher) | Runs every prefix step, the launcher and the game inside Proton's runtime container | Yes |
 | `osslsigncode` | Verifies the Astarte Launcher's signature | Yes |
 | `wget` | Downloads Proton and the launcher | Yes |
 | `glxinfo` | Better GPU detection (falls back to `lspci` or sysfs without it) | Recommended |
 | `zenity` or `kdialog` | Graphical folder picker (falls back to a terminal prompt) | Optional |
-| `winetricks` | Not needed: a pinned copy is bundled and installed to `~/.local/bin` | No |
+| `wine`, `winetricks` | Not needed. Everything runs on the pinned Proton, including the winetricks it bundles | No |
 
 | Distro family | Command |
 | --- | --- |
-| Arch / CachyOS / EndeavourOS / Manjaro | `sudo pacman -S wine umu-launcher wget mesa-utils zenity` (`umu-launcher` is in `[multilib]`, which must be enabled), plus `osslsigncode` from the AUR (e.g. `yay -S osslsigncode`) |
-| Fedora | `sudo dnf install wine osslsigncode wget glx-utils zenity`, and `umu-launcher` from its [GitHub releases](https://github.com/Open-Wine-Components/umu-launcher/releases) or your spin's repo (Bazzite and Nobara ship it) |
-| Debian / Ubuntu / Mint / Pop!_OS | `sudo apt install wine osslsigncode wget mesa-utils zenity`, and `umu-launcher` from the `.deb` on its [GitHub releases](https://github.com/Open-Wine-Components/umu-launcher/releases) (not in the distro repos) |
-| openSUSE Tumbleweed | `sudo zypper install wine osslsigncode wget Mesa-demo-x zenity`, and `umu-launcher` from the OBS [`games`](https://build.opensuse.org/package/show/games/umu-launcher) repo |
+| Arch / CachyOS / EndeavourOS / Manjaro | `sudo pacman -S umu-launcher wget mesa-utils zenity` (`umu-launcher` is in `[multilib]`, which must be enabled), plus `osslsigncode` from the AUR (e.g. `yay -S osslsigncode`) |
+| Fedora | `sudo dnf install osslsigncode wget glx-utils zenity`, and `umu-launcher` from its [GitHub releases](https://github.com/Open-Wine-Components/umu-launcher/releases) or your spin's repo (Bazzite and Nobara ship it) |
+| Debian / Ubuntu / Mint / Pop!_OS | `sudo apt install osslsigncode wget mesa-utils zenity`, and `umu-launcher` from the `.deb` on its [GitHub releases](https://github.com/Open-Wine-Components/umu-launcher/releases) (not in the distro repos) |
+| openSUSE Tumbleweed | `sudo zypper install osslsigncode wget Mesa-demo-x zenity`, and `umu-launcher` from the OBS [`games`](https://build.opensuse.org/package/show/games/umu-launcher) repo |
 | SteamOS / Bazzite (immutable) | Install only through the host's supported method (distrobox/toolbox or the system's layering tool). The installer will not modify an immutable host. |
 
-> ⚠️ **Wine version.** The installer refuses to run unless `wine --version`
-> reports exactly `wine-11.8`, a development release from May 2026 that most
-> distros won't ship. You can bypass the check with `--force-wine-version`. The
-> game itself runs on the pinned Proton, not system Wine. Removing this
-> requirement is tracked in
-> [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8).
+You also need the **Proton EasyAntiCheat Runtime** from Steam (free, no game
+purchase needed): run `steam steam://install/1826330`.
 
 ## Install today (build from `main`)
 
 Until a new release is published, build the current code. You need
-[Go 1.24+](https://go.dev/dl/), `git` and `make`.
+[Go 1.26+](https://go.dev/dl/), `git` and `make`.
 
 ```bash
 git clone https://github.com/Ch3w3y/bellum-linux-installer.git
 cd bellum-linux-installer
 make release
-cd dist/bellum-installer-linux-amd64-2.0.1   # run the installer from INSIDE this folder
-./installer
+./dist/bellum-installer-linux-amd64-2.0.1/installer   # can be run from any folder
 ```
-
-> Run `./installer` from inside the extracted folder. Some bundled files are
-> currently looked up relative to your terminal's working directory
-> ([#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8)).
 
 Once a new release is out, you'll be able to download the tarball from
 [Releases](https://github.com/Ch3w3y/bellum-linux-installer/releases/latest),
-extract it with `tar -xzf`, `cd` into it, and run `./installer` the same way.
+extract it with `tar -xzf`, and run the `installer` inside it.
 Check that you're on **this** repository's Releases page; the original
 `joepaji/bellum-linux-installer` publishes separate, older builds.
 
@@ -146,11 +137,14 @@ Check that you're on **this** repository's Releases page; the original
 1. **Choose where to install.** A folder picker opens. Pick the **parent**
    folder: the installer creates a `Bellum` folder inside it (picking `~/Games`
    gives `~/Games/Bellum`).
-2. **Prechecks.** The installer detects your GPU, checks tools, downloads and
-   verifies Proton (a download of several hundred MB, one time only), and verifies the EAC runtime.
+2. **Prechecks.** The installer detects your GPU and checks tools, the EAC
+   runtime and free disk space. Nothing is downloaded or changed yet, and every
+   problem is reported together.
 3. **Confirm the summary.**
-4. **Prefix setup.** It creates the prefix and installs runtime components
-   (Visual C++, .NET 9 and others). This takes a while.
+4. **Downloads and prefix setup.** It downloads and verifies Proton (several
+   hundred MB, one time only), creates the prefix and installs runtime
+   components (Visual C++, .NET 9 and others) through Proton. This takes a
+   while.
 5. **The Astarte Launcher installer appears.** Follow its prompts. Don't close
    the terminal.
 6. **Finishing steps.** The installer writes the launcher wrapper, desktop
@@ -238,7 +232,6 @@ validated by this project.
 
 | Problem | Workaround | Tracking |
 | --- | --- | --- |
-| *Wine version mismatch* | Use `--force-wine-version` | [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8) |
 | *EAC runtime digest mismatch* after a Steam update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
 | *SHA-256 mismatch* for the launcher installer after an Astarte update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
 | Install fails at the very end with *unsupported GPU type* (VMs, unrecognised GPUs) | Not supported yet | [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10) |
@@ -260,11 +253,12 @@ The prefix holds your launcher login, certificates and WebView2 cookies. Back it
 up first if you need anything in it.
 
 The uninstaller removes the prefix, plus the `Bellum` command, desktop
-shortcuts and icon when they point at that prefix. Shared Proton and
-winetricks are kept, because other installs may use them. To remove those too:
+shortcuts and icon when they point at that prefix. Shared Proton is kept,
+because other installs may use it. To remove it too:
 
 ```bash
 rm -rf ~/.local/share/bellum/proton     # shared Proton; only if no other Bellum install uses it
+# Installs made before winetricks moved into Proton also left a copy here:
 rm -f ~/.local/bin/winetricks           # only if you don't use winetricks elsewhere
 ```
 

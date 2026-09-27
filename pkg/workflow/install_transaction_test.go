@@ -1,10 +1,7 @@
 package workflow
 
 import (
-	"archive/tar"
-	"compress/gzip"
 	"errors"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -40,10 +37,10 @@ func TestInstallFailureRollsBackAndRetrySucceeds(t *testing.T) {
 	logger, _ := core.NewLogger("")
 	fail := true
 	mutate := func(_ core.RunMode, args []string, _ *core.Logger, _ string) error {
-		if len(args) > 1 && args[1] == "-q" && fail {
+		if len(args) > 2 && args[1] == "winetricks" && args[2] == "-q" && fail {
 			return errors.New("forced first attempt failure")
 		}
-		if len(args) > 1 && args[1] == "run" {
+		if len(args) == 2 && args[1] == "installer.exe" {
 			runtime := filepath.Join(prefix, "drive_c", "Program Files (x86)", "Microsoft", "EdgeWebView", "Application", "1.0", "msedgewebview2.exe")
 			if err := os.MkdirAll(filepath.Dir(runtime), 0700); err != nil {
 				return err
@@ -122,42 +119,22 @@ func TestLauncherGenerationFailureRestoresPriorAssets(t *testing.T) {
 	}
 }
 
-func TestRequestedWinetricksVerbsExistInPinnedArchive(t *testing.T) {
-	f, err := os.Open(filepath.Join("..", "..", "packages", "winetricks-20250102-modified.tar.gz"))
+// TestRequestedWinetricksVerbsExistInProton checks the verbs against the
+// winetricks bundled in an extracted Proton tree. It runs when
+// BELLUM_PROTON_DIR points at one; run it whenever the Proton pin changes.
+// Verified for proton-cachyos-11.0-20260703-slr (winetricks 20260125-next).
+func TestRequestedWinetricksVerbsExistInProton(t *testing.T) {
+	dir := os.Getenv("BELLUM_PROTON_DIR")
+	if dir == "" {
+		t.Skip("set BELLUM_PROTON_DIR to an extracted Proton tree to check winetricks verbs")
+	}
+	script, err := os.ReadFile(filepath.Join(dir, "protonfixes", "winetricks"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer f.Close()
-	gz, err := gzip.NewReader(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer gz.Close()
-	tr := tar.NewReader(gz)
-	var script strings.Builder
-	for {
-		hdr, err := tr.Next()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			t.Fatal(err)
-		}
-		if hdr.Name == "src/winetricks" {
-			b, err := io.ReadAll(tr)
-			if err != nil {
-				t.Fatal(err)
-			}
-			script.Write(b)
-			break
-		}
-	}
-	if script.Len() == 0 {
-		t.Fatal("pinned archive lacks src/winetricks")
-	}
-	for _, verb := range requiredWinetricksVerbs {
-		if !strings.Contains(script.String(), "w_metadata "+verb+" ") {
-			t.Errorf("requested verb %q is not declared in pinned winetricks", verb)
+	for _, verb := range append(append([]string{}, requiredWinetricksVerbs...), "win11", "remove_mono", "grabfullscreen=y", "windowmanagerdecorated=n", "mwo=disable") {
+		if !strings.Contains(string(script), "w_metadata "+verb+" ") {
+			t.Errorf("requested verb %q is not declared in Proton's winetricks", verb)
 		}
 	}
 }
@@ -274,7 +251,7 @@ func TestInterruptedInstallIsReplacedOnRetry(t *testing.T) {
 	}
 	logger, _ := core.NewLogger("")
 	mutate := func(_ core.RunMode, args []string, _ *core.Logger, _ string) error {
-		if len(args) > 1 && args[1] == "run" {
+		if len(args) == 2 && args[1] == "installer.exe" {
 			runtime := filepath.Join(prefix, "drive_c", "Program Files", "Microsoft", "EdgeWebView", "Application", "1.0", "msedgewebview2.exe")
 			if err := os.MkdirAll(filepath.Dir(runtime), 0700); err != nil {
 				return err

@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	cfg "bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
 )
 
@@ -79,7 +78,6 @@ func UpdateDLLs(logger *core.Logger) error {
 func updateDLLsWith(mutate func(core.RunMode, []string, *core.Logger, string) error, logger *core.Logger) error {
 	logger.Info("Setting DLL overrides")
 
-	wine := cfg.DefaultVersions.Binaries.Wine
 	logFile := ""
 
 	// System-wide overrides
@@ -92,7 +90,7 @@ func updateDLLsWith(mutate func(core.RunMode, []string, *core.Logger, string) er
 	}
 
 	for _, dll := range systemDLLs {
-		if err := mutate(core.RunModeSilent, []string{wine, "reg", "add", `HKEY_CURRENT_USER\Software\Wine\DllOverrides`, "/v", dll, "/d", "native,builtin", "/f"}, logger, logFile); err != nil {
+		if err := mutate(core.RunModeSilent, umuRun("reg", "add", `HKEY_CURRENT_USER\Software\Wine\DllOverrides`, "/v", dll, "/d", "native,builtin", "/f"), logger, logFile); err != nil {
 			logger.Error(fmt.Sprintf("Failed to set override for %s", dll))
 			return err
 		}
@@ -103,13 +101,13 @@ func updateDLLsWith(mutate func(core.RunMode, []string, *core.Logger, string) er
 
 	for _, dll := range appDLLs {
 		// Launcher overrides
-		if err := mutate(core.RunModeSilent, []string{wine, "reg", "add", `HKCU\Software\Wine\AppDefaults\AstarteLauncher.exe\DllOverrides`, "/v", dll, "/d", "builtin", "/f"}, logger, logFile); err != nil {
+		if err := mutate(core.RunModeSilent, umuRun("reg", "add", `HKCU\Software\Wine\AppDefaults\AstarteLauncher.exe\DllOverrides`, "/v", dll, "/d", "builtin", "/f"), logger, logFile); err != nil {
 			logger.Error(fmt.Sprintf("Failed to set override for %s (launcher)", dll))
 			return err
 		}
 
 		// Game overrides
-		if err := mutate(core.RunModeSilent, []string{wine, "reg", "add", `HKCU\Software\Wine\AppDefaults\Bellum-Win64-Shipping.exe\DllOverrides`, "/v", dll, "/d", "native", "/f"}, logger, logFile); err != nil {
+		if err := mutate(core.RunModeSilent, umuRun("reg", "add", `HKCU\Software\Wine\AppDefaults\Bellum-Win64-Shipping.exe\DllOverrides`, "/v", dll, "/d", "native", "/f"), logger, logFile); err != nil {
 			logger.Error(fmt.Sprintf("Failed to set override for %s (game)", dll))
 			return err
 		}
