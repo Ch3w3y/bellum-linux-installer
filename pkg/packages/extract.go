@@ -284,7 +284,7 @@ func extractXZ(archivePath, destDir string, stripComponents bool) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, header.FileInfo().Mode()); err != nil {
+			if err := os.MkdirAll(target, (header.FileInfo().Mode() & 0o777)); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 
@@ -293,7 +293,7 @@ func extractXZ(archivePath, destDir string, stripComponents bool) error {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 
-			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, header.FileInfo().Mode())
+			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, (header.FileInfo().Mode() & 0o777))
 			if err != nil {
 				return fmt.Errorf("failed to create file: %w", err)
 			}
@@ -386,6 +386,18 @@ func sanitizePath(destDir, entryName string) (string, error) {
 		return "", fmt.Errorf("entry name is an absolute path: %s", entryName)
 	}
 
+	root, err := os.OpenRoot(destDir)
+	if err != nil {
+		return "", fmt.Errorf("open extraction root: %w", err)
+	}
+	defer root.Close()
+	if cleanName != "." {
+		// Lstat through Root rejects an already present symlinked parent that
+		// escapes the extraction tree, while allowing not-yet-created entries.
+		if _, err := root.Lstat(cleanName); err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("entry escapes or cannot be inspected beneath extraction root: %w", err)
+		}
+	}
 	return filepath.Join(destDir, cleanName), nil
 }
 
@@ -394,13 +406,13 @@ func extractTarEntry(tr io.Reader, header *tar.Header, target, destDir string) e
 	switch header.Typeflag {
 	case tar.TypeDir:
 		// Preserve original directory permissions
-		if err := os.MkdirAll(target, header.FileInfo().Mode()); err != nil {
+		if err := os.MkdirAll(target, (header.FileInfo().Mode() & 0o777)); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 
 	case tar.TypeReg:
 		// Create the file with original permissions
-		outFile, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, header.FileInfo().Mode())
+		outFile, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, (header.FileInfo().Mode() & 0o777))
 		if err != nil {
 			return fmt.Errorf("failed to create file: %w", err)
 		}
@@ -455,7 +467,7 @@ func extractTarEntryFromData(data []byte, header *tar.Header, target, destDir st
 	switch header.Typeflag {
 	case tar.TypeDir:
 		// Preserve original directory permissions
-		if err := os.MkdirAll(target, header.FileInfo().Mode()); err != nil {
+		if err := os.MkdirAll(target, (header.FileInfo().Mode() & 0o777)); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 
@@ -464,7 +476,7 @@ func extractTarEntryFromData(data []byte, header *tar.Header, target, destDir st
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 			return fmt.Errorf("failed to create parent directory: %w", err)
 		}
-		if err := os.WriteFile(target, data, header.FileInfo().Mode()); err != nil {
+		if err := os.WriteFile(target, data, (header.FileInfo().Mode() & 0o777)); err != nil {
 			return fmt.Errorf("failed to write file: %w", err)
 		}
 

@@ -1,23 +1,14 @@
 # Runtime pins and provenance
 
-Snapshot reviewed 2026-09-26. The installer downloads the CachyOS Proton SLR
-runtime and verifies its SHA-256 before extraction. DXVK, vkd3d-proton, and
-dxvk-nvapi are supplied by that Proton runtime; Bellum does not install
-separate copies into the prefix. The component versions below are upstream
-comparison pins from the TES-3 research, not independently downloaded
-artifacts or claims that Bellum has been integration-tested against them.
+The installer downloads CachyOS Proton SLR and checks the complete archive against the SHA-256 pin in `pkg/config/versions.go` before extraction. Proton installs into a sibling staging directory, receives the Bellum settings patch, and is atomically renamed into place. A content stamp detects partial or modified trees before reuse. The old cwd-relative `./packages/proton-*` cache is not used. Installer and uninstaller refuse uid 0.
 
-| Component | Pin / handling | Provenance and license |
-| --- | --- | --- |
-| CachyOS Proton SLR | `proton-cachyos-11.0-20260703-slr-x86_64`; SHA-256 `62ff4b2750180723cc00538608fe687e21d1d91a31ef64ce1a7c9f46c3db310b` | [CachyOS release](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260703-slr); upstream Proton/CachyOS source and license notices are in the release. The archive is verified before extraction. |
-| DXVK | Integrated with the pinned Proton runtime; upstream comparison target `3.1.1` | [Upstream release](https://github.com/doitsujin/dxvk/releases/tag/v3.1.1); zlib license. The integrated component's exact version is not independently claimed or overlaid. |
-| vkd3d-proton | Integrated with the pinned Proton runtime; upstream comparison target `3.0.1` | [Upstream release](https://github.com/HansKristian-Work/vkd3d-proton/releases/tag/v3.0.1); LGPL-2.1-or-later. The integrated component's exact version is not independently claimed or overlaid. |
-| dxvk-nvapi | Integrated with the pinned Proton runtime; upstream comparison target `0.9.2` | [Upstream release](https://github.com/jp7677/dxvk-nvapi/releases/tag/v0.9.2); MIT license. The release identifies its source and CI digest. The integrated component's exact version is not independently claimed or overlaid. |
-| AstarteLauncher installer | Official updater URL; SHA-256 `2c2d17b724bee70883eae782d2ff9ead2533d2d339fd4ee1b9326c60bb3f064a`; Authenticode signer `ASTARTE INDUSTRIES INC.` | Downloaded from the official Astarte release endpoint; SHA-256, signer name, and signature verification are required before use. |
+| Runtime | Pin and source |
+| --- | --- |
+| CachyOS Proton SLR | `proton-cachyos-11.0-20260703-slr-x86_64`, SHA-256 `62ff4b2750180723cc00538608fe687e21d1d91a31ef64ce1a7c9f46c3db310b`; [CachyOS release](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260703-slr). |
+| Proton EasyAntiCheat Runtime | Steam app 1826330 / depot 1826331, manifest 3310269496439035229; approved combined file digests are an allowlist in `pkg/config/versions.go`. Users install it through Steam; Bellum does not redistribute depot files. |
+| Astarte Launcher | SHA-256 allowlist and exact leaf signer CN are required in `pkg/config/versions.go`; signature verification requires `osslsigncode`. |
+| winetricks | Upstream tag `20250102` from [Winetricks/winetricks](https://github.com/Winetricks/winetricks/tree/20250102); the vendored archive is separately pinned in `pkg/packages/versions.go`. Upstream `COPYING` is shipped at the repository root. |
 
-The SHA-256 pins are content pins for the exact downloaded files. A missing or
-mismatched pin fails closed. The vendored legacy DXVK archive has been removed
-from the release payload; its old installer helper is not part of the runtime
-setup path. Runtime
-availability does not establish Bellum EAC compatibility; the game-directory
-integrity boundary remains enforced separately.
+The bundled winetricks Makefile was compared with upstream tag `20250102`. Its only changes are: add `uninstall` to the `all` target's help text and add an `uninstall` target that removes the installed executable, man page, desktop entry, metainfo, icon, and bash completion. The version label `20250102-modified` records that delta. To update: fetch a tagged upstream source archive, review its license and Makefile, apply only reviewed local changes, update the archive SHA-256 and version together, then run the package integrity and installer regression checks.
+
+DXVK, vkd3d-proton, and dxvk-nvapi are supplied by the pinned Proton archive; Bellum does not overlay separate versions. The archive hash is the reproducible content pin.

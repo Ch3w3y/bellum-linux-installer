@@ -23,4 +23,11 @@ func TestVerifySHA256FailsClosed(t *testing.T) {
 	if err := VerifySHA256(path, hex.EncodeToString(hash[:])); err != nil {
 		t.Fatal(err)
 	}
+	// A file substituted after the digest is approved must be rejected at use.
+	if err := os.WriteFile(path, []byte("substituted"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := VerifySHA256(path, hex.EncodeToString(hash[:])); err == nil {
+		t.Fatal("substituted artifact accepted")
+	}
 }
