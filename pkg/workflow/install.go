@@ -11,6 +11,8 @@ import (
 	"bellum-installer/pkg/packages"
 )
 
+var requiredWinetricksVerbs = []string{"vcrun2022", "d3dcompiler_43", "d3dcompiler_47", "faudio", "msls31", "dotnet9", "dotnetdesktop9", "mfc140"}
+
 // InstallConfig holds configuration for installation
 type InstallConfig struct {
 	WINEPREFIX        string
@@ -114,18 +116,7 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 
 	// Install required winedlls
 	logger.Info("Installing required winedlls")
-	dlls := []string{
-		"vcrun2026",
-		"d3dcompiler_43",
-		"d3dcompiler_47",
-		"faudio",
-		"msls31",
-		"dotnet9",
-		"dotnetdesktop9",
-		"mfc140",
-	}
-
-	for _, dll := range dlls {
+	for _, dll := range requiredWinetricksVerbs {
 		if err := boundaries.MutatePrefix(core.RunModeSilent, []string{winetricks, "-q", dll}, logger, logFile); err != nil {
 			logger.Error(fmt.Sprintf("Failed to install %s", dll))
 			return err
@@ -216,15 +207,10 @@ func GenerateLauncher(config InstallConfig, logger *core.Logger) error {
 }
 
 func generateLauncherWith(config InstallConfig, logger *core.Logger, generate func(launchers.LauncherConfig) error) error {
-	// Copy icon to system location
 	iconPath := filepath.Join(config.Workdir, "packages", "launcher_1_256x256x32.png")
 	if err := packages.VerifySHA256(iconPath, packages.IconSHA256); err != nil {
 		return err
 	}
-	if err := launchers.CopyIcon(iconPath); err != nil {
-		logger.Warn(fmt.Sprintf("Failed to copy icon: %v", err))
-	}
-
 	// Generate launcher config
 	launcherConfig := launchers.LauncherConfig{
 		Wineprefix: config.WINEPREFIX,
@@ -233,7 +219,14 @@ func generateLauncherWith(config InstallConfig, logger *core.Logger, generate fu
 		IconPath:   iconPath,
 	}
 
+	assets, err := snapshotLauncherAssets()
+	if err != nil {
+		return err
+	}
 	if err := generate(launcherConfig); err != nil {
+		if restoreErr := assets.restore(); restoreErr != nil {
+			return fmt.Errorf("%w (also failed to restore previous launcher assets: %v)", err, restoreErr)
+		}
 		logger.Error(fmt.Sprintf("Failed to generate launcher: %v", err))
 		return err
 	}
@@ -241,4 +234,67 @@ func generateLauncherWith(config InstallConfig, logger *core.Logger, generate fu
 	logger.Info("[OK] Game launcher installed in ~/.local/bin/Bellum")
 
 	return nil
+}
+
+type launcherAsset struct {
+	path   string
+	data   []byte
+	mode   os.FileMode
+	exists bool
+}
+
+type launcherAssets []launcherAsset
+
+func snapshotLauncherAssets() (launcherAssets, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, err
+	}
+	paths := []string{
+		filepath.Join(home, ".local", "bin", "Bellum"),
+		filepath.Join(home, ".local", "share", "applications", "Bellum.desktop"),
+		filepath.Join(home, "Desktop", "Bellum.desktop"),
+		filepath.Join(home, ".local", "share", "icons", "hicolor", "256x256", "apps", "bellum.png"),
+	}
+	assets := make([]launcherAsset, 0, len(paths))
+	for _, path := range paths {
+		info, statErr := os.Lstat(path)
+		if os.IsNotExist(statErr) {
+			assets = append(assets, launcherAsset{path: path})
+			continue
+		}
+		if statErr != nil {
+			return nil, statErr
+		}
+		if !info.Mode().IsRegular() {
+			return nil, fmt.Errorf("launcher asset is not a regular file: %s", path)
+		}
+		data, readErr := os.ReadFile(path)
+		if readErr != nil {
+			return nil, readErr
+		}
+		assets = append(assets, launcherAsset{path: path, data: data, mode: info.Mode().Perm(), exists: true})
+	}
+	return assets, nil
+}
+
+func (assets launcherAssets) restore() error {
+	var first error
+	for _, asset := range assets {
+		var err error
+		if asset.exists {
+			if err = os.MkdirAll(filepath.Dir(asset.path), 0755); err == nil {
+				err = os.WriteFile(asset.path, asset.data, asset.mode)
+			}
+		} else {
+			err = os.Remove(asset.path)
+			if os.IsNotExist(err) {
+				err = nil
+			}
+		}
+		if err != nil && first == nil {
+			first = err
+		}
+	}
+	return first
 }

@@ -107,13 +107,9 @@ func validateTarArchive(archivePath, destDir string, strip bool) error {
 		if err != nil {
 			return err
 		}
-		name := h.Name
-		if strip {
-			parts := strings.SplitN(name, "/", 2)
-			if len(parts) < 2 {
-				continue
-			}
-			name = parts[1]
+		name, skip := archiveEntryName(h.Name, strip)
+		if skip {
+			continue
 		}
 		target, err := sanitizePath(destDir, name)
 		if err != nil {
@@ -122,6 +118,9 @@ func validateTarArchive(archivePath, destDir string, strip bool) error {
 		if h.Typeflag == tar.TypeSymlink {
 			if filepath.IsAbs(h.Linkname) {
 				return fmt.Errorf("absolute symlink target %q", h.Linkname)
+			}
+			if hasParentSegment(h.Linkname) {
+				return fmt.Errorf("symlink target contains parent traversal: %q", h.Linkname)
 			}
 			if _, err := sanitizePath(destDir, filepath.Join(filepath.Dir(name), h.Linkname)); err != nil {
 				return fmt.Errorf("unsafe symlink %q -> %q: %w", name, h.Linkname, err)
@@ -174,17 +173,14 @@ func extractGZ(archivePath, destDir string, stripComponents bool) error {
 			return fmt.Errorf("failed to read tar entry: %w", err)
 		}
 
-		// Apply strip components if requested
-		entryName := header.Name
-		if stripComponents && strings.Contains(entryName, string(filepath.Separator)) {
-			parts := strings.Split(entryName, string(filepath.Separator))
-			if len(parts) > 1 {
-				// Strip the first component (archive root directory)
-				entryName = strings.Join(parts[1:], string(filepath.Separator))
-			}
+		entryName, skip := archiveEntryName(header.Name, stripComponents)
+		if skip {
+			continue
 		}
-
-		target := filepath.Join(destDir, entryName)
+		target, err := sanitizePath(destDir, entryName)
+		if err != nil {
+			return fmt.Errorf("invalid path in archive: %w", err)
+		}
 
 		// Read the entire entry data into memory
 		entryData, err := io.ReadAll(tr)
@@ -284,7 +280,7 @@ func extractXZ(archivePath, destDir string, stripComponents bool) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(target, header.FileInfo().Mode()); err != nil {
+			if err := os.MkdirAll(target, (header.FileInfo().Mode() & 0o777)); err != nil {
 				return fmt.Errorf("failed to create directory: %w", err)
 			}
 
@@ -293,7 +289,7 @@ func extractXZ(archivePath, destDir string, stripComponents bool) error {
 				return fmt.Errorf("failed to create parent directory: %w", err)
 			}
 
-			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, header.FileInfo().Mode())
+			outFile, err := os.OpenFile(target, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, (header.FileInfo().Mode() & 0o777))
 			if err != nil {
 				return fmt.Errorf("failed to create file: %w", err)
 			}
@@ -386,7 +382,39 @@ func sanitizePath(destDir, entryName string) (string, error) {
 		return "", fmt.Errorf("entry name is an absolute path: %s", entryName)
 	}
 
+	root, err := os.OpenRoot(destDir)
+	if err != nil {
+		return "", fmt.Errorf("open extraction root: %w", err)
+	}
+	defer root.Close()
+	if cleanName != "." {
+		// Lstat through Root rejects an already present symlinked parent that
+		// escapes the extraction tree, while allowing not-yet-created entries.
+		if _, err := root.Lstat(cleanName); err != nil && !os.IsNotExist(err) {
+			return "", fmt.Errorf("entry escapes or cannot be inspected beneath extraction root: %w", err)
+		}
+	}
 	return filepath.Join(destDir, cleanName), nil
+}
+
+func archiveEntryName(name string, strip bool) (string, bool) {
+	if !strip {
+		return name, false
+	}
+	parts := strings.SplitN(name, "/", 2)
+	if len(parts) < 2 {
+		return "", true
+	}
+	return parts[1], false
+}
+
+func hasParentSegment(name string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(name), "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
 }
 
 // extractTarEntry extracts a single tar entry with proper permissions
@@ -394,13 +422,13 @@ func extractTarEntry(tr io.Reader, header *tar.Header, target, destDir string) e
 	switch header.Typeflag {
 	case tar.TypeDir:
 		// Preserve original directory permissions
-		if err := os.MkdirAll(target, header.FileInfo().Mode()); err != nil {
+		if err := os.MkdirAll(target, (header.FileInfo().Mode() & 0o777)); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 
 	case tar.TypeReg:
 		// Create the file with original permissions
-		outFile, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, header.FileInfo().Mode())
+		outFile, err := os.OpenFile(target, os.O_CREATE|os.O_RDWR|os.O_TRUNC, (header.FileInfo().Mode() & 0o777))
 		if err != nil {
 			return fmt.Errorf("failed to create file: %w", err)
 		}
@@ -455,7 +483,7 @@ func extractTarEntryFromData(data []byte, header *tar.Header, target, destDir st
 	switch header.Typeflag {
 	case tar.TypeDir:
 		// Preserve original directory permissions
-		if err := os.MkdirAll(target, header.FileInfo().Mode()); err != nil {
+		if err := os.MkdirAll(target, (header.FileInfo().Mode() & 0o777)); err != nil {
 			return fmt.Errorf("failed to create directory: %w", err)
 		}
 
@@ -464,7 +492,7 @@ func extractTarEntryFromData(data []byte, header *tar.Header, target, destDir st
 		if err := os.MkdirAll(filepath.Dir(target), 0755); err != nil {
 			return fmt.Errorf("failed to create parent directory: %w", err)
 		}
-		if err := os.WriteFile(target, data, header.FileInfo().Mode()); err != nil {
+		if err := os.WriteFile(target, data, (header.FileInfo().Mode() & 0o777)); err != nil {
 			return fmt.Errorf("failed to write file: %w", err)
 		}
 
@@ -552,17 +580,14 @@ func extractTar(archivePath, destDir string, stripComponents bool) error {
 			return fmt.Errorf("failed to read tar entry: %w", err)
 		}
 
-		// Apply strip components if requested
-		entryName := header.Name
-		if stripComponents && strings.Contains(entryName, string(filepath.Separator)) {
-			parts := strings.Split(entryName, string(filepath.Separator))
-			if len(parts) > 1 {
-				// Strip the first component (archive root directory)
-				entryName = strings.Join(parts[1:], string(filepath.Separator))
-			}
+		entryName, skip := archiveEntryName(header.Name, stripComponents)
+		if skip {
+			continue
 		}
-
-		target := filepath.Join(destDir, entryName)
+		target, err := sanitizePath(destDir, entryName)
+		if err != nil {
+			return fmt.Errorf("invalid path in archive: %w", err)
+		}
 
 		// Read the entire entry data into memory
 		entryData, err := io.ReadAll(tr)

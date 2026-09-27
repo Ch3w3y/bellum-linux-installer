@@ -83,6 +83,17 @@ func TestUMURunPrecheckUsesInjectedHost(t *testing.T) {
 	}
 }
 
+func TestLauncherPrecheckRequiresOsslsigncodeForDownloadPath(t *testing.T) {
+	logger, err := core.NewLogger("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = checkLauncherInstaller("", logger, fakeFileStore{}, namedCommands{available: map[string]string{"wget": "/usr/bin/wget"}})
+	if err == nil || !strings.Contains(err.Error(), "osslsigncode") {
+		t.Fatalf("expected missing osslsigncode precheck error, got %v", err)
+	}
+}
+
 func TestSSDPrecheckUsesInjectedCommandOutput(t *testing.T) {
 	logger, err := core.NewLogger("")
 	if err != nil {

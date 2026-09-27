@@ -93,11 +93,12 @@ The installer writes `.bellum-manifest.json` inside each new prefix to identify
 the Bellum-owned instance. Uninstall verifies that manifest, shows the resolved
 prefix, and requires an explicit `y` before deleting that prefix; Enter defaults
 to cancel. Run `./uninstaller --wineprefix /path/to/Bellum --dry-run` to inspect
-the target without changing files. Uninstall retains shared Proton and
-user-wide launcher files, which may be used by other Bellum instances. Back up
+the target without changing files. Uninstall retains shared Proton and removes
+launcher assets only when they point at the selected prefix. Back up
 the entire prefix first if it contains saves, credentials, or other data you
 want to keep. If installation fails after creating a new prefix, the installer
-removes that newly created prefix; it leaves pre-existing directories intact.
+removes that newly created prefix. The GUI does not create the prefix before
+installation begins.
 
 ## Release Tarball Structure
 
@@ -143,4 +144,5 @@ If Bellum fails to load shaders or renders a black screen on a 5000 series GPU w
 - The launcher uses umu-launcher with the Proton EasyAntiCheat Runtime (see [EAC QA](docs/eac-qa.md)).
 - The installer and uninstaller are Go binaries; packages are bundled in the release tarball, not embedded.
 - All install logging is written to `logs/installer.log`; the uninstaller writes `uninstaller.log`.
-- The uninstaller removes the Bellum-owned prefix after confirmation and retains shared Proton and user-wide launcher files.
+- The installer rolls back a newly created prefix on failure and preserves prior launcher assets until prefix configuration succeeds.
+- The uninstaller removes the Bellum-owned prefix after confirmation, retains shared Proton, and removes only launcher assets that point at that prefix. Repeating uninstall is safe.
