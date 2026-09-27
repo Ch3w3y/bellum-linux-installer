@@ -147,3 +147,61 @@ func TestWrapperChainsGameModeAndGamescope(t *testing.T) {
 		t.Fatalf("launch chain = %q, want %q", log, want)
 	}
 }
+
+func TestWrapperUpdatesLauncherFirstAndStartsEvenIfUpdateFails(t *testing.T) {
+	prefix := filepath.Join(t.TempDir(), "Bellum prefix")
+	launcher := filepath.Join(prefix, "drive_c/users/steamuser/AppData/Local/Astarte Industries/Astarte Launcher/AstarteLauncher.exe")
+	proton := filepath.Join(t.TempDir(), "proton build")
+	runtimeDir := filepath.Join(t.TempDir(), "EAC runtime")
+	bin := t.TempDir()
+	for _, dir := range []string{filepath.Dir(launcher), proton, runtimeDir} {
+		if err := os.MkdirAll(dir, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	for _, path := range []string{launcher, filepath.Join(proton, "proton")} {
+		if err := os.WriteFile(path, []byte("stub"), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	trace := filepath.Join(t.TempDir(), "trace")
+	vars := "export WINEPREFIX='" + prefix + "'\nexport PROTONPATH='" + proton + "'\nexport PROTON_EAC_RUNTIME='" + runtimeDir + "'\n"
+	if err := os.WriteFile(filepath.Join(prefix, "launch_vars.env"), []byte(vars), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(bin, "umu-run"), []byte("#!/bin/sh\necho umu-run >> '"+trace+"'\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	tool := filepath.Join(t.TempDir(), "bellum tool")
+	if err := os.WriteFile(tool, []byte("#!/bin/sh\necho \"tool $1 $2\" >> '"+trace+"'\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	t.Setenv("BASH_ENV", "")
+
+	for _, cfg := range []LauncherConfig{
+		{Wineprefix: prefix, ToolPath: tool},
+		{Wineprefix: prefix, ToolPath: filepath.Join(t.TempDir(), "missing")},
+	} {
+		_ = os.Remove(trace)
+		wrapper := filepath.Join(t.TempDir(), "Bellum")
+		if err := os.WriteFile(wrapper, []byte(generateWrapperContent(cfg)), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if out, err := exec.Command("bash", wrapper).CombinedOutput(); err != nil {
+			t.Fatalf("wrapper failed: %v %s", err, out)
+		}
+		got, _ := os.ReadFile(trace)
+		want := "umu-run\n"
+		if cfg.ToolPath == tool {
+			want = "tool update-launcher " + prefix + "\numu-run\n"
+		}
+		if string(got) != want {
+			t.Fatalf("trace = %q, want %q", got, want)
+		}
+	}
+	if !strings.Contains(generateWrapperContent(LauncherConfig{Wineprefix: prefix, ToolPath: tool}), "update-launcher") ||
+		strings.Contains(generateWrapperContent(LauncherConfig{Wineprefix: prefix}), "update-launcher") {
+		t.Fatal("update block not tied to ToolPath")
+	}
+}
