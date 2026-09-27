@@ -120,7 +120,7 @@ jobs:
         run: |
           if [[ "$TAG" =~ -rc\.[0-9]+$ ]]; then
             gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --prerelease \
-              --notes "Release candidate for hardware testing. Install with: bash <(curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh) --version $TAG"
+              --notes "Release candidate for hardware testing. Install with: curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | bash -s -- --version $TAG"
           else
             gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --draft
           fi
