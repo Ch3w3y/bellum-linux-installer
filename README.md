@@ -4,6 +4,59 @@ Welcome to the Bellum Linux Installer and Uninstaller. This is a linux Proton/Wi
 Please note, this is NOT official support or an official native release. I am just a supporter of the game and am not affiliated with Astarte Industries.
 That said, my goal is making sure none of my fellow linux gamers have to see the light of Windows to play this awesome game.
 
+## Before You Start: First-Run Prerequisites
+
+### Host packages
+
+The installer checks for these tools and tells you what's missing and how to
+install it for your distribution (see `pkg/workflow/host.go`); it never runs a
+package manager for you. Install them yourself first to avoid a mid-install
+stop:
+
+- **Required on every distro:** Wine, `umu-run` (umu-launcher), and `wget`.
+- **Optional:** `kdialog` (KDE) or `zenity` (GNOME/other) for the graphical
+  directory picker. Without either, the installer falls back to a plain
+  terminal prompt.
+
+Per-family package names:
+
+| Family | Package manager | Packages |
+| --- | --- | --- |
+| Arch / Manjaro / EndeavourOS | `pacman -S` | `wine winetricks umu-launcher wget mesa-demos` |
+| Fedora / RHEL / CentOS | `dnf install` | `wine winetricks umu-launcher wget glx-utils` |
+| Debian / Ubuntu / Mint / Pop!_OS | `apt install` | `wine winetricks umu-launcher wget mesa-utils` |
+| openSUSE | `zypper install` | `wine winetricks umu-launcher wget Mesa-demo-x` |
+
+Add `kdialog` or `zenity` from the same package manager if you want the GUI
+picker.
+
+### Proton EasyAntiCheat Runtime
+
+Bellum runs under Easy Anti-Cheat. Before installing, get the **Proton
+EasyAntiCheat Runtime** (Steam app `1826330`) onto your system: in Steam, go
+to **Library → Tools**, find "Proton EasyAntiCheat Runtime", and install it.
+The generated launcher expects this runtime; set `PROTON_EAC_RUNTIME` to its
+directory if it's installed somewhere other than Steam's default location.
+
+### Immutable-host limits
+
+On immutable/atomic hosts (e.g. SteamOS, Bazzite), the installer will not
+attempt to install missing packages itself — its dependency guidance is
+informational only, and you're responsible for installing packages through
+that host's supported workflow (e.g. a distrobox/toolbox container or the
+host's own package layering mechanism) before running the installer.
+
+### Recovery from a failed or partial install
+
+If the installer fails after it has already created a new WINEPREFIX, it
+removes that newly created prefix automatically; it never deletes a
+pre-existing directory you pointed it at. Check `logs/installer.log` in the
+directory you ran the installer from for the failure reason, resolve it (for
+example, install a missing host package), and re-run `./installer` — it will
+create a fresh prefix. If you reused an *existing* prefix (`UseExisting`) and
+the install failed partway through, that prefix is left as-is; back it up
+before retrying if it may contain data you care about.
+
 ## Download & Install
 
 ### Unpack the Release Package
@@ -52,8 +105,19 @@ Steam's default location. The launcher logs to `launcher.log` in the prefix;
 check that log for EAC initialization when validating Linux mode.
 See [the EAC QA checklist](docs/eac-qa.md) for the evidence to record.
 
+**EAC hygiene — don't hand-place proxy DLLs:** Do not manually copy a proxy
+DLL (a ReShade `dxgi.dll`/`d3d11.dll`, an OptiScaler `dxgi.dll`, or similar)
+into the game directory yourself. Anything sitting there loads into the same
+protected process EAC watches, and Bellum has no way to know it's benign.
+The installer's own refusal to write DLLs into the game directory
+(`GuardGameTreeWrites`) is a regression guard against the installer
+accidentally corrupting or overwriting game files during install/uninstall —
+it is **not** a sandbox and does not stop you, another program, or a game
+update from placing files there, and it does not vouch for anything you add
+yourself.
 
-2. Select the directory where you want to install Bellum and confirm the install summary. A WINEPREFIX named `Bellum` will be created in the selected directory.
+
+2. Select the **parent** directory where you want to install Bellum and confirm the install summary. The installer appends `Bellum` to your selection, so a WINEPREFIX named `Bellum` is created inside the directory you pick (e.g. picking `~/Games` creates `~/Games/Bellum`).
    
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/826d7e36-1471-4cd2-9c61-8440252456aa" />
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/5347c5bd-c44d-4f37-b89b-cdbf4e137ae9" />
@@ -68,10 +132,13 @@ See [the EAC QA checklist](docs/eac-qa.md) for the evidence to record.
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/aab9f336-9307-4e2a-b7da-f5f8655eb92b" />
 
 
-**Note:** `WINEPREFIX` environment variable can also be used to install Bellum:
+**Note:** `WINEPREFIX` environment variable can also be used to install Bellum.
+Unlike the directory picker or the `--wineprefix` flag, the env var is used
+exactly as given — it is **not** appended with `Bellum` — so point it at the
+prefix itself:
 
 ```bash
-export WINEPREFIX=/path/to/wineprefix
+export WINEPREFIX=/path/to/Bellum
 ./installer
 ```
 
@@ -87,18 +154,25 @@ This guy will be added under the **Games** category in your Application Menu:
 
 <img width="537" height="67" alt="image" src="https://github.com/user-attachments/assets/d6acdfed-7569-415d-8e42-dac896d7bce9" />
 
-### Option 3 - Terminaal
+### Option 3 - Terminal
 Just open a terminal anywhere, and run the `Bellum` command.
 
 <img width="800" alt="image" src="https://github.com/user-attachments/assets/e24b60bc-7aaa-4fc8-99ff-26ed24fbe7e7" />
 
 ## Uninstallation
 
-Set the `WINEPREFIX` env var to the one used to install the game. Then run unintsaller script.
+Set the `WINEPREFIX` env var to the prefix used to install the game (used
+literally, same as install — no `Bellum` is appended). Then run the
+uninstaller script:
 ```bash
-export WINEPREFIX=/path/to/wineprefix
+export WINEPREFIX=/path/to/Bellum
 ./uninstaller
 ```
+
+Alternatively, run `./uninstaller` with no arguments and no `WINEPREFIX` set
+to use the GUI picker — for uninstall, **select the `Bellum` prefix directory
+itself** (e.g. `~/Games/Bellum`), not its parent. This is the opposite of the
+install picker, which selects the parent directory.
 
 The installer writes `.bellum-manifest.json` inside each new prefix to identify
 the Bellum-owned instance. Uninstall verifies that manifest, shows the resolved

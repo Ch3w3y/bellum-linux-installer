@@ -38,5 +38,5 @@
 
 - On 2026-09-26, the installed entitled Steam runtime's six-file digest was independently recomputed as `4d18c3a5b896c757be9e25bf1004b81568bc4d4e56ddd8d1a2a634eebf12d1f9`, matching the configured pin. The installer requires that exact content before installation; missing or altered runtime files fail closed.
 - `GOCACHE=<task-local writable cache> mise exec go@1.24.9 -- go test ./...` and `git diff --check` pass in the shared checkout. These checks cover the game-tree write guard, package integrity, generated wrappers, and uninstall safety.
-- [TES-12](/TES/issues/TES-12) owns live EAC Linux-mode evidence and launcher lifecycle QA. The procedure is in [the EAC QA checklist](eac-qa.md). Static tests and runtime hashing do not establish that a protected Bellum session succeeds.
+- [TES-12](/TES/issues/TES-12) owns live EAC Linux-mode evidence and launcher lifecycle QA. The procedure is in [the EAC QA checklist](../eac-qa.md). Static tests and runtime hashing do not establish that a protected Bellum session succeeds.
 - Verify `osslsigncode` against the pinned official launcher during release QA. Its required signer and SHA-256 gates fail closed in the installer.
