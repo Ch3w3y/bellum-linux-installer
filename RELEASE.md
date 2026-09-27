@@ -98,7 +98,7 @@ agent environments. Keep VCS stamping enabled for release provenance.
 ## Publishing
 
 Current state (2026-09-27): the only published releases are `v2.0.1` and
-`2.0.1` (2026-05-13), which predate the September hardening on `master`. The
+`2.0.1` (2026-05-13), which predate the September hardening on `main`. The
 next release should bump `VERSION` (for example `2.1.0`). Note that
 `make release` names the tarball `bellum-installer-linux-amd64-<VERSION>.tar.gz`
 with no `v` prefix unless `VERSION` includes one. Keep one tag convention going

@@ -9,12 +9,17 @@ and a `Bellum` terminal command.
 > affiliated with Astarte Industries. The goal is simple: nobody who has moved to
 > Linux should have to boot Windows to play Bellum.
 
+This successor project builds on [Joheb Rahman (joepaji)'s original Bellum Linux
+Installer](https://github.com/joepaji/bellum-linux-installer). Joheb created the
+foundational installer and continues to own the original project. See
+[Credits](CREDITS.md) for the project lineage and upstream update policy.
+
 ## Project status (2026-09-27)
 
 | | |
 | --- | --- |
 | **Easy Anti-Cheat on Linux** | ✅ Astarte has enabled Proton/Linux EAC support for Bellum. |
-| **Latest published release** | ⚠️ [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1) (2026-05-13) **predates** the September hardening on `master`: pinned and verified downloads, the EAC-safe launcher, and ownership-checked uninstall. A new release is pending; until then, [build from `master`](#install-today-build-from-master). |
+| **Latest published release** | ⚠️ [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1) (2026-05-13) **predates** the September hardening on `main`: pinned and verified downloads, the EAC-safe launcher, and ownership-checked uninstall. A new release is pending; until then, [build from `main`](#install-today-build-from-main). |
 | **One-command install** | 🚧 Planned. See [#6](https://github.com/Ch3w3y/bellum-linux-installer/issues/6). Not available yet. |
 | **Known blockers** | [#7](https://github.com/Ch3w3y/bellum-linux-installer/issues/7), [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8), [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9), [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10). Workarounds are under [Known issues](#known-issues-and-workarounds). |
 
@@ -26,7 +31,7 @@ single command:
 
 ```bash
 # Planned: this script does not exist yet.
-bash <(curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/master/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh)
 ```
 
 It will check your system, tell you the one command to install anything that's
@@ -113,7 +118,7 @@ command for your distro, but it never runs your package manager for you.
 > requirement is tracked in
 > [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8).
 
-## Install today (build from `master`)
+## Install today (build from `main`)
 
 Until a new release is published, build the current code. You need
 [Go 1.24+](https://go.dev/dl/), `git` and `make`.
