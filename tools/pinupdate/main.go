@@ -190,7 +190,20 @@ func updateProton(p *pins, tag string, force bool, r *report) error {
 	for _, req := range workflow.ProtonContract() {
 		wanted[req.Path] = true
 	}
-	sum, files, err := downloadProton(a.URL, wanted)
+	work, err := os.MkdirTemp("", "pinupdate-proton-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(work)
+	archivePath := filepath.Join(work, a.Name)
+	archive, err := os.Create(archivePath)
+	if err != nil {
+		return err
+	}
+	sum, files, err := downloadProton(a.URL, wanted, archive)
+	if closeErr := archive.Close(); err == nil {
+		err = closeErr
+	}
 	if err != nil {
 		return err
 	}
@@ -206,14 +219,20 @@ func updateProton(p *pins, tag string, force bool, r *report) error {
 	if len(missing) > 0 {
 		return fmt.Errorf("[%s](%s) breaks the installer's Proton contract:\n  - %s", ver, rel.HTMLURL, strings.Join(missing, "\n  - "))
 	}
+	// Unpack it exactly as the installer does, so an archive our extractor
+	// rejects (as happened with protonfixes' relative symlinks) never gets
+	// pinned.
+	if err := packages.ExtractPackageTo(archivePath, filepath.Join(work, "tree"), 1); err != nil {
+		return fmt.Errorf("[%s](%s) does not unpack with the installer's extractor: %v", ver, rel.HTMLURL, err)
+	}
 	wt := winetricksVersion(files["protonfixes/winetricks"])
 	if ver == p.ProtonVer && sum != p.ProtonSHA256 {
 		return fmt.Errorf("the published archive for %s no longer matches the pinned SHA-256 (%s, now %s); investigate before re-pinning", ver, p.ProtonSHA256, sum)
 	}
 	if ver != p.ProtonVer {
-		r.change("Proton `%s` → [`%s`](%s) (SHA-256 `%s`); all %d contract checks pass.", p.ProtonVer, ver, rel.HTMLURL, sum, len(workflow.ProtonContract()))
+		r.change("Proton `%s` → [`%s`](%s) (SHA-256 `%s`); all %d contract checks pass and it unpacks with the installer's extractor.", p.ProtonVer, ver, rel.HTMLURL, sum, len(workflow.ProtonContract()))
 	} else {
-		r.note("Proton `%s` re-verified: digest and all %d contract checks pass.", ver, len(workflow.ProtonContract()))
+		r.note("Proton `%s` re-verified: digest, all %d contract checks and a full unpack pass.", ver, len(workflow.ProtonContract()))
 	}
 	p.ProtonVer, p.ProtonSHA256 = ver, sum
 	if wt != "" {
@@ -228,7 +247,7 @@ func updateProton(p *pins, tag string, force bool, r *report) error {
 
 // downloadProton streams the archive once, hashing it and keeping the files
 // named in wanted (paths relative to the archive's top directory).
-func downloadProton(url string, wanted map[string]bool) (string, map[string][]byte, error) {
+func downloadProton(url string, wanted map[string]bool, keep io.Writer) (string, map[string][]byte, error) {
 	resp, err := client.Get(url)
 	if err != nil {
 		return "", nil, err
@@ -238,7 +257,8 @@ func downloadProton(url string, wanted map[string]bool) (string, map[string][]by
 		return "", nil, fmt.Errorf("download %s: %s", url, resp.Status)
 	}
 	h := sha256.New()
-	xzr, err := xz.NewReader(io.TeeReader(resp.Body, h), 0)
+	sink := io.MultiWriter(h, keep)
+	xzr, err := xz.NewReader(io.TeeReader(resp.Body, sink), 0)
 	if err != nil {
 		return "", nil, err
 	}
@@ -260,7 +280,7 @@ func downloadProton(url string, wanted map[string]bool) (string, map[string][]by
 		}
 	}
 	// Hash any trailing bytes the tar reader didn't consume.
-	if _, err := io.Copy(io.Discard, io.TeeReader(resp.Body, h)); err != nil {
+	if _, err := io.Copy(io.Discard, io.TeeReader(resp.Body, sink)); err != nil {
 		return "", nil, err
 	}
 	return hex.EncodeToString(h.Sum(nil)), files, nil

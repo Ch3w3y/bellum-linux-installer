@@ -112,3 +112,81 @@ func TestGZStripSkipsEntriesWithoutRootComponent(t *testing.T) {
 		t.Fatalf("stripped orphan was extracted, err=%v", err)
 	}
 }
+
+func writeTar(t *testing.T, path string, headers []*tar.Header) {
+	t.Helper()
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := tar.NewWriter(f)
+	for _, h := range headers {
+		if err := w.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+		if h.Typeflag == tar.TypeReg {
+			if _, err := w.Write(make([]byte, h.Size)); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	if err := w.Close(); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Proton-CachyOS links sibling protonfixes directories with "../" targets.
+func TestExtractAllowsLeadingParentSymlinksInsideRoot(t *testing.T) {
+	root := t.TempDir()
+	archive := filepath.Join(root, "proton.tar")
+	writeTar(t, archive, []*tar.Header{
+		{Name: "proton/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: "proton/protonfixes/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: "proton/protonfixes/gamefixes-steam/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: "proton/protonfixes/gamefixes-steam/61500.py", Typeflag: tar.TypeReg, Mode: 0644, Size: 3},
+		{Name: "proton/protonfixes/gamefixes-umu/", Typeflag: tar.TypeDir, Mode: 0755},
+		{Name: "proton/protonfixes/gamefixes-umu/61500.py", Linkname: "../gamefixes-steam/61500.py", Typeflag: tar.TypeSymlink, Mode: 0777},
+	})
+	dest := filepath.Join(root, "dest")
+	if err := ExtractPackageTo(archive, dest, 1); err != nil {
+		t.Fatalf("Proton-style relative symlink rejected: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dest, "protonfixes", "gamefixes-umu", "61500.py")); err != nil {
+		t.Fatalf("link does not resolve: %v", err)
+	}
+}
+
+func TestExtractRejectsUnsafeParentSymlinks(t *testing.T) {
+	cases := map[string][]*tar.Header{
+		"escapes root": {
+			{Name: "proton/a/", Typeflag: tar.TypeDir, Mode: 0755},
+			{Name: "proton/a/link", Linkname: "../../outside", Typeflag: tar.TypeSymlink, Mode: 0777},
+		},
+		"parent after segment": {
+			{Name: "proton/a/", Typeflag: tar.TypeDir, Mode: 0755},
+			{Name: "proton/a/link", Linkname: "x/../../outside", Typeflag: tar.TypeSymlink, Mode: 0777},
+		},
+		"under symlinked dir": {
+			{Name: "proton/real/", Typeflag: tar.TypeDir, Mode: 0755},
+			{Name: "proton/sym", Linkname: "real", Typeflag: tar.TypeSymlink, Mode: 0777},
+			{Name: "proton/sym/link", Linkname: "../x", Typeflag: tar.TypeSymlink, Mode: 0777},
+		},
+		"symlinked dir listed later": {
+			{Name: "proton/sym/link", Linkname: "../x", Typeflag: tar.TypeSymlink, Mode: 0777},
+			{Name: "proton/sym", Linkname: "/etc", Typeflag: tar.TypeSymlink, Mode: 0777},
+		},
+	}
+	for name, headers := range cases {
+		t.Run(name, func(t *testing.T) {
+			root := t.TempDir()
+			archive := filepath.Join(root, "bad.tar")
+			writeTar(t, archive, headers)
+			if err := ExtractPackageTo(archive, filepath.Join(root, "dest"), 1); err == nil {
+				t.Fatal("unsafe symlink accepted")
+			}
+		})
+	}
+}

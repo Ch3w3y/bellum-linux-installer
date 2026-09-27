@@ -99,9 +99,19 @@ func validateTarArchive(archivePath, destDir string, strip bool) error {
 		reader = xzReader
 	}
 	tr := tar.NewReader(reader)
+	symlinks := map[string]bool{}
+	type link struct{ name, target string }
+	var links []link
 	for {
 		h, err := tr.Next()
 		if err == io.EOF {
+			// Checked once every symlink in the archive is known, so a
+			// symlinked parent listed after its child is still caught.
+			for _, l := range links {
+				if err := checkRelativeLink(l.name, l.target, symlinks); err != nil {
+					return err
+				}
+			}
 			return nil
 		}
 		if err != nil {
@@ -119,12 +129,11 @@ func validateTarArchive(archivePath, destDir string, strip bool) error {
 			if filepath.IsAbs(h.Linkname) {
 				return fmt.Errorf("absolute symlink target %q", h.Linkname)
 			}
-			if hasParentSegment(h.Linkname) {
-				return fmt.Errorf("symlink target contains parent traversal: %q", h.Linkname)
-			}
+			links = append(links, link{name, h.Linkname})
 			if _, err := sanitizePath(destDir, filepath.Join(filepath.Dir(name), h.Linkname)); err != nil {
 				return fmt.Errorf("unsafe symlink %q -> %q: %w", name, h.Linkname, err)
 			}
+			symlinks[filepath.Clean(name)] = true
 		}
 		if h.Typeflag == tar.TypeLink {
 			if filepath.IsAbs(h.Linkname) {
@@ -406,6 +415,38 @@ func archiveEntryName(name string, strip bool) (string, bool) {
 		return "", true
 	}
 	return parts[1], false
+}
+
+// checkRelativeLink allows ".." in a symlink target only as a leading run
+// ("../sibling/file", as Proton's protonfixes uses), never after a normal
+// segment, and only when none of the link's parent directories is itself a
+// symlink from the archive. The kernel resolves ".." physically after
+// following symlinks, so both rules keep lexical and physical resolution
+// identical; sanitizePath then checks the lexical target stays in the root.
+func checkRelativeLink(name, target string, symlinks map[string]bool) error {
+	parts := strings.Split(filepath.ToSlash(target), "/")
+	leading := true
+	for _, part := range parts {
+		switch {
+		case part == "..":
+			if !leading {
+				return fmt.Errorf("symlink target contains parent traversal after a path segment: %q", target)
+			}
+		case part == "" || part == ".":
+			// harmless
+		default:
+			leading = false
+		}
+	}
+	if !hasParentSegment(target) {
+		return nil
+	}
+	for dir := filepath.Dir(filepath.Clean(name)); dir != "." && dir != "/"; dir = filepath.Dir(dir) {
+		if symlinks[dir] {
+			return fmt.Errorf("symlink %q with parent traversal sits under symlinked directory %q", name, dir)
+		}
+	}
+	return nil
 }
 
 func hasParentSegment(name string) bool {
