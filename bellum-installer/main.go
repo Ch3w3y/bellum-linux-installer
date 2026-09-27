@@ -21,6 +21,11 @@ func main() {
 		os.Exit(1)
 	}
 
+	// The Bellum wrapper runs "update-launcher PREFIX" before each launch.
+	if len(os.Args) == 3 && os.Args[1] == "update-launcher" {
+		os.Exit(runUpdateLauncher(os.Args[2]))
+	}
+
 	// Parse command line arguments
 	// Accepted for compatibility with older instructions; system Wine is no
 	// longer used, so there is no version to force.
@@ -286,4 +291,20 @@ func runUpdate(result *workflow.PrecheckResult, installConfig workflow.InstallCo
 	}
 	logger.Info("Update complete!")
 	printFinish("Bellum is up to date", result.WINEPREFIX)
+}
+
+// runUpdateLauncher installs the latest Astarte Launcher into prefix. Its
+// output goes to the wrapper's launcher.log.
+func runUpdateLauncher(prefix string) int {
+	logger, err := core.NewLogger("")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return 1
+	}
+	defer logger.Close()
+	if err := workflow.UpdateLauncherInPrefix(prefix, logger); err != nil {
+		logger.Error(err.Error())
+		return 1
+	}
+	return 0
 }

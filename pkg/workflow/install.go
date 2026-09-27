@@ -141,6 +141,9 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	if err := checkWebView2Runtime(config.WINEPREFIX); err != nil {
 		return err
 	}
+	// The installer carries an older launcher build, and the launcher can't
+	// replace its own exe under Wine; install the latest release from Linux.
+	updateLauncherStep(config.WINEPREFIX, logger)
 	logger.Warn("Almost done. Don't start the game or close this window yet.")
 
 	if err := step("Setting Windows 11 mode", umuRun("winetricks", "-q", "win11")); err != nil {
@@ -223,7 +226,11 @@ func runUpdateWith(config InstallConfig, logger *core.Logger, generate func(laun
 	}
 	logger.Info("Updating the Bellum launcher and settings...")
 	setPrefixEnv(config.WINEPREFIX, config.ProtonPath)
-	return generateLauncherWith(config, logger, generate)
+	if err := generateLauncherWith(config, logger, generate); err != nil {
+		return err
+	}
+	updateLauncherStep(config.WINEPREFIX, logger)
+	return nil
 }
 
 // umuRunBinary is the pinned umu-run installed by AcquireRuntime. It
@@ -270,6 +277,13 @@ func generateLauncherWith(config InstallConfig, logger *core.Logger, generate fu
 		Protonpath: config.ProtonPath,
 		GPUType:    config.GPUType,
 		IconPath:   iconPath,
+	}
+	// The wrapper runs a stable copy of this installer to keep the Astarte
+	// Launcher up to date.
+	if err := packages.InstallTool(); err != nil {
+		logger.Warn(fmt.Sprintf("Couldn't install the launcher update helper: %v. The launcher will update itself instead.", err))
+	} else {
+		launcherConfig.ToolPath = packages.ToolPath()
 	}
 
 	assets, err := snapshotLauncherAssets()

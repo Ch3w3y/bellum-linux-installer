@@ -16,6 +16,7 @@ type LauncherConfig struct {
 	Protonpath string
 	GPUType    string
 	IconPath   string
+	ToolPath   string // bellum-installer copy that installs launcher updates; empty to skip
 }
 
 // GenerateLauncher generates the launcher wrapper scripts and desktop files.
@@ -76,7 +77,7 @@ if ! flock -n 9; then
 fi
 touch "$WINEPREFIX/launcher.log"
 chmod 0600 "$WINEPREFIX/launcher.log"
-export GAMEID="${GAMEID:-nonsteam}"
+%sexport GAMEID="${GAMEID:-nonsteam}"
 export UMU_LOG=1
 # Keep the container alive while the launcher and game share the Wine session.
 export PROTON_VERB=waitforexitandrun
@@ -92,7 +93,22 @@ if [ "${BELLUM_GAMESCOPE:-0}" = 1 ]; then
   cmd=(gamescope -- "${cmd[@]}")
 fi
 exec "${cmd[@]}" >> "$WINEPREFIX/launcher.log" 2>&1
-`, shellQuote(filepath.Join(config.Wineprefix, "launch_vars.env")), shellQuote(launcherExe))
+`, shellQuote(filepath.Join(config.Wineprefix, "launch_vars.env")), shellQuote(launcherExe), launcherUpdateBlock(config.ToolPath))
+}
+
+// launcherUpdateBlock installs Astarte Launcher updates from Linux before
+// each launch; the launcher's own updater can't replace its exe under Wine.
+// A failed check still starts the installed launcher.
+func launcherUpdateBlock(tool string) string {
+	if tool == "" {
+		return ""
+	}
+	return `BELLUM_TOOL=` + shellQuote(tool) + `
+if [ -x "$BELLUM_TOOL" ]; then
+  "$BELLUM_TOOL" update-launcher "$WINEPREFIX" >> "$WINEPREFIX/launcher.log" 2>&1 ||
+    echo "Launcher update check failed; starting the installed launcher." >> "$WINEPREFIX/launcher.log"
+fi
+`
 }
 
 // writeWrapper writes a wrapper script to the specified path.
