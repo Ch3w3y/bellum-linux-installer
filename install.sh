@@ -5,8 +5,8 @@
 #
 # Downloads the latest release from this repository, checks it against the
 # release's SHA256SUMS, unpacks it to ~/.local/share/bellum-installer/<version>
-# and runs the guided installer. It never uses sudo on its own: if host
-# packages are missing it prints the command and asks first.
+# and runs the installer. Almost everything is bundled or downloaded; if the
+# host lacks python3 or flock it asks once before installing them with sudo.
 #
 # Options (anything else is passed to the installer):
 #   --dry-run          download and verify only; do not install anything
@@ -84,7 +84,7 @@ done
 have() { command -v "$1" >/dev/null 2>&1; }
 
 for tool in tar sha256sum; do
-  have "$tool" || die "'$tool' is missing. It is part of every standard Linux install; install coreutils/tar with your package manager and try again."
+  have "$tool" || die "'$tool' is missing. It is part of every standard Linux install; install it with your package manager and try again."
 done
 if have curl; then
   fetch() { curl -fsSL --retry 3 -o "$2" "$1"; }
@@ -96,52 +96,46 @@ else
   die "Neither curl nor wget is installed. Install one with your package manager and try again."
 fi
 
-# Offer to install the host packages the installer needs. The Go installer
-# checks again and explains anything still missing, so declining is fine.
-offer_packages() {
-  local missing=() pkgs=() notes=() cmd=""
-  have umu-run      || missing+=(umu-run)
-  have osslsigncode || missing+=(osslsigncode)
-  have wget         || missing+=(wget)
+# Everything else (Proton, umu-launcher, signature checks, winetricks) is
+# downloaded or built in. The host only needs python3 (3.10+, runs the pinned
+# umu-launcher) and flock (util-linux, part of every standard install).
+install_packages() {
+  local missing=() pkgs=() cmd=""
+  if ! have python3 || ! python3 -c 'import sys; sys.exit(sys.version_info < (3, 10))' 2>/dev/null; then
+    missing+=(python3)
+  fi
+  have flock || missing+=(flock)
   [ ${#missing[@]} -gt 0 ] || return 0
 
-  warn "Missing tools: ${missing[*]}"
+  warn "Missing: ${missing[*]}"
   if [ "$immutable" = 1 ]; then
-    warn "This system ($os_id) is immutable. Install them through its supported method (for example a Distrobox container or the system's layering tool). Nothing will be changed automatically."
-    return 0
+    die "This system ($os_id) is immutable and is missing ${missing[*]}, which it normally ships. Update the system image, then run this again."
   fi
   for tool in "${missing[@]}"; do
     case "$family:$tool" in
-      arch:umu-run)      pkgs+=(umu-launcher); notes+=("umu-launcher is in the [multilib] repository, which must be enabled.") ;;
-      arch:osslsigncode) notes+=("osslsigncode is in the AUR, for example: yay -S osslsigncode") ;;
-      *:umu-run)         notes+=("umu-launcher: install it from https://github.com/Open-Wine-Components/umu-launcher/releases (or your distribution's repository if it has one).") ;;
-      *)                 pkgs+=("$tool") ;;
+      arch:python3) pkgs+=(python) ;;
+      *:python3)    pkgs+=(python3) ;;
+      *:flock)      pkgs+=(util-linux) ;;
     esac
   done
   case "$family" in
-    arch)     cmd="sudo pacman -S --needed" ;;
-    fedora)   cmd="sudo dnf install" ;;
-    debian)   cmd="sudo apt install" ;;
-    opensuse) cmd="sudo zypper install" ;;
+    arch)     cmd="sudo pacman -S --needed --noconfirm" ;;
+    fedora)   cmd="sudo dnf install -y" ;;
+    debian)   cmd="sudo apt-get install -y" ;;
+    opensuse) cmd="sudo zypper --non-interactive install" ;;
+    *) die "Install ${pkgs[*]} with your distribution's package manager, then run this again." ;;
   esac
-  for note in "${notes[@]}"; do warn "$note"; done
-  if [ ${#pkgs[@]} -eq 0 ]; then
+  say "Installing with: $cmd ${pkgs[*]}"
+  if [ "$dry_run" = 1 ]; then
     return 0
   fi
-  if [ -z "$cmd" ]; then
-    warn "Install these with your distribution's package manager: ${pkgs[*]}"
-    return 0
-  fi
-  say "This command installs them: $cmd ${pkgs[*]}"
-  if [ "$dry_run" = 1 ] || [ ! -r /dev/tty ]; then
-    return 0
-  fi
+  [ -r /dev/tty ] || die "No terminal to confirm the package install. Run: $cmd ${pkgs[*]}"
   local answer=""
-  printf 'Run this now? [y/N] ' >/dev/tty
+  printf 'Install them now? You may be asked for your password. [Y/n] ' >/dev/tty
   read -r answer </dev/tty || answer=""
   case "$answer" in
-    y|Y|yes|YES) $cmd "${pkgs[@]}" || warn "The package command failed; the installer will tell you what's still missing." ;;
-    *) say "Skipped. The installer will list anything still missing." ;;
+    ''|y|Y|yes|YES) $cmd "${pkgs[@]}" || die "The package install failed. Run it yourself: $cmd ${pkgs[*]}" ;;
+    *) die "Bellum needs ${pkgs[*]}. Run: $cmd ${pkgs[*]}" ;;
   esac
 }
 
@@ -185,7 +179,7 @@ tar -xzf "$work/$tarball" -C "$work"
   || die "Files inside the release archive failed their checksums; nothing was installed."
 say "Checksums OK."
 
-offer_packages
+install_packages
 
 if [ "$dry_run" = 1 ]; then
   say "Dry run complete: $tarball downloaded and verified. Nothing was installed or run."

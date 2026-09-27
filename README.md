@@ -25,21 +25,26 @@ bash <(curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installe
 Then press **Enter** at each question to accept the defaults. The installer:
 
 1. downloads the latest release from this repository and checks its checksum;
-2. checks your system and, if something is missing, shows the exact command
-   for your distro and asks before running it (it never uses `sudo` on its
-   own);
-3. asks where to install (default `~/Games/Bellum`), which preset to use
-   (**Stable** by default, or the experimental low-latency **Performance**),
-   and whether to turn on MangoHud, GameMode or gamescope if you have them;
-4. shows one summary and asks you to confirm. **Nothing is downloaded or
-   changed before that.**
+2. provides what it needs itself: the pinned Proton, umu-launcher and
+   winetricks are downloaded and verified, and signatures are checked
+   in-process. The only host packages involved are `python3` and `flock`,
+   which almost every distro already has. If one is missing, it asks once and
+   installs it with your package manager;
+3. if the Proton EasyAntiCheat Runtime isn't in Steam yet, offers to ask
+   Steam to install it and waits until it's done;
+4. asks where to install (default `~/Games/Bellum`), then shows one summary
+   and asks you to confirm. **Nothing is downloaded or changed before that.**
+
+There are no presets to choose. Bellum gets one configuration: the most
+stable one, then the fastest that stays stable, picked for your GPU vendor.
+It works the same on X11, Wayland (through XWayland) and gamescope sessions.
 
 Then the Astarte Launcher installer opens; follow its prompts. When it's done
 you get a desktop shortcut, an app-menu entry and a `Bellum` command. If the
 install fails or is interrupted, just run the same command again.
 
-You need **Steam** with the free **Proton EasyAntiCheat Runtime** installed
-(`steam steam://install/1826330`). See [Before you start](#before-you-start).
+You need **Steam** installed and signed in. The installer fetches the free
+Proton EasyAntiCheat Runtime through it. See [Before you start](#before-you-start).
 
 > ⚠️ **The one-liner needs a release built from the current `main`.** The last
 > published release, [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1)
@@ -60,6 +65,7 @@ You need **Steam** with the free **Proton EasyAntiCheat Runtime** installed
 Steam ──────────────► Proton EasyAntiCheat Runtime (app 1826330, stays in your Steam library)
                                    │
 installer ─► ~/.local/share/bellum/proton/…  (pinned Proton-CachyOS, SHA-256 verified)
+          ─► ~/.local/share/bellum/umu/…     (pinned umu-launcher zipapp, SHA-256 verified)
           ─► <your folder>/Bellum            (a private Wine/Proton prefix just for Bellum)
                └─ Astarte Launcher (signature verified) → installs & updates the game
           ─► ~/.local/bin/Bellum + Bellum.desktop  (runs everything through umu-run)
@@ -85,41 +91,34 @@ installer ─► ~/.local/share/bellum/proton/…  (pinned Proton-CachyOS, SHA-2
   the installer warns you otherwise.
 - **Steam** installed and signed in. It's needed for the EAC runtime below.
 
-### 1. Install the Proton EasyAntiCheat Runtime
+### 1. The Proton EasyAntiCheat Runtime
 
-In Steam, open **Library → Tools**, find **Proton EasyAntiCheat Runtime**, and
-install it. You can also open `steam://install/1826330` in your browser.
+The installer offers to ask Steam to install it and then waits for Steam to
+finish. To do it yourself beforehand: in Steam, open **Library → Tools**, find
+**Proton EasyAntiCheat Runtime**, and install it (or open
+`steam://install/1826330`).
 
 The installer finds it in native or **Flatpak** Steam, in any of your Steam
 library folders. Steam keeps it up to date, and newer builds are accepted. If
 you keep it somewhere unusual, point the installer at the folder with
 `export PROTON_EAC_RUNTIME="/path/to/Proton EasyAntiCheat Runtime"`.
 
-### 2. Install host packages
+### 2. Host packages
 
-The installer checks for all of these before it changes anything, lists
-everything that's missing at once, and prints the install command for your
-distro. It never runs your package manager for you.
+There's almost nothing to install. The installer downloads and verifies
+Proton and umu-launcher itself, checks the launcher's Authenticode signature
+in-process, and uses the winetricks that ships with Proton.
 
 | Tool | Why | Required? |
 | --- | --- | --- |
-| `umu-run` (umu-launcher) | Runs every prefix step, the launcher and the game inside Proton's runtime container | Yes |
-| `osslsigncode` | Verifies the Astarte Launcher's signature | Yes |
-| `wget` | Downloads Proton and the launcher | Yes |
-| `glxinfo` | Better GPU detection (falls back to `lspci` or sysfs without it) | Recommended |
-| `zenity` or `kdialog` | Graphical folder picker (falls back to a terminal prompt) | Optional |
-| `wine`, `winetricks` | Not needed. Everything runs on the pinned Proton, including the winetricks it bundles | No |
+| `python3` 3.10+ | Runs the pinned umu-launcher | Yes (preinstalled on nearly every distro, SteamOS and Bazzite included) |
+| `flock` (util-linux) | Stops a second launch while Bellum is running | Yes (part of every standard install) |
+| `glxinfo` | Better GPU detection (falls back to `lspci` or sysfs without it) | Optional |
+| `zenity` or `kdialog` | Graphical folder picker when you type `b` | Optional |
+| `wine`, `winetricks`, `umu-launcher`, `osslsigncode`, `wget` | Not needed | No |
 
-| Distro family | Command |
-| --- | --- |
-| Arch / CachyOS / EndeavourOS / Manjaro | `sudo pacman -S umu-launcher wget mesa-utils zenity` (`umu-launcher` is in `[multilib]`, which must be enabled), plus `osslsigncode` from the AUR (e.g. `yay -S osslsigncode`) |
-| Fedora | `sudo dnf install osslsigncode wget glx-utils zenity`, and `umu-launcher` from its [GitHub releases](https://github.com/Open-Wine-Components/umu-launcher/releases) or your spin's repo (Bazzite and Nobara ship it) |
-| Debian / Ubuntu / Mint / Pop!_OS | `sudo apt install osslsigncode wget mesa-utils zenity`, and `umu-launcher` from the `.deb` on its [GitHub releases](https://github.com/Open-Wine-Components/umu-launcher/releases) (not in the distro repos) |
-| openSUSE Tumbleweed | `sudo zypper install osslsigncode wget Mesa-demo-x zenity`, and `umu-launcher` from the OBS [`games`](https://build.opensuse.org/package/show/games/umu-launcher) repo |
-| SteamOS / Bazzite (immutable) | Install only through the host's supported method (distrobox/toolbox or the system's layering tool). The installer will not modify an immutable host. |
-
-You also need the **Proton EasyAntiCheat Runtime** from Steam (free, no game
-purchase needed): run `steam steam://install/1826330`.
+If `python3` or `flock` is missing, the one-line install offers to install it
+(`pacman`, `dnf`, `apt` or `zypper`). Immutable systems ship both.
 
 ## Advanced: build from `main` or use a tarball
 
@@ -149,17 +148,14 @@ Check that you're on **this** repository's Releases page; the original
 2. **Prechecks.** The installer detects your GPU and checks tools, the EAC
    runtime and free disk space. Nothing is downloaded or changed yet, and every
    problem is reported together.
-3. **Preset and extras.** Stable (default) or the experimental Performance
-   preset (Proton-CachyOS low-latency builds). Then MangoHud, GameMode and gamescope, if they're installed.
-   All of these can be changed later in `<prefix>/launch_vars.env`.
-4. **Confirm the summary.**
-5. **Downloads and prefix setup.** It downloads and verifies Proton (several
+3. **Confirm the summary.** It shows the configuration picked for your GPU.
+4. **Downloads and prefix setup.** It downloads and verifies umu-launcher and Proton (several
    hundred MB, one time only), creates the prefix and installs runtime
    components (Visual C++, .NET 9 and others) through Proton. This takes a
    while.
-6. **The Astarte Launcher installer appears.** Follow its prompts. Don't close
+5. **The Astarte Launcher installer appears.** Follow its prompts. Don't close
    the terminal.
-7. **Finishing steps.** The installer writes the launcher wrapper, desktop
+6. **Finishing steps.** The installer writes the launcher wrapper, desktop
    shortcut and launch settings. Wait for *"Installation completed
    successfully!"*
 
@@ -171,7 +167,7 @@ Check that you're on **this** repository's Releases page; the original
 ### Advanced options
 
 ```bash
-./installer --yes                          # accept every default: ~/Games/Bellum, Stable, no extras
+./installer --yes                          # accept every default (~/Games/Bellum)
 ./installer --wineprefix ~/Games          # skip the location question (creates ~/Games/Bellum)
 WINEPREFIX=~/Games/Bellum ./installer     # same thing, via the environment
 ./installer --launcher-installer ./AstarteLauncher-amd64-installer.exe  # use a local copy (still verified)
@@ -200,8 +196,8 @@ After installing, launch Bellum any of these ways:
 The Astarte Launcher must stay open while you play, because it authenticates
 the game. A second launch while Bellum is already running is ignored.
 
-**Optional extras.** The installer writes your choices to
-`<prefix>/launch_vars.env`. Change them there, setting any of these to `1`:
+**Optional extras.** These are off, because none of them has been validated
+with Easy Anti-Cheat. To try one, set it to `1` in `<prefix>/launch_vars.env`:
 
 ```bash
 export BELLUM_MANGOHUD=1   # performance overlay (needs mangohud)
@@ -235,10 +231,10 @@ message ends with the log's exact path.
   `PROTON_FSR4_UPGRADE=1`, which forces the offer. Set `PROTON_FSR4_INDICATOR=1`
   in `launch_vars.env` to see an on-screen FSR watermark confirming it's
   active. [Details](docs/runtime-pins.md#upscaler-behaviour-of-the-pinned-proton).
-- **Presets:** both presets get the settings above. **Performance** adds
-  Proton-CachyOS's low-latency vkd3d-proton and DXVK builds
-  (`PROTON_VKD3D_LOWLATENCY=1`, `PROTON_DXVK_LOWLATENCY=1`). It's
-  experimental: not yet tested with Bellum and Easy Anti-Cheat.
+- **Display server:** the settings are the same on X11, Wayland and gamescope.
+  The pinned Proton uses XWayland unless its experimental Wayland driver is
+  switched on (`PROTON_ENABLE_WAYLAND`), which the installer doesn't do.
+  Proton turns on fsync by itself where the kernel supports it.
 - **Intel and other GPUs:** generic Proton settings.
 
 ### NVIDIA RTX 50-series (Blackwell) driver note

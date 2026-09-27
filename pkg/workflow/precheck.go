@@ -3,6 +3,7 @@ package workflow
 import (
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -202,9 +203,60 @@ type precheckHost struct {
 	StageLauncher func(string) (string, string, packages.LauncherCheck, error)
 	ProtonDir     func(string) string
 	FindEAC       func() (EACRuntime, error)
+	// RequestEAC runs the given command to ask Steam to install the EAC
+	// runtime; Steam shows its own confirmation.
+	RequestEAC func([]string) error
+	// Sleep is time.Sleep, injectable for tests.
+	Sleep func(time.Duration)
+}
+
+// steamInstallCommand returns the command that asks the user's Steam
+// (native or Flatpak) to install the EAC runtime, or nil without Steam.
+func steamInstallCommand(commands CommandRunner, files FileStore) []string {
+	uri := "steam://install/" + eacRuntimeAppID
+	if DiscoverExecutable("steam", commands) != "" {
+		return []string{"steam", uri}
+	}
+	home, _ := os.UserHomeDir()
+	if DiscoverExecutable("flatpak", commands) != "" &&
+		(isDirWith(filepath.Join(home, ".var", "app", "com.valvesoftware.Steam"), files) || isDirWith("/var/lib/flatpak/app/com.valvesoftware.Steam", files)) {
+		return []string{"flatpak", "run", "com.valvesoftware.Steam", uri}
+	}
+	return nil
+}
+
+// startDetached starts argv without waiting for it, so Steam keeps running.
+func startDetached(argv []string) error {
+	cmd := exec.Command(argv[0], argv[1:]...)
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	return cmd.Process.Release()
+}
+
+// eacInstallWait bounds how long the installer waits for Steam.
+const eacInstallWait = 20 * time.Minute
+
+func waitForEACInstall(host precheckHost, logger *core.Logger) (EACRuntime, error) {
+	logger.Info("Steam should now ask you to install \"Proton EasyAntiCheat Runtime\". Confirm it there; the installer carries on as soon as Steam is done.")
+	var rt EACRuntime
+	var err error
+	for waited := time.Duration(0); waited <= eacInstallWait; waited += 5 * time.Second {
+		if rt, err = host.FindEAC(); err == nil {
+			return rt, nil
+		}
+		if waited > 0 && waited%(time.Minute) == 0 {
+			logger.Info(fmt.Sprintf("Still waiting for Steam (%d min). Press Ctrl+C to stop; running the installer again resumes from here.", waited/time.Minute))
+		}
+		host.Sleep(5 * time.Second)
+	}
+	return rt, err
 }
 
 var defaultPrecheckHost = precheckHost{
+	RequestEAC:    startDetached,
+	Sleep:         time.Sleep,
 	Commands:      DefaultBoundaries.Commands,
 	Files:         DefaultBoundaries.Files,
 	DetectGPU:     core.DetectGPUCapabilities,
@@ -222,11 +274,20 @@ var defaultPrecheckHost = precheckHost{
 	},
 }
 
-// requiredTools lists the host commands the install needs. Every Wine
-// operation runs through umu-run and the pinned Proton, so no system Wine or
-// winetricks is required.
+// requiredTools lists the host commands the install needs. Everything else
+// is provided: Proton and umu-launcher are downloaded and pinned, downloads
+// and Authenticode checks are done in Go, and winetricks comes with Proton.
+// python3 runs the umu-launcher zipapp; flock (util-linux) guards the game
+// wrapper against double launches.
 func requiredTools() []string {
-	return []string{"umu-run", "osslsigncode", "wget"}
+	return []string{"python3", "flock"}
+}
+
+// pythonTooOld reports whether python3 is older than umu-launcher needs
+// (3.10). Unknown versions are not treated as too old.
+func pythonTooOld(commands CommandRunner) bool {
+	out, err := commands.Output([]string{"python3", "-c", "import sys; print(sys.version_info >= (3, 10))"})
+	return err == nil && strings.TrimSpace(out) == "False"
 }
 
 // RunPrechecks runs the read-only checks. It never writes to $HOME, never
@@ -274,10 +335,23 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	}
 	if len(missing) > 0 {
 		problems = append(problems, MissingDependencyGuidance(DetectHost(host.Files, host.Commands), missing))
+	} else if pythonTooOld(host.Commands) {
+		problems = append(problems, "python3 is older than 3.10, which umu-launcher needs. Update python3 with your distribution's package manager.")
 	}
 
-	if runtime, err := host.FindEAC(); err != nil {
-		problems = append(problems, err.Error())
+	runtime, eacErr := host.FindEAC()
+	if eacErr != nil && host.RequestEAC != nil && os.Getenv("PROTON_EAC_RUNTIME") == "" {
+		if argv := steamInstallCommand(host.Commands, host.Files); argv != nil &&
+			host.Ask("Bellum needs the free Proton EasyAntiCheat Runtime from Steam. Ask Steam to install it now? (Y/n): ") {
+			if err := host.RequestEAC(argv); err != nil {
+				logger.Warn(fmt.Sprintf("Couldn't start Steam: %v", err))
+			} else {
+				runtime, eacErr = waitForEACInstall(host, logger)
+			}
+		}
+	}
+	if eacErr != nil {
+		problems = append(problems, eacErr.Error())
 	} else if digest, known, err := host.VerifyEAC(runtime.Path, config.DefaultVersions.EACRuntimeSHA256Allowlist); err != nil {
 		problems = append(problems, fmt.Sprintf("The Proton EasyAntiCheat Runtime at %q is incomplete (%v). In Steam, verify the integrity of \"Proton EasyAntiCheat Runtime\", or reinstall it with: %s", runtime.Path, err, eacRuntimeInstallCmd))
 	} else {
@@ -312,7 +386,7 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	}
 
 	// Verify a user-supplied launcher now, into a private temporary copy, so a
-	// bad file fails before confirmation. osslsigncode was checked above.
+	// bad file fails before confirmation.
 	var stagedLauncher, launcherTempDir string
 	if opts.LauncherInstaller != "" {
 		var check packages.LauncherCheck
@@ -378,9 +452,14 @@ func freeBytes(path string) (uint64, error) {
 	return st.Bavail * uint64(st.Bsize), nil
 }
 
-// AcquireRuntime downloads, verifies and patches the pinned Proton. It runs
-// only after the user has confirmed the install summary.
+// AcquireRuntime downloads and verifies the pinned umu-launcher and Proton.
+// It runs only after the user has confirmed the install summary.
 func AcquireRuntime(result *PrecheckResult, workdir string, logger *core.Logger) error {
+	umu, err := packages.EnsureUMU(packages.UMUInstallDir(config.DefaultVersions.UMUVersion), logger)
+	if err != nil {
+		return err
+	}
+	umuRunBinary = umu
 	logFile := filepath.Join(workdir, "logs", "installer.log")
 	return packages.EnsureProtonWithLog(result.ProtonPath, result.ProtonVer, result.IsAMDGPU, result.UseFSR41, logFile, logger)
 }

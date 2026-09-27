@@ -6,6 +6,8 @@ type Versions struct {
 	ProtonVer                 string
 	ProtonBaseURL             string
 	ProtonSHA256              string
+	UMUVersion                string
+	UMUZipappSHA256           string
 	EACRuntimeSHA256Allowlist []string
 	LauncherSHA256Allowlist   []string
 	LauncherSigner            string
@@ -22,6 +24,10 @@ var DefaultVersions = Versions{
 	ProtonBaseURL: "https://github.com/CachyOS/proton-cachyos/releases/download",
 	// SHA-256 from the official CachyOS GitHub release asset metadata.
 	ProtonSHA256: "62ff4b2750180723cc00538608fe687e21d1d91a31ef64ce1a7c9f46c3db310b",
+	// umu-launcher's self-contained zipapp (needs only python3), so users
+	// don't have to find a distro package for it.
+	UMUVersion:      "1.4.4",
+	UMUZipappSHA256: "eb590691841f7fad3fc3ad8fd5db4ccb87849fe7948e62b28ece7a4ee48cc851",
 	// Measured from the entitled Steam client install of app 1826330,
 	// depot 1826331, manifest 3310269496439035229 (build 10437216).
 	// Digest covers the six paths in packages.eacRuntimeFiles.

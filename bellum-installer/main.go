@@ -42,7 +42,7 @@ func main() {
 		fmt.Println("Options:")
 		fmt.Println("  --wineprefix PATH     Install location (default: ask, suggesting ~/Games/Bellum)")
 		fmt.Println("  --launcher-installer PATH  Use a local Astarte Launcher installer (still verified)")
-		fmt.Println("  --yes, -y             Accept every default: ~/Games/Bellum, Stable preset, no extras")
+		fmt.Println("  --yes, -y             Accept every default (install to ~/Games/Bellum without asking)")
 		fmt.Println("  --help                Show this help message")
 		fmt.Println()
 		fmt.Println("Examples:")
@@ -109,8 +109,7 @@ func main() {
 		fail(logger, logFile, "Bellum can't be installed yet", err, "Fix the problems listed above, then run the installer again. Nothing on this system was changed.")
 	}
 
-	// Guided choices; pressing Enter keeps the Stable preset and no extras.
-	options := workflow.ChooseInstallOptions(result.GPUCapabilities, logger)
+	logger.Info("Display session: " + workflow.DisplaySession())
 
 	// Print installer summary
 	core.PrintInstallerSummary(
@@ -121,7 +120,7 @@ func main() {
 		result.WINEPREFIX,
 		result.LauncherInstaller,
 		result.GPUType,
-		options.Summary(),
+		workflow.ConfigSummary(result.GPUCapabilities),
 		workdir,
 	)
 
@@ -175,7 +174,6 @@ func main() {
 		IsAMDGPU:        result.IsAMDGPU,
 		Workdir:         workdir,
 		IsFSR41:         result.UseFSR41,
-		Options:         options,
 	}
 
 	if err := workflow.RunConfiguration(configureConfig, logger); err != nil {

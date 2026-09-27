@@ -46,10 +46,10 @@ func TestHostDiscoveryAndDependencyGuidance(t *testing.T) {
 		name, release, manager, family, command string
 		immutable                               bool
 	}{
-		{"arch", "ID=arch\n", "pacman", "arch", "pacman -S umu-launcher wget", false},
-		{"fedora", "ID=fedora\n", "dnf", "fedora", "dnf install osslsigncode wget", false},
-		{"ubuntu", "ID=ubuntu\n", "apt-get", "debian", "apt install osslsigncode wget", false},
-		{"opensuse", "ID=opensuse-tumbleweed\n", "zypper", "opensuse", "zypper install osslsigncode wget", false},
+		{"arch", "ID=arch\n", "pacman", "arch", "pacman -S --needed python util-linux", false},
+		{"fedora", "ID=fedora\n", "dnf", "fedora", "dnf install python3 util-linux", false},
+		{"ubuntu", "ID=ubuntu\n", "apt-get", "debian", "apt install python3 util-linux", false},
+		{"opensuse", "ID=opensuse-tumbleweed\n", "zypper", "opensuse", "zypper install python3 util-linux", false},
 		{"steamos", "ID=steamos\n", "pacman", "unknown", "immutable", true},
 		{"bazzite", "ID=bazzite\n", "", "unknown", "immutable", true},
 		{"unknown", "ID=void\n", "", "unknown", "unknown", false},
@@ -65,8 +65,8 @@ func TestHostDiscoveryAndDependencyGuidance(t *testing.T) {
 			if tt.manager != "" && host.PackageManager != tt.manager {
 				t.Fatalf("manager = %q", host.PackageManager)
 			}
-			msg := MissingDependencyGuidance(host, []string{"umu-run", "osslsigncode", "wget"})
-			if !strings.Contains(msg, tt.command) || !strings.Contains(msg, "umu-run") {
+			msg := MissingDependencyGuidance(host, []string{"python3", "flock"})
+			if !strings.Contains(msg, tt.command) || !strings.Contains(msg, "python3") {
 				t.Fatalf("guidance: %s", msg)
 			}
 		})
@@ -187,23 +187,6 @@ func TestDependencyGuidanceIncludesGlxinfoPackage(t *testing.T) {
 		msg := MissingDependencyGuidance(host, []string{"glxinfo"})
 		if !strings.Contains(msg, wantPkg) {
 			t.Fatalf("%s guidance missing %s: %s", host.PackageFamily(), wantPkg, msg)
-		}
-	}
-}
-
-func TestDependencyGuidanceNotesOutOfRepoPackages(t *testing.T) {
-	cases := []struct{ release, manager, tool, want string }{
-		{"ID=arch\n", "pacman", "osslsigncode", "AUR"},
-		{"ID=arch\n", "pacman", "umu-run", "multilib"},
-		{"ID=ubuntu\n", "apt-get", "umu-run", "umu-launcher/releases"},
-		{"ID=fedora\n", "dnf", "umu-run", "umu-launcher/releases"},
-		{"ID=opensuse-tumbleweed\n", "zypper", "umu-run", "games"},
-	}
-	for _, tt := range cases {
-		host := DetectHost(releaseFiles{release: tt.release}, namedCommands{available: map[string]string{tt.manager: "/usr/bin/" + tt.manager}})
-		msg := MissingDependencyGuidance(host, []string{tt.tool})
-		if !strings.Contains(msg, tt.want) {
-			t.Fatalf("%s/%s guidance missing %q: %s", host.PackageFamily(), tt.tool, tt.want, msg)
 		}
 	}
 }

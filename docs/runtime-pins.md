@@ -13,6 +13,7 @@ artifacts or claims that Bellum has been integration-tested against them.
 | DXVK | Integrated with the pinned Proton runtime; upstream comparison target `3.1.1` | [Upstream release](https://github.com/doitsujin/dxvk/releases/tag/v3.1.1); zlib license. The integrated component's exact version is not independently claimed or overlaid. |
 | vkd3d-proton | Integrated with the pinned Proton runtime; upstream comparison target `3.0.1` | [Upstream release](https://github.com/HansKristian-Work/vkd3d-proton/releases/tag/v3.0.1); LGPL-2.1-or-later. The integrated component's exact version is not independently claimed or overlaid. |
 | dxvk-nvapi | Integrated with the pinned Proton runtime; upstream comparison target `0.9.2` | [Upstream release](https://github.com/jp7677/dxvk-nvapi/releases/tag/v0.9.2); MIT license. The release identifies its source and CI digest. The integrated component's exact version is not independently claimed or overlaid. |
+| umu-launcher | `1.4.4` zipapp, SHA-256 `eb590691841f7fad3fc3ad8fd5db4ccb87849fe7948e62b28ece7a4ee48cc851`; installed to `~/.local/share/bellum/umu/1.4.4` | [umu-launcher release](https://github.com/Open-Wine-Components/umu-launcher/releases/tag/1.4.4), GPL-3.0, downloaded at install time rather than redistributed. Self-contained: needs only python3 3.10+. |
 | winetricks | Bundled in the pinned Proton at `protonfixes/winetricks` (`20260125-next`, SHA-256 `58778c4f0c6fccfd66b0f8abfff4fd4d27b25536f35d699128821a572d29dddb`); run as `umu-run winetricks` | [Winetricks](https://github.com/Winetricks/winetricks), LGPL-2.1-or-later, shipped by the Proton archive. Covered by the Proton archive hash. Bellum no longer vendors its own copy or needs system Wine. After a Proton re-pin, run `BELLUM_PROTON_DIR=<extracted tree> go test ./pkg/workflow -run Verbs` to confirm every verb still exists. |
 | AstarteLauncher installer | Official updater URL; SHA-256 `2c2d17b724bee70883eae782d2ff9ead2533d2d339fd4ee1b9326c60bb3f064a`; Authenticode signer `ASTARTE INDUSTRIES INC.` | Downloaded from the official Astarte release endpoint; SHA-256, signer name, and signature verification are required before use. |
 
@@ -53,7 +54,8 @@ upscaler fixes (CachyOS releases often).
 3. Re-read the new tag's `protonfixes` upscaler patches and update
    [Upscaler behaviour](#upscaler-behaviour-of-the-pinned-proton).
 4. **Launcher.** Download `AstarteLauncher-amd64-installer.exe`, run
-   `osslsigncode verify -in <file>`, confirm the leaf signer, and append its
+   `BELLUM_AUTHENTICODE_SAMPLE=<file> BELLUM_AUTHENTICODE_SIGNER="ASTARTE INDUSTRIES INC." go test ./pkg/packages -run RealWorld`
+   (or `osslsigncode verify -in <file>`), confirm the leaf signer, and append its
    SHA-256 to `LauncherSHA256Allowlist` (keep the older entries).
 5. **EAC runtime.** After Steam updates app `1826330`, compute the digest with
    `packages.EACRuntimeDigest`, or take it from an installer-log warning, run the
@@ -102,8 +104,8 @@ disassembly of `files/lib/wine/x86_64-windows/amdxc64.dll`.
 - **What the installer sets:** `PROTON_FSR4_UPGRADE=1` on an unambiguous
   RDNA4 only (native FP8), and never the RDNA3 workaround there. Other AMD
   GPUs keep `PROTON_FSR4_UPGRADE=0`, which leaves Proton's automatic check in
-  charge, plus the workaround, which is the existing behaviour. This is the
-  same in both presets.
+  charge, plus the workaround, which is the existing behaviour. This is
+  the only AMD configuration.
 - Whether the game gets FSR4 also depends on Bellum using the FidelityFX API
   on D3D12. The game ships D3D12 (Unreal Engine 5); its FSR version is **not
   yet verified**. Check in game with `PROTON_FSR4_INDICATOR=1`, which sets
@@ -119,13 +121,13 @@ downloads newer DLSS DLLs from the same third-party manifest at launch.
 `PROTON_ENABLE_NVAPI`, `PROTON_ENABLE_NGX_UPDATER` and `PROTON_VKD3D_HEAP`
 are not read by this Proton build and are no longer written.
 
-**Performance preset.** It sets `PROTON_VKD3D_LOWLATENCY=1` and
-`PROTON_DXVK_LOWLATENCY=1`, which make Proton install the
-`files/lib/wine/vkd3d-low-latency` and `dxvk-low-latency` builds shipped in
-the pinned archive in place of the standard ones. The DXVK variant also
-disables async shader compilation and tunes compiler threads. Neither is yet
-tested with Bellum and Easy Anti-Cheat, so the preset is labelled
-experimental.
+**One configuration.** There are no presets. The launch settings are the
+most stable set per GPU vendor, as described above. They are the same on X11,
+Wayland and gamescope, because the pinned Proton only uses its Wayland driver
+when `PROTON_ENABLE_WAYLAND` is set, and it enables fsync by itself. The
+low-latency DXVK and vkd3d-proton builds shipped in the archive
+(`PROTON_DXVK_LOWLATENCY`, `PROTON_VKD3D_LOWLATENCY`) stay off until they have
+been tested with Bellum and Easy Anti-Cheat.
 
 **EAC.** Wine's `ntdll.so` in the pinned build reads `PROTON_EAC_RUNTIME`
 directly, which is how `launch_vars.env` points the game at Valve's runtime.

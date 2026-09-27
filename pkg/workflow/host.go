@@ -71,37 +71,22 @@ var familyPackages = map[string]struct {
 	notes    map[string]string
 }{
 	"arch": {
-		install:  "sudo pacman -S",
-		packages: map[string]string{"umu-run": "umu-launcher", "wget": "wget", "glxinfo": "mesa-utils"},
-		notes: map[string]string{
-			"umu-run":      "umu-launcher is in the [multilib] repository, which must be enabled.",
-			"osslsigncode": "osslsigncode is in the AUR (for example: yay -S osslsigncode).",
-		},
+		install:  "sudo pacman -S --needed",
+		packages: map[string]string{"python3": "python", "flock": "util-linux", "glxinfo": "mesa-utils"},
 	},
 	"fedora": {
 		install:  "sudo dnf install",
-		packages: map[string]string{"osslsigncode": "osslsigncode", "wget": "wget", "glxinfo": "glx-utils"},
-		notes: map[string]string{
-			"umu-run": "umu-launcher is not in the Fedora repositories; install it from " + umuReleasesURL + ".",
-		},
+		packages: map[string]string{"python3": "python3", "flock": "util-linux", "glxinfo": "glx-utils"},
 	},
 	"debian": {
 		install:  "sudo apt install",
-		packages: map[string]string{"osslsigncode": "osslsigncode", "wget": "wget", "glxinfo": "mesa-utils"},
-		notes: map[string]string{
-			"umu-run": "umu-launcher is not in the Debian/Ubuntu repositories; install the .deb from " + umuReleasesURL + ".",
-		},
+		packages: map[string]string{"python3": "python3", "flock": "util-linux", "glxinfo": "mesa-utils"},
 	},
 	"opensuse": {
 		install:  "sudo zypper install",
-		packages: map[string]string{"osslsigncode": "osslsigncode", "wget": "wget", "glxinfo": "Mesa-demo-x"},
-		notes: map[string]string{
-			"umu-run": "umu-launcher is in the openSUSE 'games' OBS repository (https://build.opensuse.org/package/show/games/umu-launcher).",
-		},
+		packages: map[string]string{"python3": "python3", "flock": "util-linux", "glxinfo": "Mesa-demo-x"},
 	},
 }
-
-const umuReleasesURL = "https://github.com/Open-Wine-Components/umu-launcher/releases"
 
 // MissingDependencyGuidance names exactly the missing tools and one command
 // that installs the ones the distribution packages. It never invokes a
@@ -116,7 +101,7 @@ func MissingDependencyGuidance(h Host, missing []string) string {
 	}
 	family, ok := familyPackages[h.PackageFamily()]
 	if !ok {
-		return fmt.Sprintf("Missing %s. Distribution/package manager is unknown; install umu-launcher (%s), osslsigncode and wget using your distribution's documented method.", list, umuReleasesURL)
+		return fmt.Sprintf("Missing %s. Distribution/package manager is unknown; install python3 (3.10 or newer) and util-linux (for flock) using your distribution's documented method.", list)
 	}
 	msg := fmt.Sprintf("Missing %s.", list)
 	var pkgs []string
