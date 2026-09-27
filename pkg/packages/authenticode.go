@@ -39,7 +39,7 @@ func verifyLauncherAuthenticodeWith(path, approvedSigner string, roots *x509.Cer
 	}
 	cn, err := SignerCommonName(sig.Signer)
 	if err != nil || cn != approvedSigner {
-		return fmt.Errorf("AstarteLauncher signer does not match approved signer")
+		return fmt.Errorf("AstarteLauncher signer %q does not match approved signer %q", sig.Signer.Subject.String(), approvedSigner)
 	}
 	return nil
 }
