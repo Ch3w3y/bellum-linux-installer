@@ -13,6 +13,10 @@ import (
 )
 
 func main() {
+	if err := core.RequireNonRoot(os.Geteuid()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	// Print banner
 	printInstallerBanner()
 
@@ -112,6 +116,9 @@ func main() {
 
 	// Confirm with user before proceeding
 	if !core.ConfirmProceed() {
+		if result.LauncherTempDir != "" {
+			_ = os.RemoveAll(result.LauncherTempDir)
+		}
 		fmt.Println("Installation cancelled.")
 		os.Exit(0)
 	}
@@ -130,8 +137,12 @@ func main() {
 
 	// Run installation
 	logger.Info("Starting installation phase...")
-	if err := workflow.RunInstaller(installConfig, logger); err != nil {
-		logger.Error(fmt.Sprintf("Installation failed: %v", err))
+	installErr := workflow.RunInstaller(installConfig, logger)
+	if result.LauncherTempDir != "" {
+		_ = os.RemoveAll(result.LauncherTempDir)
+	}
+	if installErr != nil {
+		logger.Error(fmt.Sprintf("Installation failed: %v", installErr))
 		os.Exit(1)
 	}
 

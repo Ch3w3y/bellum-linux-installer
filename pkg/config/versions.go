@@ -11,19 +11,19 @@ type Binaries struct {
 
 // Versions holds all version strings and paths for the installer
 type Versions struct {
-	Workdir          string
-	ProtonVer        string
-	ProtonBaseURL    string
-	ProtonSHA256     string
-	EACRuntimeSHA256 string
-	LauncherSHA256   string
-	LauncherSigner   string
-	WineVer          string
-	WinetricksVer    string
-	DXVKVer          string
-	VKD3DVer         string
-	DXVKNVAPIVer     string
-	Binaries         Binaries
+	Workdir                   string
+	ProtonVer                 string
+	ProtonBaseURL             string
+	ProtonSHA256              string
+	EACRuntimeSHA256Allowlist []string
+	LauncherSHA256Allowlist   []string
+	LauncherSigner            string
+	WineVer                   string
+	WinetricksVer             string
+	DXVKVer                   string
+	VKD3DVer                  string
+	DXVKNVAPIVer              string
+	Binaries                  Binaries
 }
 
 // DefaultVersions contains the version configuration
@@ -36,12 +36,12 @@ var DefaultVersions = Versions{
 	// Measured from the entitled Steam client install of app 1826330,
 	// depot 1826331, manifest 3310269496439035229 (build 10437216).
 	// Digest covers the six paths in packages.eacRuntimeFiles.
-	EACRuntimeSHA256: "4d18c3a5b896c757be9e25bf1004b81568bc4d4e56ddd8d1a2a634eebf12d1f9",
+	EACRuntimeSHA256Allowlist: []string{"4d18c3a5b896c757be9e25bf1004b81568bc4d4e56ddd8d1a2a634eebf12d1f9"},
 	// Official Astarte updater download inspected on 2026-09-26.
-	LauncherSHA256: "2c2d17b724bee70883eae782d2ff9ead2533d2d339fd4ee1b9326c60bb3f064a",
-	LauncherSigner: "ASTARTE INDUSTRIES INC.",
-	WineVer:        "wine-11.8",
-	WinetricksVer:  "20250102-modified",
+	LauncherSHA256Allowlist: []string{"2c2d17b724bee70883eae782d2ff9ead2533d2d339fd4ee1b9326c60bb3f064a"},
+	LauncherSigner:          "ASTARTE INDUSTRIES INC.",
+	WineVer:                 "wine-11.8",
+	WinetricksVer:           "20250102-modified",
 	// The installer uses Proton's integrated components instead of independently
 	// pinned DLL overlays. The Proton archive hash is the reproducible content pin.
 	DXVKVer:      "integrated with pinned Proton",

@@ -33,6 +33,7 @@ GO := go
 GOOS ?= linux
 GOARCH ?= amd64
 CGO_ENABLED := 0
+export GOOS GOARCH CGO_ENABLED
 
 # Reproducible-build switches: stable tool behavior regardless of host env.
 export LC_ALL := C
@@ -46,8 +47,8 @@ PACKAGES_DIR := packages
 # Output files
 INSTALLER_BIN := installer
 UNINSTALLER_BIN := uninstaller
-RELEASE_TARBALL := bellum-installer-linux-amd64-$(VERSION).tar.gz
-RELEASE_STEM := bellum-installer-linux-amd64-$(VERSION)
+RELEASE_TARBALL := bellum-installer-linux-$(GOARCH)-$(VERSION).tar.gz
+RELEASE_STEM := bellum-installer-linux-$(GOARCH)-$(VERSION)
 RELEASE_DIR := dist/$(RELEASE_STEM)
 DIST_DIR := dist
 
@@ -55,7 +56,7 @@ DIST_DIR := dist
 # -X ldflags on config vars when present; empty by default to stay stable.
 GO_LDFLAGS := -s -w
 
-GO_BUILD_FLAGS := -trimpath -mod=readonly -ldflags "$(GO_LDFLAGS)"
+GO_BUILD_FLAGS := -buildvcs=false -trimpath -mod=readonly -ldflags "$(GO_LDFLAGS)"
 
 # Default target
 all: build
@@ -98,13 +99,17 @@ $(UNINSTALLER_BIN):
 #  2. Stage binaries + packages under dist/$(RELEASE_STEM)/.
 #  3. Write MANIFEST (version, files, sizes, sha256) and SHA256SUMS.
 #  4. Pack the tarball with fixed metadata so reruns are byte-identical.
-release: $(INSTALLER_BIN) $(UNINSTALLER_BIN)
+release:
+	@test -z "$$(git status --porcelain --untracked-files=all)" || { echo '[RELEASE] Refusing dirty tree'; exit 1; }
+	@$(MAKE) -B $(INSTALLER_BIN) $(UNINSTALLER_BIN)
 	@echo "[RELEASE] Staging $(RELEASE_STEM)..."
 	@rm -rf $(RELEASE_DIR)
 	@mkdir -p $(RELEASE_DIR)/$(PACKAGES_DIR)
 	@cp $(INSTALLER_BIN) $(RELEASE_DIR)/installer
 	@cp $(UNINSTALLER_BIN) $(RELEASE_DIR)/uninstaller
-	@cp -r $(PACKAGES_DIR)/. $(RELEASE_DIR)/$(PACKAGES_DIR)/
+	@git ls-files -z -- $(PACKAGES_DIR) | while IFS= read -r -d '' file; do \
+		mkdir -p "$(RELEASE_DIR)/$$(dirname "$$file")"; cp "$$file" "$(RELEASE_DIR)/$$file"; \
+	done
 	@echo "[RELEASE] Writing MANIFEST and checksums..."
 	@MANIFEST="$(RELEASE_DIR)/MANIFEST.md"; \
 	{ \
@@ -149,9 +154,12 @@ verify-release:
 	if [ '$(origin VERSION)' = 'file' ] && [ -f $(DIST_DIR)/.last-version ]; then \
 		version=$$(cat $(DIST_DIR)/.last-version); \
 	fi; \
-	release_dir="$(DIST_DIR)/bellum-installer-linux-amd64-$$version"; \
+	release_dir="$(DIST_DIR)/bellum-installer-linux-$(GOARCH)-$$version"; \
 	echo "[VERIFY] Checking checksums in $$release_dir..."; \
-	cd "$$release_dir" && sha256sum --check --strict SHA256SUMS
+	(cd "$$release_dir" && sha256sum --check --strict SHA256SUMS) || exit 1; \
+	tmp=$$(mktemp -d); trap 'rm -rf "$$tmp"' EXIT; \
+	tar -xzf "$(DIST_DIR)/bellum-installer-linux-$(GOARCH)-$$version.tar.gz" -C "$$tmp"; \
+	diff -r "$$release_dir" "$$tmp/bellum-installer-linux-$(GOARCH)-$$version"
 
 # Clean build artifacts
 clean:

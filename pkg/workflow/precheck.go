@@ -21,6 +21,7 @@ type PrecheckResult struct {
 	UseExisting       bool
 	ForceWineVersion  bool
 	LauncherInstaller string
+	LauncherTempDir   string
 	GPUType           string
 	IsAMDGPU          bool
 	GPUCapabilities   core.GPUCapabilities
@@ -79,7 +80,7 @@ func ValidateWINEPREFIX(wineprefixArg string, logger *core.Logger) (string, stri
 
 		// The GUI picker returns the parent path, we need to append "Bellum"
 		selectedPath := strings.TrimSuffix(result.Path, "/")
-		WINEPREFIX = filepath.Join(selectedPath, "Bellum")
+		WINEPREFIX = wineprefixForSelectedDirectory(selectedPath)
 		WINEPREFIXSource = "GUI picker"
 
 		logger.Info(fmt.Sprintf("WINEPREFIX: %s%s%s", core.ColorBoldYellow, WINEPREFIX, core.ColorReset))
@@ -170,7 +171,7 @@ func ValidateWINEPREFIXWithGUI(logger *core.Logger) (string, error) {
 	fmt.Println()
 
 	// The WINEPREFIX will be created at selectedPath/Bellum
-	wineprefixPath := filepath.Join(selectedPath, "Bellum")
+	wineprefixPath := wineprefixForSelectedDirectory(selectedPath)
 
 	// Validate the selected directory
 	valid, errMsg := gui.ValidateDirectory(wineprefixPath, logger)
@@ -181,17 +182,11 @@ func ValidateWINEPREFIXWithGUI(logger *core.Logger) (string, error) {
 	logger.Info("[OK] Directory validation passed")
 	fmt.Println()
 
-	// Create the Bellum directory if it doesn't exist
-	if !isDir(wineprefixPath) {
-		logger.Info(fmt.Sprintf("Creating Bellum directory at %s...", wineprefixPath))
-		if err := os.MkdirAll(wineprefixPath, 0700); err != nil {
-			return "", fmt.Errorf("failed to create Bellum directory %s: %w", wineprefixPath, err)
-		}
-		logger.Info("[OK] Bellum directory created successfully")
-		fmt.Println()
-	}
-
 	return wineprefixPath, nil
+}
+
+func wineprefixForSelectedDirectory(selectedPath string) string {
+	return filepath.Join(selectedPath, "Bellum")
 }
 
 // CheckRequiredWineBinaries checks if all required Wine binaries are present
@@ -322,12 +317,21 @@ func CheckWinetricks(workdir string, logger *core.Logger) error {
 		logger.Error(fmt.Sprintf("winetricks binary not found in PATH and %s not found", winetricksArchive))
 		return fmt.Errorf("winetricks not found")
 	}
-	if err := packages.VerifySHA256(winetricksArchive, packages.WinetricksSHA256); err != nil {
+	privateDir, err := os.MkdirTemp("", "bellum-winetricks-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(privateDir)
+	if err := os.Chmod(privateDir, 0700); err != nil {
+		return err
+	}
+	verifiedArchive := filepath.Join(privateDir, filepath.Base(winetricksArchive))
+	if err := packages.CopyVerifiedSHA256(winetricksArchive, verifiedArchive, packages.WinetricksSHA256); err != nil {
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Extracting %s into packages/.tmp/winetricks/...", winetricksArchive))
-	tmpDir, err := packages.ExtractPackage(winetricksArchive, "winetricks")
+	logger.Info("Extracting verified winetricks copy into a private temporary directory...")
+	tmpDir, err := packages.ExtractPackage(verifiedArchive, "winetricks")
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to extract %s: %v", winetricksArchive, err))
 		return err
@@ -447,11 +451,27 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 		return nil, err
 	}
 
-	// Check launcher installer
+	// Check precheck dependencies and the supplied artifact. The latter check is
+	// followed by a private copy that is independently hashed and verified.
 	if err := CheckLauncherInstaller(launcherInstallerPath, logger); err != nil {
 		return nil, err
 	}
-
+	// Stage and verify a user-supplied launcher before the later install phase.
+	var launcherTempDir string
+	stagedLauncher := launcherInstallerPath
+	if launcherInstallerPath != "" {
+		var stageErr error
+		stagedLauncher, launcherTempDir, stageErr = packages.StageLauncherInstaller(launcherInstallerPath)
+		if stageErr != nil {
+			return nil, stageErr
+		}
+	}
+	keepLauncher := false
+	defer func() {
+		if !keepLauncher && launcherTempDir != "" {
+			_ = os.RemoveAll(launcherTempDir)
+		}
+	}()
 	// Check winetricks
 	if err := CheckWinetricks(".", logger); err != nil {
 		return nil, err
@@ -471,12 +491,13 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 	if info, err := os.Stat(runtimePath); err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("Proton EasyAntiCheat Runtime is required at %q (set PROTON_EAC_RUNTIME to its installed directory)", runtimePath)
 	}
-	if err := packages.VerifyEACRuntime(runtimePath, config.DefaultVersions.EACRuntimeSHA256); err != nil {
+	if err := packages.VerifyEACRuntime(runtimePath, config.DefaultVersions.EACRuntimeSHA256Allowlist); err != nil {
 		return nil, err
 	}
 
 	logger.Info("[OK] All prechecks passed!")
 	fmt.Println()
+	keepLauncher = true
 
 	return &PrecheckResult{
 		WINEPREFIX:        wineprefix,
@@ -487,7 +508,8 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 		ProtonVer:         protonVer,
 		ProtonPath:        protonPath,
 		ForceWineVersion:  forceWineVersion,
-		LauncherInstaller: launcherInstallerPath,
+		LauncherInstaller: stagedLauncher,
+		LauncherTempDir:   launcherTempDir,
 	}, nil
 }
 

@@ -16,13 +16,17 @@ artifacts or claims that Bellum has been integration-tested against them.
 | AstarteLauncher installer | Official updater URL; SHA-256 `2c2d17b724bee70883eae782d2ff9ead2533d2d339fd4ee1b9326c60bb3f064a`; Authenticode signer `ASTARTE INDUSTRIES INC.` | Downloaded from the official Astarte release endpoint; SHA-256, signer name, and signature verification are required before use. |
 
 The SHA-256 pins are content pins for the exact downloaded files. A missing or
-mismatched pin fails closed. The vendored legacy DXVK archive has been removed
+mismatched pin fails closed. Proton is extracted into a sibling staging
+directory, patched, stamped with a content digest and atomically renamed into
+place; a partial or modified tree is re-downloaded rather than reused. The
+launcher is downloaded into a private temporary directory. Installer and
+uninstaller refuse to run as root. The vendored legacy DXVK archive has been removed
 from the release payload; its old installer helper is not part of the runtime
 setup path. The game-directory integrity boundary is enforced separately.
 
 **Pin durability (#9).** The Proton URL is versioned, so its pin is stable. The
 launcher URL is *not* versioned: it always serves Astarte's current installer,
-so the launcher SHA-256 pin will fail every install after the next Astarte
+so the launcher SHA-256 allowlist will fail every install after the next Astarte
 release. The Authenticode signer check is the durable control. The EAC runtime
 digest (see `docs/eac-qa.md`) is tied to one Steam build and fails after Steam
 updates app `1826330`.

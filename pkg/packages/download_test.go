@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
 )
 
@@ -33,6 +34,9 @@ user_settings = {
 	samplePath := filepath.Join(protonDir, "user_settings.sample.py")
 	if err := os.WriteFile(samplePath, []byte(sampleContent), 0644); err != nil {
 		t.Fatalf("Failed to create sample file: %v", err)
+	}
+	if err := writeProtonStamp(protonDir); err != nil {
+		t.Fatal(err)
 	}
 
 	// Create a mock logger
@@ -80,6 +84,9 @@ user_settings = {
 	existingPath := filepath.Join(protonDir, "user_settings.py")
 	if err := os.WriteFile(existingPath, []byte(existingContent), 0644); err != nil {
 		t.Fatalf("Failed to create existing file: %v", err)
+	}
+	if err := writeProtonStamp(protonDir); err != nil {
+		t.Fatal(err)
 	}
 
 	// Create a mock logger
@@ -158,4 +165,47 @@ func findSubstring(s, substr string) bool {
 		}
 	}
 	return false
+}
+
+func TestProtonStampDetectsTamperingAndPartialTrees(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "proton"), []byte("good"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyProtonStamp(root); err == nil {
+		t.Fatal("unstamped partial tree trusted")
+	}
+	if err := writeProtonStamp(root); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyProtonStamp(root); err != nil {
+		t.Fatalf("fresh stamp rejected: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "proton"), []byte("tampered"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := verifyProtonStamp(root); err == nil {
+		t.Fatal("tampered tree trusted")
+	}
+}
+
+func TestProtonStampIncludesVersionAndArchivePin(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "proton"), []byte("tree"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeProtonStamp(root); err != nil {
+		t.Fatal(err)
+	}
+	oldVer, oldPin := config.DefaultVersions.ProtonVer, config.DefaultVersions.ProtonSHA256
+	defer func() { config.DefaultVersions.ProtonVer, config.DefaultVersions.ProtonSHA256 = oldVer, oldPin }()
+	config.DefaultVersions.ProtonSHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if err := verifyProtonStamp(root); err == nil {
+		t.Fatal("cache accepted after Proton pin change")
+	}
+	config.DefaultVersions.ProtonSHA256 = oldPin
+	config.DefaultVersions.ProtonVer = oldVer + "-changed"
+	if err := verifyProtonStamp(root); err == nil {
+		t.Fatal("cache accepted after Proton version change")
+	}
 }

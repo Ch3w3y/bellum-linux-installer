@@ -238,7 +238,6 @@ validated by this project.
 | *EAC runtime digest mismatch* after a Steam update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
 | *SHA-256 mismatch* for the launcher installer after an Astarte update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
 | Install fails at the very end with *unsupported GPU type* (VMs, unrecognised GPUs) | Not supported yet | [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10) |
-| The shortcut and `Bellum` command remain after uninstalling | Remove them manually (see below) | [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10) |
 
 ## Uninstalling
 
@@ -256,12 +255,11 @@ symlinks.
 The prefix holds your launcher login, certificates and WebView2 cookies. Back it
 up first if you need anything in it.
 
-The uninstaller currently removes **only the prefix**. To remove everything
-else:
+The uninstaller removes the prefix, plus the `Bellum` command, desktop
+shortcuts and icon when they point at that prefix. Shared Proton and
+winetricks are kept, because other installs may use them. To remove those too:
 
 ```bash
-rm -f ~/.local/bin/Bellum ~/.local/share/applications/Bellum.desktop ~/Desktop/Bellum.desktop \
-      ~/.local/share/icons/hicolor/256x256/apps/bellum.png
 rm -rf ~/.local/share/bellum/proton     # shared Proton; only if no other Bellum install uses it
 rm -f ~/.local/bin/winetricks           # only if you don't use winetricks elsewhere
 ```
