@@ -45,7 +45,11 @@ func RunConfigurationWithBoundaries(config ConfigureConfig, logger *core.Logger,
 
 	// Update DLL overrides
 	task := core.StartTask("Setting DLL overrides")
-	err := updateDLLsWith(boundaries.MutatePrefix, logger)
+	logFile := ""
+	if config.Workdir != "" {
+		logFile = filepath.Join(config.Workdir, "logs", "installer.log")
+	}
+	err := updateDLLsWith(boundaries.MutatePrefix, logger, logFile)
 	task.Done(err)
 	if err != nil {
 		return err
@@ -77,13 +81,10 @@ func RunConfigurationWithBoundaries(config ConfigureConfig, logger *core.Logger,
 
 // UpdateDLLs sets up DLL overrides for the WINEPREFIX
 func UpdateDLLs(logger *core.Logger) error {
-	return updateDLLsWith(DefaultBoundaries.MutatePrefix, logger)
+	return updateDLLsWith(DefaultBoundaries.MutatePrefix, logger, "")
 }
 
-func updateDLLsWith(mutate func(core.RunMode, []string, *core.Logger, string) error, logger *core.Logger) error {
-
-	logFile := ""
-
+func updateDLLsWith(mutate func(core.RunMode, []string, *core.Logger, string) error, logger *core.Logger, logFile string) error {
 	// System-wide overrides
 	systemDLLs := []string{
 		"d3d12",
