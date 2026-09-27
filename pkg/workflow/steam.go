@@ -116,9 +116,9 @@ func findEACRuntime(home, override string, files FileStore) (EACRuntime, error) 
 		return EACRuntime{Path: path, Manifest: manifest}, nil
 	}
 	if len(libraries) == 0 {
-		return EACRuntime{}, fmt.Errorf("no Steam library was found. Install Steam, sign in, then install the Proton EasyAntiCheat Runtime with: %s", eacRuntimeInstallCmd)
+		return EACRuntime{}, fmt.Errorf("No Steam library was found. Install Steam, sign in, then install the Proton EasyAntiCheat Runtime with: %s", eacRuntimeInstallCmd)
 	}
-	return EACRuntime{}, fmt.Errorf("the Proton EasyAntiCheat Runtime is not installed in any Steam library (%s). Install it with: %s", strings.Join(libraries, ", "), eacRuntimeInstallCmd)
+	return EACRuntime{}, fmt.Errorf("The Proton EasyAntiCheat Runtime is not installed in any Steam library (%s). Install it with: %s", strings.Join(libraries, ", "), eacRuntimeInstallCmd)
 }
 
 // eacRuntimePath is the runtime path written into launch_vars.env: the

@@ -9,7 +9,7 @@ import (
 // PrintInstallerSummary prints the installer summary after prechecks complete.
 // This mirrors the bash version's print_installer_summary function.
 func PrintInstallerSummary(protonVer, winetricksVer, vkd3dVer, dxvkVer,
-	wineprefix, launcherInstallerPath, gpuType string, workdir string) {
+	wineprefix, launcherInstallerPath, gpuType, choices string, workdir string) {
 
 	// Determine launcher summary
 	launcherSummary := "(will be downloaded)"
@@ -31,7 +31,8 @@ func PrintInstallerSummary(protonVer, winetricksVer, vkd3dVer, dxvkVer,
 	// Print paths and configuration
 	fmt.Printf("%s       WINEPREFIX%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, Colorize(wineprefix, ColorBoldYellow), ColorReset, ColorReset)
 	fmt.Printf("%s Bellum Installer%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, launcherSummary, ColorReset, ColorReset)
-	fmt.Printf("\n%s         GPU TYPE%s:   %s%s%s%s\n\n", ColorBoldCyan, ColorReset, ColorBold, gpuType, ColorReset, ColorReset)
+	fmt.Printf("\n%s         GPU TYPE%s:   %s%s%s%s\n", ColorBoldCyan, ColorReset, ColorBold, gpuType, ColorReset, ColorReset)
+	fmt.Printf("%s   Preset, extras%s:   %s%s%s%s\n\n", ColorBoldCyan, ColorReset, ColorBold, choices, ColorReset, ColorReset)
 
 	// Print note
 	fmt.Printf("%sNOTE:%s The game will be installed into the specified WINEPREFIX path.\n", ColorBoldYellow, ColorReset)
@@ -47,6 +48,10 @@ func ConfirmProceed() bool {
 	reader := NewReader()
 
 	fmt.Print("Do you want to proceed with the installation? (Y/n): ")
+	if AssumeYes {
+		fmt.Println("y")
+		return true
+	}
 	input, err := reader.ReadString('\n')
 	if err != nil {
 		fmt.Println("Error reading input:", err)

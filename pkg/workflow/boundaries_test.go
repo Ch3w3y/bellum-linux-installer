@@ -124,7 +124,7 @@ func TestRDNA4EnablesOnlyNativeFSR4DriverComponent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := createLaunchVarsFileAMD("/prefix", "/proton", true, logger, files); err != nil {
+	if err := createLaunchVarsFileAMD("/prefix", "/proton", true, "", logger, files); err != nil {
 		t.Fatal(err)
 	}
 	content := string(files.written["/prefix/launch_vars.env"])
@@ -135,7 +135,7 @@ func TestRDNA4EnablesOnlyNativeFSR4DriverComponent(t *testing.T) {
 
 func TestGenericLaunchVarsAreSourceable(t *testing.T) {
 	files := fakeFileStore{written: map[string][]byte{}}
-	if err := createLaunchVarsFileGeneric("/prefix with spaces", "/proton's build", files); err != nil {
+	if err := createLaunchVarsFileGeneric("/prefix with spaces", "/proton's build", "", files); err != nil {
 		t.Fatal(err)
 	}
 	content := string(files.written["/prefix with spaces/launch_vars.env"])

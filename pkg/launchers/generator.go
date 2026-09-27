@@ -80,11 +80,16 @@ export UMU_LOG=1
 export PROTON_VERB=waitforexitandrun
 if [ "${BELLUM_MANGOHUD:-0}" = 1 ]; then export MANGOHUD=1; fi
 if [ "${BELLUM_VKBASALT:-0}" = 1 ]; then export ENABLE_VKBASALT=1; fi
+cmd=(umu-run "$LAUNCHER_EXE" "$@")
+if [ "${BELLUM_GAMEMODE:-0}" = 1 ]; then
+  command -v gamemoderun >/dev/null || { echo "gamemoderun is required for BELLUM_GAMEMODE=1" >&2; exit 1; }
+  cmd=(gamemoderun "${cmd[@]}")
+fi
 if [ "${BELLUM_GAMESCOPE:-0}" = 1 ]; then
   command -v gamescope >/dev/null || { echo "gamescope is required for BELLUM_GAMESCOPE=1" >&2; exit 1; }
-  exec gamescope -- umu-run "$LAUNCHER_EXE" "$@" >> "$WINEPREFIX/launcher.log" 2>&1
+  cmd=(gamescope -- "${cmd[@]}")
 fi
-exec umu-run "$LAUNCHER_EXE" "$@" >> "$WINEPREFIX/launcher.log" 2>&1
+exec "${cmd[@]}" >> "$WINEPREFIX/launcher.log" 2>&1
 `, shellQuote(filepath.Join(config.Wineprefix, "launch_vars.env")), shellQuote(launcherExe))
 }
 

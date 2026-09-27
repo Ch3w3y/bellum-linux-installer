@@ -77,3 +77,31 @@ jobs:
             -o /tmp/bellum-ci/${{ matrix.arch }}/installer ./bellum-installer
           CGO_ENABLED=0 GOOS=linux GOARCH=${{ matrix.arch }} go build -trimpath \
             -o /tmp/bellum-ci/${{ matrix.arch }}/uninstaller ./bellum-uninstaller
+
+  install-sh:
+    name: install.sh (shellcheck + dry run)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: shellcheck
+        run: shellcheck install.sh
+
+      - name: Dry run against a locally built release
+        run: |
+          make release VERSION=0.0.0-ci
+          (cd dist && sha256sum bellum-installer-linux-amd64-0.0.0-ci.tar.gz > SHA256SUMS)
+          BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-ci
+
+      - name: Dry run refuses a tampered archive
+        run: |
+          printf '%064d  bellum-installer-linux-amd64-0.0.0-ci.tar.gz\n' 0 > dist/SHA256SUMS
+          if BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-ci; then
+            echo "install.sh accepted a checksum mismatch" >&2
+            exit 1
+          fi

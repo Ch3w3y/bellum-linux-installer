@@ -75,8 +75,9 @@ func readRendererWithFallback() (string, error) {
 	)
 }
 
-// readRendererWithFallbackWith makes each probe injectable for tests.
-// glxinfo probe errors that are not "binary missing" abort the chain.
+// readRendererWithFallbackWith makes each probe injectable for tests. Any
+// glxinfo failure (missing binary, no display over SSH or on a TTY) falls
+// through to lspci and then DRM sysfs.
 func readRendererWithFallbackWith(
 	runGlxinfo func() (string, error),
 	runLspci func() (string, bool),
@@ -85,9 +86,6 @@ func readRendererWithFallbackWith(
 	renderer, err := runGlxinfo()
 	if err == nil {
 		return renderer, nil
-	}
-	if !glxinfoMissingError(err) {
-		return "", err
 	}
 	if lspciRenderer, ok := runLspci(); ok {
 		return lspciRenderer, nil
@@ -99,8 +97,15 @@ func readRendererWithFallbackWith(
 	return "", err
 }
 
+// DetectGPUCapabilities never fails: when no probe can identify the GPU (VMs,
+// containers, unusual hardware) it reports GPUUnknown, which gets generic
+// Proton settings.
 func DetectGPUCapabilities() (GPUCapabilities, error) {
-	return DetectGPUCapabilitiesWith(readRendererWithFallback)
+	caps, err := DetectGPUCapabilitiesWith(readRendererWithFallback)
+	if err != nil {
+		return GPUCapabilities{Vendor: GPUUnknown, Renderer: "undetected: " + err.Error()}, nil
+	}
+	return caps, nil
 }
 
 // detectGPUCapabilitiesFromDRM identifies the GPU vendor directly from sysfs

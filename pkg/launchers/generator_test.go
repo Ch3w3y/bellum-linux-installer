@@ -12,7 +12,7 @@ import (
 func TestAllVendorsUseUMUAndEAC(t *testing.T) {
 	for _, vendor := range []string{"AMD", "NVIDIA", "Intel"} {
 		script := generateWrapperContent(LauncherConfig{Wineprefix: "/tmp/Bellum's prefix", Protonpath: "/proton", GPUType: vendor})
-		if !strings.Contains(script, "exec umu-run") || !strings.Contains(script, "PROTON_EAC_RUNTIME") {
+		if !strings.Contains(script, `cmd=(umu-run "$LAUNCHER_EXE" "$@")`) || !strings.Contains(script, `exec "${cmd[@]}"`) || !strings.Contains(script, "PROTON_EAC_RUNTIME") {
 			t.Fatalf("%s wrapper does not require umu and EAC", vendor)
 		}
 		if strings.Contains(script, "wineboot") || strings.Contains(script, "\nwine ") || strings.Contains(script, "cd \"$GAME_DIR\"") {
@@ -102,5 +102,48 @@ func TestUnknownGPUStillGetsLauncherAndDesktopEntry(t *testing.T) {
 		if _, err := os.Stat(path); err != nil {
 			t.Errorf("missing %s: %v", path, err)
 		}
+	}
+}
+
+func TestWrapperChainsGameModeAndGamescope(t *testing.T) {
+	prefix := filepath.Join(t.TempDir(), "Bellum")
+	launcher := filepath.Join(prefix, "drive_c/users/steamuser/AppData/Local/Astarte Industries/Astarte Launcher/AstarteLauncher.exe")
+	proton := t.TempDir()
+	runtimeDir := t.TempDir()
+	bin := t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(launcher), 0700); err != nil {
+		t.Fatal(err)
+	}
+	for path, content := range map[string]string{
+		launcher:                          "stub",
+		filepath.Join(proton, "proton"):   "stub",
+		filepath.Join(bin, "umu-run"):     "#!/bin/sh\n",
+		filepath.Join(bin, "gamemoderun"): "#!/bin/sh\n",
+		filepath.Join(bin, "gamescope"):   "#!/bin/sh\necho \"gamescope $*\"\n",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	vars := "export WINEPREFIX='" + prefix + "'\nexport PROTONPATH='" + proton + "'\nexport PROTON_EAC_RUNTIME='" + runtimeDir + "'\n" +
+		"export BELLUM_GAMEMODE=1\nexport BELLUM_GAMESCOPE=1\n"
+	if err := os.WriteFile(filepath.Join(prefix, "launch_vars.env"), []byte(vars), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	t.Setenv("BASH_ENV", "")
+	wrapper := filepath.Join(t.TempDir(), "Bellum")
+	if err := os.WriteFile(wrapper, []byte(generateWrapperContent(LauncherConfig{Wineprefix: prefix})), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if out, err := exec.Command("bash", wrapper, "--arg").CombinedOutput(); err != nil {
+		t.Fatalf("wrapper failed: %v %s", err, out)
+	}
+	log, err := os.ReadFile(filepath.Join(prefix, "launcher.log"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "gamescope -- gamemoderun umu-run " + launcher + " --arg"; !strings.Contains(string(log), want) {
+		t.Fatalf("launch chain = %q, want %q", log, want)
 	}
 }

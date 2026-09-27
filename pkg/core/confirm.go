@@ -22,10 +22,38 @@ func (s *Scanner) ReadString(delim byte) (string, error) {
 	return s.reader.ReadString(delim)
 }
 
+// AssumeYes answers every default-yes question with its default, for the
+// installer's --yes flag. Destructive default-no questions are unaffected.
+var AssumeYes bool
+
+// Prompt asks for a line of text and returns def when the user just presses
+// Enter, when input is unavailable, or when AssumeYes is set.
+func Prompt(prompt, def string) string {
+	fmt.Print(prompt)
+	if AssumeYes {
+		fmt.Println(def)
+		return def
+	}
+	input, err := bufio.NewReader(os.Stdin).ReadString('\n')
+	input = strings.TrimSpace(input)
+	if err != nil && input == "" {
+		fmt.Println()
+		return def
+	}
+	if input == "" {
+		return def
+	}
+	return input
+}
+
 // AskBool prompts the user for confirmation and returns true if they confirm
 // If the user presses Enter without typing anything, it defaults to true (yes)
 func AskBool(prompt string) bool {
 	fmt.Print(prompt)
+	if AssumeYes {
+		fmt.Println("y")
+		return true
+	}
 
 	reader := bufio.NewReader(os.Stdin)
 	input, err := reader.ReadString('\n')
