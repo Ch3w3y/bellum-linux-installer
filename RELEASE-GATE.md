@@ -13,8 +13,8 @@ required-reviewer protection is absent.
 
 Candidate: 59ae4837bfde5a72e010741cc8792e6b08993f4a
 
-QA: [ ] https://example.invalid/qa-evidence
-EAC: [ ] https://example.invalid/eac-evidence
+QA: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/qa.md
+EAC: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/eac.md
 Security: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/security.md
 Provenance: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/provenance.md
 
