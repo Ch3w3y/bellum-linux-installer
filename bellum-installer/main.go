@@ -2,6 +2,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -26,9 +27,12 @@ func main() {
 	forceWineVersion := flag.Bool("force-wine-version", false, "Deprecated; has no effect")
 	wineprefix := flag.String("wineprefix", "", "Path to WINEPREFIX directory (optional if WINEPREFIX env var is set)")
 	launcherInstaller := flag.String("launcher-installer", "", "Path to launcher installer executable")
+	assumeYes := flag.Bool("yes", false, "Accept every default without asking")
+	flag.BoolVar(assumeYes, "y", false, "Shorthand for --yes")
 	help := flag.Bool("help", false, "Show help message")
 
 	flag.Parse()
+	core.AssumeYes = *assumeYes
 
 	if *help {
 		fmt.Println("Bellum Linux Installer")
@@ -36,13 +40,14 @@ func main() {
 		fmt.Println("Usage: bellum-installer [options]")
 		fmt.Println()
 		fmt.Println("Options:")
-		fmt.Println("  --wineprefix PATH     Path to WINEPREFIX directory (optional if WINEPREFIX env var is set)")
-		fmt.Println("  --launcher-installer PATH  Path to launcher installer executable")
+		fmt.Println("  --wineprefix PATH     Install location (default: ask, suggesting ~/Games/Bellum)")
+		fmt.Println("  --launcher-installer PATH  Use a local Astarte Launcher installer (still verified)")
+		fmt.Println("  --yes, -y             Accept every default: ~/Games/Bellum, Stable preset, no extras")
 		fmt.Println("  --help                Show this help message")
 		fmt.Println()
 		fmt.Println("Examples:")
-		fmt.Println("  bellum-installer --wineprefix /path/to/wineprefix")
-		fmt.Println("  bellum-installer --wineprefix /path/to/wineprefix --launcher-installer /path/to/launcher.exe")
+		fmt.Println("  bellum-installer")
+		fmt.Println("  bellum-installer --wineprefix ~/Games --yes")
 		os.Exit(0)
 	}
 
@@ -78,11 +83,10 @@ func main() {
 		logger.Info(fmt.Sprintf("Install location from environment: %s", core.Colorize(envPrefix, core.ColorBoldYellow)))
 		selectedWINEPREFIX, err = workflow.ResolvePrefixPath(envPrefix)
 	} else {
-		selectedWINEPREFIX, err = workflow.PickWINEPREFIXWithGUI(logger)
+		selectedWINEPREFIX, err = workflow.PromptInstallLocation(logger)
 	}
 	if err != nil {
-		logger.Error(fmt.Sprintf("WINEPREFIX selection failed: %v", err))
-		os.Exit(1)
+		fail(logger, logFile, "Couldn't choose an install location", err, "Run the installer again and pick a folder you own, or pass --wineprefix ~/Games.")
 	}
 
 	if *forceWineVersion {
@@ -102,10 +106,11 @@ func main() {
 		Workdir:           workdir,
 	}, logger)
 	if err != nil {
-		logger.Error(fmt.Sprintf("Prechecks failed: %v", err))
-		fmt.Printf("Full log: %s\n", logFile)
-		os.Exit(1)
+		fail(logger, logFile, "Bellum can't be installed yet", err, "Fix the problems listed above, then run the installer again. Nothing on this system was changed.")
 	}
+
+	// Guided choices; pressing Enter keeps the Stable preset and no extras.
+	options := workflow.ChooseInstallOptions(result.GPUCapabilities, logger)
 
 	// Print installer summary
 	core.PrintInstallerSummary(
@@ -116,6 +121,7 @@ func main() {
 		result.WINEPREFIX,
 		result.LauncherInstaller,
 		result.GPUType,
+		options.Summary(),
 		workdir,
 	)
 
@@ -147,9 +153,7 @@ func main() {
 		if result.LauncherTempDir != "" {
 			_ = os.RemoveAll(result.LauncherTempDir)
 		}
-		logger.Error(fmt.Sprintf("Proton setup failed: %v", err))
-		fmt.Printf("Full log: %s\n", logFile)
-		os.Exit(1)
+		fail(logger, logFile, "Downloading or unpacking Proton failed", err, "Check your internet connection and free space in ~/.local/share, then run the installer again. It picks up where it left off.")
 	}
 
 	// Run installation
@@ -159,8 +163,7 @@ func main() {
 		_ = os.RemoveAll(result.LauncherTempDir)
 	}
 	if installErr != nil {
-		logger.Error(fmt.Sprintf("Installation failed: %v", installErr))
-		os.Exit(1)
+		fail(logger, logFile, "Setting up the Bellum prefix failed", installErr, "The unfinished install was cleaned up. Run the installer again to retry; if it fails at the same step, include the log below when asking for help.")
 	}
 
 	// Run configuration
@@ -172,18 +175,17 @@ func main() {
 		IsAMDGPU:        result.IsAMDGPU,
 		Workdir:         workdir,
 		IsFSR41:         result.UseFSR41,
+		Options:         options,
 	}
 
 	if err := workflow.RunConfiguration(configureConfig, logger); err != nil {
-		logger.Error(fmt.Sprintf("Configuration failed: %v", err))
 		if rmErr := workflow.DiscardIncompleteInstall(result.WINEPREFIX, logger); rmErr != nil {
 			logger.Warn(fmt.Sprintf("Could not remove the unfinished install; re-running the installer will offer to start over: %v", rmErr))
 		}
-		os.Exit(1)
+		fail(logger, logFile, "Writing Bellum's launch settings failed", err, "Run the installer again to retry.")
 	}
 	if err := workflow.MarkInstallComplete(result.WINEPREFIX); err != nil {
-		logger.Error(fmt.Sprintf("Failed to mark the install as complete: %v", err))
-		os.Exit(1)
+		fail(logger, logFile, "Couldn't mark the install as finished", err, "Check that you can write to "+result.WINEPREFIX+", then run the installer again.")
 	}
 
 	logger.Info("Installation complete!")
@@ -210,4 +212,18 @@ func printInstallerBanner() {
 ======================================================================================`
 	fmt.Printf("%s%s%s\n", core.ColorBoldBlue, banner, core.ColorReset)
 	fmt.Println()
+}
+
+// fail reports a fatal error in plain language: what went wrong, the detail,
+// what to do next and where the full log is. It exits the process.
+func fail(logger *core.Logger, logFile, what string, err error, fix string) {
+	fmt.Println()
+	logger.Error(what + ".")
+	var precheckErr *workflow.PrecheckError
+	if !errors.As(err, &precheckErr) {
+		logger.Error(fmt.Sprintf("Details: %v", err))
+	}
+	fmt.Printf("%sWhat to do:%s %s\n", core.ColorBoldYellow, core.ColorReset, fix)
+	fmt.Printf("Full log: %s\n", logFile)
+	os.Exit(1)
 }

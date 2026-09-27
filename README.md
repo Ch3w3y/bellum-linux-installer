@@ -14,31 +14,45 @@ Installer](https://github.com/joepaji/bellum-linux-installer). Joheb created the
 foundational installer and continues to own the original project. See
 [Credits](CREDITS.md) for the project lineage and upstream update policy.
 
+## Install
+
+Open a terminal and paste:
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh)
+```
+
+Then press **Enter** at each question to accept the defaults. The installer:
+
+1. downloads the latest release from this repository and checks its checksum;
+2. checks your system and, if something is missing, shows the exact command
+   for your distro and asks before running it (it never uses `sudo` on its
+   own);
+3. asks where to install (default `~/Games/Bellum`), which preset to use
+   (**Stable** by default, or **Performance** if your GPU has vendor extras),
+   and whether to turn on MangoHud, GameMode or gamescope if you have them;
+4. shows one summary and asks you to confirm. **Nothing is downloaded or
+   changed before that.**
+
+Then the Astarte Launcher installer opens; follow its prompts. When it's done
+you get a desktop shortcut, an app-menu entry and a `Bellum` command. If the
+install fails or is interrupted, just run the same command again.
+
+You need **Steam** with the free **Proton EasyAntiCheat Runtime** installed
+(`steam steam://install/1826330`). See [Before you start](#before-you-start).
+
+> ⚠️ **The one-liner needs a release built from the current `main`.** The last
+> published release, [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1)
+> (2026-05-13), predates it and uses a different layout. Until the next
+> release is published, [build from `main`](#advanced-build-from-main-or-use-a-tarball).
+
 ## Project status (2026-09-27)
 
 | | |
 | --- | --- |
 | **Easy Anti-Cheat on Linux** | ✅ Astarte has enabled Proton/Linux EAC support for Bellum. |
-| **Latest published release** | ⚠️ [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1) (2026-05-13) **predates** the September hardening on `main`: pinned and verified downloads, the EAC-safe launcher, and ownership-checked uninstall. A new release is pending; until then, [build from `main`](#install-today-build-from-main). |
-| **One-command install** | 🚧 Planned. See [#6](https://github.com/Ch3w3y/bellum-linux-installer/issues/6). Not available yet. |
+| **One-command install** | ✅ `install.sh` on `main`; it works once the next release is published. |
 | **Known blockers** | None open. See [Known issues](#known-issues-and-workarounds). |
-
-## Where we're going
-
-This project is for people coming to Linux **from Windows**. The target
-experience ([#6](https://github.com/Ch3w3y/bellum-linux-installer/issues/6)) is a
-single command:
-
-```bash
-# Planned: this script does not exist yet.
-bash <(curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh)
-```
-
-It will check your system, tell you the one command to install anything that's
-missing, and offer a **Stable** or **Performance** preset plus optional extras
-(MangoHud, gamescope). You confirm once, and it finishes with a working game.
-Nothing is changed on your system before you confirm, and a failed or
-interrupted install can simply be re-run.
 
 ## How it works
 
@@ -107,9 +121,10 @@ distro. It never runs your package manager for you.
 You also need the **Proton EasyAntiCheat Runtime** from Steam (free, no game
 purchase needed): run `steam steam://install/1826330`.
 
-## Install today (build from `main`)
+## Advanced: build from `main` or use a tarball
 
-Until a new release is published, build the current code. You need
+Use this if you'd rather not pipe a script into bash, or until the next
+release is published. To build the current code you need
 [Go 1.26+](https://go.dev/dl/), `git` and `make`.
 
 ```bash
@@ -127,20 +142,24 @@ Check that you're on **this** repository's Releases page; the original
 
 ### What happens during install
 
-1. **Choose where to install.** A folder picker opens. Pick the **parent**
-   folder: the installer creates a `Bellum` folder inside it (picking `~/Games`
+1. **Choose where to install.** Press Enter for `~/Games/Bellum`, type another
+   folder, or type `b` to open a folder picker. A `Bellum` folder is created
+   inside the folder you give unless it already ends in `Bellum` (so `~/Games`
    gives `~/Games/Bellum`).
 2. **Prechecks.** The installer detects your GPU and checks tools, the EAC
    runtime and free disk space. Nothing is downloaded or changed yet, and every
    problem is reported together.
-3. **Confirm the summary.**
-4. **Downloads and prefix setup.** It downloads and verifies Proton (several
+3. **Preset and extras.** Stable (default) or, if your GPU has vendor extras,
+   Performance. Then MangoHud, GameMode and gamescope, if they're installed.
+   All of these can be changed later in `<prefix>/launch_vars.env`.
+4. **Confirm the summary.**
+5. **Downloads and prefix setup.** It downloads and verifies Proton (several
    hundred MB, one time only), creates the prefix and installs runtime
    components (Visual C++, .NET 9 and others) through Proton. This takes a
    while.
-5. **The Astarte Launcher installer appears.** Follow its prompts. Don't close
+6. **The Astarte Launcher installer appears.** Follow its prompts. Don't close
    the terminal.
-6. **Finishing steps.** The installer writes the launcher wrapper, desktop
+7. **Finishing steps.** The installer writes the launcher wrapper, desktop
    shortcut and launch settings. Wait for *"Installation completed
    successfully!"*
 
@@ -152,7 +171,8 @@ Check that you're on **this** repository's Releases page; the original
 ### Advanced options
 
 ```bash
-./installer --wineprefix ~/Games          # skip the picker (creates ~/Games/Bellum)
+./installer --yes                          # accept every default: ~/Games/Bellum, Stable, no extras
+./installer --wineprefix ~/Games          # skip the location question (creates ~/Games/Bellum)
 WINEPREFIX=~/Games/Bellum ./installer     # same thing, via the environment
 ./installer --launcher-installer ./AstarteLauncher-amd64-installer.exe  # use a local copy (still verified)
 ./installer --help
@@ -180,17 +200,20 @@ After installing, launch Bellum any of these ways:
 The Astarte Launcher must stay open while you play, because it authenticates
 the game. A second launch while Bellum is already running is ignored.
 
-**Optional extras.** Add any of these lines to `<prefix>/launch_vars.env`, or
-put them before the `Bellum` command:
+**Optional extras.** The installer writes your choices to
+`<prefix>/launch_vars.env`. Change them there, setting any of these to `1`:
 
 ```bash
 export BELLUM_MANGOHUD=1   # performance overlay (needs mangohud)
+export BELLUM_GAMEMODE=1   # Feral GameMode while playing (needs gamemode)
 export BELLUM_GAMESCOPE=1  # run inside gamescope (needs gamescope)
 export BELLUM_VKBASALT=1   # vkBasalt post-processing (needs vkbasalt)
 ```
 
 **Logs.** The game and launcher log to `<prefix>/launcher.log`. Installer logs
-are in `logs/` next to the `installer` binary.
+are in `logs/` next to the `installer` binary; with the one-liner that's
+`~/.local/share/bellum-installer/<version>/logs/installer.log`. Every error
+message ends with the log's exact path.
 
 ## Graphics and upscalers
 
@@ -200,14 +223,16 @@ are in `logs/` next to the `installer` binary.
   the process Easy Anti-Cheat protects.
 - DXVK, vkd3d-proton and dxvk-nvapi come from the pinned Proton-CachyOS build.
   See [runtime pins](docs/runtime-pins.md).
-- **NVIDIA (RTX and GTX 16-series):** NVAPI is enabled and DLSS uses the real
-  driver libraries (`PROTON_NVIDIA_LIBS=1`). Older NVIDIA cards get the generic
-  settings. Proton's DLSS DLL upgrade and the NGX updater are
-  off. GTX 16-series cards have no DLSS.
+- **NVIDIA (RTX and GTX 16-series):** the **Performance** preset enables NVAPI
+  and the real driver libraries (`PROTON_ENABLE_NVAPI=1`,
+  `PROTON_NVIDIA_LIBS=1`), so the game can offer DLSS. **Stable** leaves them
+  off. Older NVIDIA cards get the generic settings. Proton's DLSS DLL upgrade
+  (which downloads DLLs at launch) and the NGX updater are always off. GTX
+  16-series cards have no DLSS.
 - **AMD:** the pinned Proton build automatically provides AMD's FSR4 driver
   component on supported RDNA2–RDNA4 discrete GPUs. This is Proton's built-in
-  behaviour, not something the installer does. On RDNA4 the installer also sets
-  Proton's `PROTON_FSR4_UPGRADE=1` flag.
+  behaviour, not something the installer does. On RDNA4 the **Performance**
+  preset also sets Proton's `PROTON_FSR4_UPGRADE=1` flag.
 - **Intel and other GPUs:** generic Proton settings.
 
 ### NVIDIA RTX 50-series (Blackwell) driver note

@@ -164,6 +164,14 @@ func PickWINEPREFIXWithGUI(logger *core.Logger) (string, error) {
 	return ResolvePrefixPath(result.Path)
 }
 
+// PrecheckError lists every problem the read-only prechecks found. Each
+// problem has already been logged on its own line.
+type PrecheckError struct{ Problems []string }
+
+func (e *PrecheckError) Error() string {
+	return fmt.Sprintf("%d precheck problem(s); nothing was changed on this system. Fix them and run the installer again: %s", len(e.Problems), strings.Join(e.Problems, " | "))
+}
+
 // Free-space floors. The prefix gets .NET, the VC++ runtime and WebView2
 // before the launcher downloads the game itself; Proton unpacks to roughly
 // 1.5 GB; the compressed archive is staged in the temporary directory.
@@ -300,7 +308,7 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 		for i, problem := range problems {
 			logger.Error(fmt.Sprintf("  %d. %s", i+1, problem))
 		}
-		return nil, fmt.Errorf("%d precheck problem(s); nothing was changed on this system. Fix them and run the installer again: %s", len(problems), strings.Join(problems, " | "))
+		return nil, &PrecheckError{Problems: problems}
 	}
 
 	// Verify a user-supplied launcher now, into a private temporary copy, so a

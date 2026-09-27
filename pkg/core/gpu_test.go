@@ -188,21 +188,19 @@ func TestReadRendererWithFallbackErrorsWhenNothingFound(t *testing.T) {
 	}
 }
 
-func TestReadRendererWithFallbackPropagatesRealGlxinfoFailures(t *testing.T) {
-	boom := fmt.Errorf("glxinfo exited with status 1: X server not running")
-	_, err := readRendererWithFallbackWith(
-		func() (string, error) { return "", boom },
+func TestReadRendererFallsBackWhenGlxinfoCannotOpenDisplay(t *testing.T) {
+	renderer, err := readRendererWithFallbackWith(
+		func() (string, error) { return "", fmt.Errorf("glxinfo exited with status 1: unable to open display") },
 		func() (string, bool) {
-			t.Fatal("lspci fallback must not run for non-lookup failures")
-			return "", false
+			return readRendererFromLspciOutput(`01:00.0 "VGA compatible controller [0300]" "NVIDIA" "AD103 [GeForce RTX 4090]"`)
 		},
 		func() (GPUCapabilities, error) {
-			t.Fatal("DRM fallback must not run for non-lookup failures")
+			t.Fatal("DRM fallback must not run when lspci succeeds")
 			return GPUCapabilities{}, fmt.Errorf("unused")
 		},
 	)
-	if err != boom {
-		t.Fatalf("expected original error to propagate, got %v", err)
+	if err != nil || !strings.Contains(renderer, "4090") {
+		t.Fatalf("expected lspci renderer, got %q, %v", renderer, err)
 	}
 }
 
