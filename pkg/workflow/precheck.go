@@ -278,6 +278,13 @@ func checkLauncherInstaller(launcherInstallerPath string, logger *core.Logger, f
 	if config.DefaultVersions.LauncherSigner == "" {
 		return fmt.Errorf("AstarteLauncher Authenticode signer pin is required")
 	}
+	// Launcher verification shells out to osslsigncode; fail here rather than
+	// after the prefix has been created.
+	if DiscoverExecutable("osslsigncode", commands) == "" {
+		guidance := MissingDependencyGuidance(DetectHost(files, commands), []string{"osslsigncode"})
+		logger.Error(guidance)
+		return fmt.Errorf("osslsigncode not found: %s", guidance)
+	}
 	if launcherInstallerPath != "" {
 		if _, err := files.Stat(launcherInstallerPath); os.IsNotExist(err) {
 			logger.Error(fmt.Sprintf("Launcher installer not found at: %s", launcherInstallerPath))

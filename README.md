@@ -85,14 +85,14 @@ export PROTON_EAC_RUNTIME="$HOME/.var/app/com.valvesoftware.Steam/.local/share/S
 
 ### 2. Install host packages
 
-The installer checks for these tools and prints install hints, but it never runs
-your package manager for you.
+The installer checks for these tools before it starts and prints the install
+command for your distro, but it never runs your package manager for you.
 
 | Tool | Why | Required? |
 | --- | --- | --- |
 | `wine` | Prefix bootstrap commands | Yes. The installer currently requires **exactly Wine 11.8**, see below |
 | `umu-run` (umu-launcher) | Runs the launcher and game inside Proton's runtime container | Yes |
-| `osslsigncode` | Verifies the Astarte Launcher's signature | Yes. This is **not** checked up front yet ([#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8)), so install it first |
+| `osslsigncode` | Verifies the Astarte Launcher's signature | Yes |
 | `wget` | Downloads Proton and the launcher | Yes |
 | `glxinfo` | Better GPU detection (falls back to `lspci` or sysfs without it) | Recommended |
 | `zenity` or `kdialog` | Graphical folder picker (falls back to a terminal prompt) | Optional |
@@ -230,7 +230,6 @@ validated by this project.
 | --- | --- | --- |
 | After a failed install, re-running says the `Bellum` folder *already exists* | Run `./uninstaller --wineprefix <path>/Bellum`. If the uninstaller refuses because the prefix is incomplete, check it's the right folder and delete it manually, then re-run the installer | [#7](https://github.com/Ch3w3y/bellum-linux-installer/issues/7) |
 | *Wine version mismatch* | Use `--force-wine-version` | [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8) |
-| *AstarteLauncher Authenticode verification failed* | Install `osslsigncode` and re-run | [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8) |
 | *EAC runtime digest mismatch* after a Steam update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
 | *SHA-256 mismatch* for the launcher installer after an Astarte update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
 | Install fails at the very end with *unsupported GPU type* (VMs, unrecognised GPUs) | Not supported yet | [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10) |

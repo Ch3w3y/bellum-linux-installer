@@ -63,25 +63,64 @@ func (h Host) PackageFamily() string {
 	return "unknown"
 }
 
+// familyPackages lists the distribution-repository packages that provide the
+// host tools, plus notes for tools a family does not ship in its main repos.
+var familyPackages = map[string]struct {
+	install, packages string
+	notes             map[string]string
+}{
+	"arch": {
+		install:  "sudo pacman -S",
+		packages: "wine umu-launcher wget mesa-utils",
+		notes: map[string]string{
+			"umu-run":      "umu-launcher is in the [multilib] repository, which must be enabled.",
+			"osslsigncode": "osslsigncode is in the AUR (for example: yay -S osslsigncode).",
+		},
+	},
+	"fedora": {
+		install:  "sudo dnf install",
+		packages: "wine osslsigncode wget glx-utils",
+		notes: map[string]string{
+			"umu-run": "umu-launcher is not in the Fedora repositories; install it from " + umuReleasesURL + ".",
+		},
+	},
+	"debian": {
+		install:  "sudo apt install",
+		packages: "wine osslsigncode wget mesa-utils",
+		notes: map[string]string{
+			"umu-run": "umu-launcher is not in the Debian/Ubuntu repositories; install the .deb from " + umuReleasesURL + ".",
+		},
+	},
+	"opensuse": {
+		install:  "sudo zypper install",
+		packages: "wine osslsigncode wget Mesa-demo-x",
+		notes: map[string]string{
+			"umu-run": "umu-launcher is in the openSUSE 'games' OBS repository (https://build.opensuse.org/package/show/games/umu-launcher).",
+		},
+	},
+}
+
+const umuReleasesURL = "https://github.com/Open-Wine-Components/umu-launcher/releases"
+
 // MissingDependencyGuidance returns concrete package names and user actions.
 // It never invokes a package manager; immutable systems are strictly guidance-only.
 func MissingDependencyGuidance(h Host, missing []string) string {
 	if len(missing) == 0 {
 		return ""
 	}
-	pkgs := map[string]string{
-		"arch":     "wine winetricks umu-launcher wget mesa-demos",
-		"fedora":   "wine winetricks umu-launcher wget glx-utils",
-		"debian":   "wine winetricks umu-launcher wget mesa-utils",
-		"opensuse": "wine winetricks umu-launcher wget Mesa-demo-x",
-	}
-	pkg := pkgs[h.PackageFamily()]
+	list := strings.Join(missing, ", ")
 	if h.Immutable {
-		return fmt.Sprintf("Missing %s. This host (%s) is immutable; install dependencies through its supported host or container workflow. Bellum will not modify it automatically.", strings.Join(missing, ", "), h.ID)
+		return fmt.Sprintf("Missing %s. This host (%s) is immutable; install dependencies through its supported host or container workflow. Bellum will not modify it automatically.", list, h.ID)
 	}
-	if h.PackageManager == "" || h.PackageFamily() == "unknown" {
-		return fmt.Sprintf("Missing %s. Distribution/package manager is unknown; install the required tools (%s) using your distribution's documented method.", strings.Join(missing, ", "), pkg)
+	family, ok := familyPackages[h.PackageFamily()]
+	if !ok {
+		return fmt.Sprintf("Missing %s. Distribution/package manager is unknown; install wine, umu-launcher (%s), osslsigncode, wget, and glxinfo using your distribution's documented method.", list, umuReleasesURL)
 	}
-	packages := map[string]string{"arch": "pacman -S", "fedora": "dnf install", "debian": "apt install", "opensuse": "zypper install"}[h.PackageFamily()]
-	return fmt.Sprintf("Missing %s. Install required host packages (%s) with: %s %s", strings.Join(missing, ", "), pkg, packages, pkg)
+	msg := fmt.Sprintf("Missing %s. Install required host packages with: %s %s", list, family.install, family.packages)
+	for _, tool := range missing {
+		if note := family.notes[tool]; note != "" {
+			msg += " " + note
+		}
+	}
+	return msg
 }

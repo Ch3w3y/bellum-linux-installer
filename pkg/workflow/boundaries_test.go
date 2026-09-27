@@ -182,7 +182,7 @@ func TestFileBoundaryRejectsWritesUnderGameInstallTree(t *testing.T) {
 
 func TestDependencyGuidanceIncludesGlxinfoPackage(t *testing.T) {
 	cases := map[string]string{
-		"arch":     "mesa-demos",
+		"arch":     "mesa-utils",
 		"fedora":   "glx-utils",
 		"debian":   "mesa-utils",
 		"opensuse": "Mesa-demo-x",
@@ -198,5 +198,39 @@ func TestDependencyGuidanceIncludesGlxinfoPackage(t *testing.T) {
 		if !strings.Contains(msg, wantPkg) {
 			t.Fatalf("%s guidance missing %s: %s", host.PackageFamily(), wantPkg, msg)
 		}
+	}
+}
+
+func TestDependencyGuidanceNotesOutOfRepoPackages(t *testing.T) {
+	cases := []struct{ release, manager, tool, want string }{
+		{"ID=arch\n", "pacman", "osslsigncode", "AUR"},
+		{"ID=arch\n", "pacman", "umu-run", "multilib"},
+		{"ID=ubuntu\n", "apt-get", "umu-run", "umu-launcher/releases"},
+		{"ID=fedora\n", "dnf", "umu-run", "umu-launcher/releases"},
+		{"ID=opensuse-tumbleweed\n", "zypper", "umu-run", "games"},
+	}
+	for _, tt := range cases {
+		host := DetectHost(releaseFiles{release: tt.release}, namedCommands{available: map[string]string{tt.manager: "/usr/bin/" + tt.manager}})
+		msg := MissingDependencyGuidance(host, []string{tt.tool})
+		if !strings.Contains(msg, tt.want) {
+			t.Fatalf("%s/%s guidance missing %q: %s", host.PackageFamily(), tt.tool, tt.want, msg)
+		}
+	}
+}
+
+func TestLauncherPrecheckRequiresOsslsigncode(t *testing.T) {
+	logger, err := core.NewLogger("")
+	if err != nil {
+		t.Fatal(err)
+	}
+	files := releaseFiles{release: "ID=fedora\n"}
+	missing := namedCommands{available: map[string]string{"wget": "/usr/bin/wget", "dnf": "/usr/bin/dnf"}}
+	err = checkLauncherInstaller("", logger, files, missing)
+	if err == nil || !strings.Contains(err.Error(), "osslsigncode") {
+		t.Fatalf("expected osslsigncode precheck failure, got %v", err)
+	}
+	present := namedCommands{available: map[string]string{"wget": "/usr/bin/wget", "osslsigncode": "/usr/bin/osslsigncode"}}
+	if err := checkLauncherInstaller("", logger, files, present); err != nil {
+		t.Fatalf("unexpected error with osslsigncode present: %v", err)
 	}
 }
