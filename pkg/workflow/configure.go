@@ -150,7 +150,6 @@ export WINEESYNC="1"
 export WINEFSYNC="1"
 export DXVK_NVAPI="1"
 export DXVK_ENABLE_NVAPI="1"
-export DXVK_NVAPIHACK="0"
 export WINE_LARGE_ADDRESS_AWARE="1"
 export CUDA_DISABLE_PERF_BOOST="1"
 ` + extras
@@ -197,6 +196,9 @@ export PROTON_EAC_RUNTIME=` + quoteShellEnv(eacRuntimePath()) + `
 export WINEPREFIX=` + quoteShellEnv(wineprefix) + `
 export PROTON_FSR4_UPGRADE="` + fsr4Upgrade + `"
 export STEAM_COMPAT_DATA_PATH=` + quoteShellEnv(wineprefix) + `
+export PROTON_DXVK_D3D8="1"
+export PROTON_DLSS_UPGRADE="0"
+export MALLOC_ARENA_MAX="1"
 export VKD3D_CONFIG="descriptor_heap"
 export WINE_LARGE_ADDRESS_AWARE="1"
 ` + dxilWorkaround + extras
@@ -219,7 +221,8 @@ func createLaunchVarsFileGeneric(wineprefix, protonpath, extras string, files Fi
 		"export PROTON_EAC_RUNTIME=" + quoteShellEnv(eacRuntimePath()) + "\n" +
 		"export WINEPREFIX=" + quoteShellEnv(wineprefix) + "\n" +
 		"export STEAM_COMPAT_DATA_PATH=" + quoteShellEnv(wineprefix) + "\n" +
-		"export PROTON_FSR4_UPGRADE=0\nexport PROTON_DLSS_UPGRADE=0\n" +
+		"export PROTON_FSR4_UPGRADE=0\nexport PROTON_DLSS_UPGRADE=0\nexport PROTON_DXVK_D3D8=1\n" +
+		"export MALLOC_ARENA_MAX=1\nexport VKD3D_CONFIG=descriptor_heap\nexport WINE_LARGE_ADDRESS_AWARE=1\n" +
 		extras
 	return files.WriteFile(filepath.Join(wineprefix, "launch_vars.env"), []byte(content), 0600)
 }

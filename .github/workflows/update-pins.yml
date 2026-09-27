@@ -1,0 +1,94 @@
+# Keeps the runtime pins (Proton-CachyOS, umu-launcher, known Astarte
+# Launcher builds) current. Every candidate is downloaded and checked by
+# tools/pinupdate: SHA-256 against GitHub's published digest, the Proton
+# contract in pkg/workflow/contract.go, and the launcher's Authenticode
+# signature. Passing updates go to one rolling pull request; failures open
+# (or update) an issue and leave the old pins in place.
+#
+# PRs opened with the default GITHUB_TOKEN don't trigger other workflows, so
+# this job runs the full check suite itself. Add a PIN_UPDATE_TOKEN secret
+# (fine-grained token: contents and pull requests, read/write) to also get
+# the normal CI run on the PR. "Allow GitHub Actions to create pull
+# requests" must be enabled in the repository's Actions settings.
+name: Update runtime pins
+
+on:
+  schedule:
+    - cron: '17 5 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+  issues: write
+
+concurrency:
+  group: update-pins
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          token: ${{ secrets.PIN_UPDATE_TOKEN || github.token }}
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Check upstream releases
+        id: pins
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          go build -o "$RUNNER_TEMP/pinupdate" ./tools/pinupdate
+          set +e
+          "$RUNNER_TEMP/pinupdate" -summary "$RUNNER_TEMP/pins.md"
+          echo "status=$?" >> "$GITHUB_OUTPUT"
+          cat "$RUNNER_TEMP/pins.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Commit the new pins
+        if: steps.pins.outputs.changed == 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git checkout -B automation/update-pins
+          git commit -am 'Update runtime pins' -m "$(cat "$RUNNER_TEMP/pins.md")"
+
+      - name: Run the checks against the new pins
+        if: steps.pins.outputs.changed == 'true'
+        run: |
+          make check
+          make release VERSION=0.0.0-pins
+          (cd dist && sha256sum bellum-installer-linux-amd64-0.0.0-pins.tar.gz > SHA256SUMS)
+          BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-pins
+          rm -rf dist
+
+      - name: Open or update the pin pull request
+        if: steps.pins.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.PIN_UPDATE_TOKEN || github.token }}
+        run: |
+          branch=automation/update-pins
+          git push --force origin "$branch"
+          if [ "$(gh pr view "$branch" --json state --jq .state 2>/dev/null)" = OPEN ]; then
+            gh pr edit "$branch" --body-file "$RUNNER_TEMP/pins.md"
+          else
+            gh pr create --base main --head "$branch" --title 'Update runtime pins' --body-file "$RUNNER_TEMP/pins.md"
+          fi
+
+      - name: Report failed checks
+        if: steps.pins.outputs.failed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          title='Runtime pin update needs attention'
+          existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
+          if [ -n "$existing" ]; then
+            gh issue comment "$existing" --body-file "$RUNNER_TEMP/pins.md"
+          else
+            gh issue create --title "$title" --body-file "$RUNNER_TEMP/pins.md"
+          fi

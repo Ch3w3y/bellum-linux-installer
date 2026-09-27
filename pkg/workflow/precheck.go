@@ -19,6 +19,9 @@ import (
 type PrecheckResult struct {
 	WINEPREFIX        string
 	ReplaceIncomplete bool
+	// Update is set when WINEPREFIX already holds a finished install that
+	// the user chose to update to the current pins.
+	Update            bool
 	LauncherInstaller string
 	LauncherTempDir   string
 	GPUType           string
@@ -90,12 +93,13 @@ func inspectPrefix(prefix string, files FileStore) (prefixState, error) {
 // without creating or changing anything. It reports whether the caller should
 // replace an unfinished earlier install once the user has confirmed.
 func ValidateWINEPREFIX(wineprefix string, logger *core.Logger) (string, bool, error) {
-	return validateWINEPREFIXWith(wineprefix, logger, DefaultBoundaries.Files, core.AskBool)
+	path, replace, _, err := validateWINEPREFIXWith(wineprefix, logger, DefaultBoundaries.Files, core.AskBool)
+	return path, replace, err
 }
 
-func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileStore, ask func(string) bool) (string, bool, error) {
+func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileStore, ask func(string) bool) (string, bool, bool, error) {
 	if wineprefix == "" || !filepath.IsAbs(wineprefix) || filepath.Base(wineprefix) != "Bellum" {
-		return "", false, fmt.Errorf("WINEPREFIX must be an absolute path ending in Bellum: %q", wineprefix)
+		return "", false, false, fmt.Errorf("WINEPREFIX must be an absolute path ending in Bellum: %q", wineprefix)
 	}
 	wineprefix = filepath.Clean(wineprefix)
 	logger.Info(fmt.Sprintf("WINEPREFIX: %s", core.Colorize(wineprefix, core.ColorBoldYellow)))
@@ -106,29 +110,33 @@ func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileSt
 		parent = filepath.Dir(parent)
 	}
 	if !isDirWith(parent, files) {
-		return "", false, fmt.Errorf("WINEPREFIX path is not on a valid mounted filesystem: %s", wineprefix)
+		return "", false, false, fmt.Errorf("WINEPREFIX path is not on a valid mounted filesystem: %s", wineprefix)
 	}
 
 	replaceIncomplete := false
 	state, err := inspectPrefix(wineprefix, files)
 	if err != nil {
-		return "", false, fmt.Errorf("inspect %s: %w", wineprefix, err)
+		return "", false, false, fmt.Errorf("inspect %s: %w", wineprefix, err)
 	}
 	switch state {
 	case prefixIncomplete:
 		logger.Warn(fmt.Sprintf("A previous Bellum install at %s didn't finish.", wineprefix))
 		if !ask("Start over? Everything in that folder will be replaced. (Y/n): ") {
-			return "", false, fmt.Errorf("installation cancelled: the unfinished install at %s was kept", wineprefix)
+			return "", false, false, fmt.Errorf("installation cancelled: the unfinished install at %s was kept", wineprefix)
 		}
 		replaceIncomplete = true
 	case prefixInstalled:
-		return "", false, fmt.Errorf("Bellum is already installed at %s. To reinstall, run the uninstaller first: ./uninstaller --wineprefix %s", wineprefix, wineprefix)
+		logger.Info(fmt.Sprintf("Bellum is already installed at %s.", wineprefix))
+		if !ask("Update it to the latest tested Proton and settings? Your game and launcher login are kept. (Y/n): ") {
+			return "", false, false, fmt.Errorf("nothing to do: Bellum is already installed at %s. To reinstall from scratch, run the uninstaller first: ./uninstaller --wineprefix %s", wineprefix, wineprefix)
+		}
+		return wineprefix, false, true, nil
 	case prefixForeign:
-		return "", false, fmt.Errorf("%s already exists and is not an empty folder or a Bellum install. Choose another location or move that folder away", wineprefix)
+		return "", false, false, fmt.Errorf("%s already exists and is not an empty folder or a Bellum install. Choose another location or move that folder away", wineprefix)
 	}
 
 	if !isWritable(parent) {
-		return "", false, fmt.Errorf("WINEPREFIX parent directory is not writable: %s", parent)
+		return "", false, false, fmt.Errorf("WINEPREFIX parent directory is not writable: %s", parent)
 	}
 	logger.Info("[OK] WINEPREFIX path is valid and writable")
 
@@ -137,11 +145,11 @@ func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileSt
 	} else {
 		logger.Warn("WINEPREFIX device is NOT an SSD/NVME (may have performance issues)")
 		if !ask("Astarte Developers strongly recommend using NVMe or SSD for the game. Are you sure you want to proceed? (Y/n): ") {
-			return "", false, fmt.Errorf("installation cancelled by user")
+			return "", false, false, fmt.Errorf("installation cancelled by user")
 		}
 	}
 
-	return wineprefix, replaceIncomplete, nil
+	return wineprefix, replaceIncomplete, false, nil
 }
 
 // PickWINEPREFIXWithGUI opens the folder picker and returns the resolved
@@ -318,7 +326,7 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 		logger.Warn("Your GPU wasn't recognised (common in VMs and on some hybrid laptops). Bellum will use generic Proton settings without vendor-specific features.")
 	}
 
-	wineprefix, replaceIncomplete, err := validateWINEPREFIXWith(opts.Wineprefix, logger, host.Files, host.Ask)
+	wineprefix, replaceIncomplete, update, err := validateWINEPREFIXWith(opts.Wineprefix, logger, host.Files, host.Ask)
 	if err != nil {
 		return nil, err
 	}
@@ -369,7 +377,7 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	if config.DefaultVersions.ProtonSHA256 == "" {
 		problems = append(problems, "approved Proton SHA-256 pin is required")
 	}
-	problems = append(problems, checkFreeSpace(wineprefix, protonPath, host)...)
+	problems = append(problems, checkFreeSpace(wineprefix, protonPath, !update, host)...)
 
 	if opts.LauncherInstaller != "" {
 		if _, err := host.Files.Stat(opts.LauncherInstaller); err != nil {
@@ -406,6 +414,7 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	return &PrecheckResult{
 		WINEPREFIX:        wineprefix,
 		ReplaceIncomplete: replaceIncomplete,
+		Update:            update,
 		GPUType:           gpuType,
 		IsAMDGPU:          isAMD,
 		GPUCapabilities:   gpuCaps,
@@ -417,7 +426,7 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	}, nil
 }
 
-func checkFreeSpace(wineprefix, protonPath string, host precheckHost) []string {
+func checkFreeSpace(wineprefix, protonPath string, newPrefix bool, host precheckHost) []string {
 	var problems []string
 	check := func(label, path string, need uint64) {
 		existing := nearestExistingDir(path, host.Files)
@@ -429,7 +438,9 @@ func checkFreeSpace(wineprefix, protonPath string, host precheckHost) []string {
 			problems = append(problems, fmt.Sprintf("Not enough free space for %s at %s: %.1f GiB free, at least %.0f GiB needed.", label, existing, float64(free)/(1<<30), float64(need)/(1<<30)))
 		}
 	}
-	check("the Bellum prefix", wineprefix, minPrefixFreeBytes)
+	if newPrefix {
+		check("the Bellum prefix", wineprefix, minPrefixFreeBytes)
+	}
 	if !isDirWith(protonPath, host.Files) {
 		check("Proton", protonPath, minProtonFreeBytes)
 		check("the Proton download", os.TempDir(), minTempFreeBytes)
@@ -461,7 +472,7 @@ func AcquireRuntime(result *PrecheckResult, workdir string, logger *core.Logger)
 	}
 	umuRunBinary = umu
 	logFile := filepath.Join(workdir, "logs", "installer.log")
-	return packages.EnsureProtonWithLog(result.ProtonPath, result.ProtonVer, result.IsAMDGPU, result.UseFSR41, logFile, logger)
+	return packages.EnsureProtonWithLog(result.ProtonPath, result.ProtonVer, logFile, logger)
 }
 
 // Helper functions

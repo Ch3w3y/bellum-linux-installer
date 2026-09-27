@@ -119,26 +119,6 @@ func TestLauncherGenerationFailureRestoresPriorAssets(t *testing.T) {
 	}
 }
 
-// TestRequestedWinetricksVerbsExistInProton checks the verbs against the
-// winetricks bundled in an extracted Proton tree. It runs when
-// BELLUM_PROTON_DIR points at one; run it whenever the Proton pin changes.
-// Verified for proton-cachyos-11.0-20260703-slr (winetricks 20260125-next).
-func TestRequestedWinetricksVerbsExistInProton(t *testing.T) {
-	dir := os.Getenv("BELLUM_PROTON_DIR")
-	if dir == "" {
-		t.Skip("set BELLUM_PROTON_DIR to an extracted Proton tree to check winetricks verbs")
-	}
-	script, err := os.ReadFile(filepath.Join(dir, "protonfixes", "winetricks"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, verb := range append(append([]string{}, requiredWinetricksVerbs...), "win11", "remove_mono", "grabfullscreen=y", "windowmanagerdecorated=n", "mwo=disable") {
-		if !strings.Contains(string(script), "w_metadata "+verb+" ") {
-			t.Errorf("requested verb %q is not declared in Proton's winetricks", verb)
-		}
-	}
-}
-
 func TestResolvePrefixPathAppendsBellumOnce(t *testing.T) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -168,7 +148,7 @@ func TestResolvePrefixPathAppendsBellumOnce(t *testing.T) {
 func TestValidatePrefixNeverCreatesDirectories(t *testing.T) {
 	logger, _ := core.NewLogger("")
 	prefix := filepath.Join(t.TempDir(), "Bellum")
-	got, replace, err := validateWINEPREFIXWith(prefix, logger, osFiles{}, func(string) bool { return true })
+	got, replace, _, err := validateWINEPREFIXWith(prefix, logger, osFiles{}, func(string) bool { return true })
 	if err != nil || got != prefix || replace {
 		t.Fatalf("validate = %q, %t, %v", got, replace, err)
 	}
@@ -186,7 +166,7 @@ func TestValidatePrefixClassifiesExistingFolders(t *testing.T) {
 	if err := os.Mkdir(empty, 0700); err != nil {
 		t.Fatal(err)
 	}
-	if _, replace, err := validateWINEPREFIXWith(empty, logger, osFiles{}, yes); err != nil || replace {
+	if _, replace, _, err := validateWINEPREFIXWith(empty, logger, osFiles{}, yes); err != nil || replace {
 		t.Fatalf("empty prefix: replace=%t err=%v", replace, err)
 	}
 
@@ -194,7 +174,7 @@ func TestValidatePrefixClassifiesExistingFolders(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(foreign, "stuff"), 0700); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := validateWINEPREFIXWith(foreign, logger, osFiles{}, yes); err == nil || !strings.Contains(err.Error(), "not an empty folder") {
+	if _, _, _, err := validateWINEPREFIXWith(foreign, logger, osFiles{}, yes); err == nil || !strings.Contains(err.Error(), "not an empty folder") {
 		t.Fatalf("foreign prefix: %v", err)
 	}
 
@@ -205,8 +185,13 @@ func TestValidatePrefixClassifiesExistingFolders(t *testing.T) {
 	if err := writeManifest(installed, osFiles{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := validateWINEPREFIXWith(installed, logger, osFiles{}, yes); err == nil || !strings.Contains(err.Error(), "uninstaller") {
-		t.Fatalf("installed prefix: %v", err)
+	// A finished install is offered an update; declining explains how to
+	// reinstall instead.
+	if got, replace, update, err := validateWINEPREFIXWith(installed, logger, osFiles{}, yes); err != nil || got != installed || replace || !update {
+		t.Fatalf("installed prefix: update=%t replace=%t err=%v", update, replace, err)
+	}
+	if _, _, _, err := validateWINEPREFIXWith(installed, logger, osFiles{}, no); err == nil || !strings.Contains(err.Error(), "uninstaller") {
+		t.Fatalf("declined update: %v", err)
 	}
 
 	incomplete := filepath.Join(t.TempDir(), "Bellum")
@@ -219,10 +204,10 @@ func TestValidatePrefixClassifiesExistingFolders(t *testing.T) {
 	if err := writeIncompleteMarker(incomplete, osFiles{}); err != nil {
 		t.Fatal(err)
 	}
-	if _, replace, err := validateWINEPREFIXWith(incomplete, logger, osFiles{}, yes); err != nil || !replace {
+	if _, replace, _, err := validateWINEPREFIXWith(incomplete, logger, osFiles{}, yes); err != nil || !replace {
 		t.Fatalf("incomplete prefix accepted: replace=%t err=%v", replace, err)
 	}
-	if _, _, err := validateWINEPREFIXWith(incomplete, logger, osFiles{}, no); err == nil {
+	if _, _, _, err := validateWINEPREFIXWith(incomplete, logger, osFiles{}, no); err == nil {
 		t.Fatal("declining to start over must cancel")
 	}
 	if _, err := os.Stat(filepath.Join(incomplete, manifestName)); err != nil {
@@ -304,5 +289,37 @@ func TestUninstallAcceptsUnfinishedInstall(t *testing.T) {
 	}
 	if err := validateBellumPrefix(prefix); err != nil {
 		t.Fatalf("unfinished install should be removable: %v", err)
+	}
+}
+
+func TestUpdateRefreshesLauncherOnlyForFinishedInstalls(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	logger, _ := core.NewLogger("")
+	prefix := filepath.Join(t.TempDir(), "Bellum")
+	if err := os.MkdirAll(filepath.Join(prefix, "drive_c", "game"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeManifest(prefix, osFiles{}); err != nil {
+		t.Fatal(err)
+	}
+	var generated []launchers.LauncherConfig
+	generate := func(c launchers.LauncherConfig) error { generated = append(generated, c); return nil }
+	config := InstallConfig{WINEPREFIX: prefix, ProtonPath: "/new/proton", Workdir: filepath.Join("..", "..")}
+	if err := runUpdateWith(config, logger, generate); err != nil {
+		t.Fatal(err)
+	}
+	if len(generated) != 1 || generated[0].Protonpath != "/new/proton" || os.Getenv("PROTONPATH") != "/new/proton" {
+		t.Fatalf("launcher not regenerated for the new Proton: %+v", generated)
+	}
+	if _, err := os.Stat(filepath.Join(prefix, "drive_c", "game")); err != nil {
+		t.Fatalf("update touched the prefix: %v", err)
+	}
+	// An unfinished install must go through the normal restart path instead.
+	if err := writeIncompleteMarker(prefix, osFiles{}); err != nil {
+		t.Fatal(err)
+	}
+	if err := runUpdateWith(config, logger, generate); err == nil {
+		t.Fatal("updated an unfinished install")
 	}
 }
