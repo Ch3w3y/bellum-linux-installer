@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
 )
 
@@ -185,5 +186,26 @@ func TestProtonStampDetectsTamperingAndPartialTrees(t *testing.T) {
 	}
 	if err := verifyProtonStamp(root); err == nil {
 		t.Fatal("tampered tree trusted")
+	}
+}
+
+func TestProtonStampIncludesVersionAndArchivePin(t *testing.T) {
+	root := t.TempDir()
+	if err := os.WriteFile(filepath.Join(root, "proton"), []byte("tree"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if err := writeProtonStamp(root); err != nil {
+		t.Fatal(err)
+	}
+	oldVer, oldPin := config.DefaultVersions.ProtonVer, config.DefaultVersions.ProtonSHA256
+	defer func() { config.DefaultVersions.ProtonVer, config.DefaultVersions.ProtonSHA256 = oldVer, oldPin }()
+	config.DefaultVersions.ProtonSHA256 = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	if err := verifyProtonStamp(root); err == nil {
+		t.Fatal("cache accepted after Proton pin change")
+	}
+	config.DefaultVersions.ProtonSHA256 = oldPin
+	config.DefaultVersions.ProtonVer = oldVer + "-changed"
+	if err := verifyProtonStamp(root); err == nil {
+		t.Fatal("cache accepted after Proton version change")
 	}
 }

@@ -8,7 +8,6 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"strings"
 
 	"bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
@@ -280,7 +279,8 @@ func writeProtonStamp(root string) error {
 		return err
 	}
 	tmp := filepath.Join(root, protonStampName+".tmp")
-	if err := os.WriteFile(tmp, []byte(digest+"\n"), 0600); err != nil {
+	stamp := protonStamp(digest)
+	if err := os.WriteFile(tmp, []byte(stamp), 0600); err != nil {
 		return err
 	}
 	return os.Rename(tmp, filepath.Join(root, protonStampName))
@@ -295,10 +295,14 @@ func verifyProtonStamp(root string) error {
 	if err != nil {
 		return err
 	}
-	if strings.TrimSpace(string(stamp)) != got {
+	if string(stamp) != protonStamp(got) {
 		return fmt.Errorf("Proton cache integrity stamp mismatch")
 	}
 	return nil
+}
+
+func protonStamp(treeDigest string) string {
+	return fmt.Sprintf("version=%s\nsha256=%s\ntree=%s\n", config.DefaultVersions.ProtonVer, config.DefaultVersions.ProtonSHA256, treeDigest)
 }
 
 // downloadFile downloads a file using wget

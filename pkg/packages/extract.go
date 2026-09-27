@@ -107,13 +107,9 @@ func validateTarArchive(archivePath, destDir string, strip bool) error {
 		if err != nil {
 			return err
 		}
-		name := h.Name
-		if strip {
-			parts := strings.SplitN(name, "/", 2)
-			if len(parts) < 2 {
-				continue
-			}
-			name = parts[1]
+		name, skip := archiveEntryName(h.Name, strip)
+		if skip {
+			continue
 		}
 		target, err := sanitizePath(destDir, name)
 		if err != nil {
@@ -122,6 +118,9 @@ func validateTarArchive(archivePath, destDir string, strip bool) error {
 		if h.Typeflag == tar.TypeSymlink {
 			if filepath.IsAbs(h.Linkname) {
 				return fmt.Errorf("absolute symlink target %q", h.Linkname)
+			}
+			if hasParentSegment(h.Linkname) {
+				return fmt.Errorf("symlink target contains parent traversal: %q", h.Linkname)
 			}
 			if _, err := sanitizePath(destDir, filepath.Join(filepath.Dir(name), h.Linkname)); err != nil {
 				return fmt.Errorf("unsafe symlink %q -> %q: %w", name, h.Linkname, err)
@@ -174,17 +173,14 @@ func extractGZ(archivePath, destDir string, stripComponents bool) error {
 			return fmt.Errorf("failed to read tar entry: %w", err)
 		}
 
-		// Apply strip components if requested
-		entryName := header.Name
-		if stripComponents && strings.Contains(entryName, string(filepath.Separator)) {
-			parts := strings.Split(entryName, string(filepath.Separator))
-			if len(parts) > 1 {
-				// Strip the first component (archive root directory)
-				entryName = strings.Join(parts[1:], string(filepath.Separator))
-			}
+		entryName, skip := archiveEntryName(header.Name, stripComponents)
+		if skip {
+			continue
 		}
-
-		target := filepath.Join(destDir, entryName)
+		target, err := sanitizePath(destDir, entryName)
+		if err != nil {
+			return fmt.Errorf("invalid path in archive: %w", err)
+		}
 
 		// Read the entire entry data into memory
 		entryData, err := io.ReadAll(tr)
@@ -401,6 +397,26 @@ func sanitizePath(destDir, entryName string) (string, error) {
 	return filepath.Join(destDir, cleanName), nil
 }
 
+func archiveEntryName(name string, strip bool) (string, bool) {
+	if !strip {
+		return name, false
+	}
+	parts := strings.SplitN(name, "/", 2)
+	if len(parts) < 2 {
+		return "", true
+	}
+	return parts[1], false
+}
+
+func hasParentSegment(name string) bool {
+	for _, part := range strings.Split(filepath.ToSlash(name), "/") {
+		if part == ".." {
+			return true
+		}
+	}
+	return false
+}
+
 // extractTarEntry extracts a single tar entry with proper permissions
 func extractTarEntry(tr io.Reader, header *tar.Header, target, destDir string) error {
 	switch header.Typeflag {
@@ -564,17 +580,14 @@ func extractTar(archivePath, destDir string, stripComponents bool) error {
 			return fmt.Errorf("failed to read tar entry: %w", err)
 		}
 
-		// Apply strip components if requested
-		entryName := header.Name
-		if stripComponents && strings.Contains(entryName, string(filepath.Separator)) {
-			parts := strings.Split(entryName, string(filepath.Separator))
-			if len(parts) > 1 {
-				// Strip the first component (archive root directory)
-				entryName = strings.Join(parts[1:], string(filepath.Separator))
-			}
+		entryName, skip := archiveEntryName(header.Name, stripComponents)
+		if skip {
+			continue
 		}
-
-		target := filepath.Join(destDir, entryName)
+		target, err := sanitizePath(destDir, entryName)
+		if err != nil {
+			return fmt.Errorf("invalid path in archive: %w", err)
+		}
 
 		// Read the entire entry data into memory
 		entryData, err := io.ReadAll(tr)

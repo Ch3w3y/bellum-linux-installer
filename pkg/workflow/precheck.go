@@ -21,6 +21,7 @@ type PrecheckResult struct {
 	UseExisting       bool
 	ForceWineVersion  bool
 	LauncherInstaller string
+	LauncherTempDir   string
 	GPUType           string
 	IsAMDGPU          bool
 	GPUCapabilities   core.GPUCapabilities
@@ -272,6 +273,9 @@ func checkLauncherInstaller(launcherInstallerPath string, logger *core.Logger, f
 	if config.DefaultVersions.LauncherSigner == "" {
 		return fmt.Errorf("AstarteLauncher Authenticode signer pin is required")
 	}
+	if DiscoverExecutable("osslsigncode", commands) == "" {
+		return fmt.Errorf("osslsigncode is required to verify the launcher installer")
+	}
 	if launcherInstallerPath != "" {
 		if _, err := files.Stat(launcherInstallerPath); os.IsNotExist(err) {
 			logger.Error(fmt.Sprintf("Launcher installer not found at: %s", launcherInstallerPath))
@@ -309,12 +313,21 @@ func CheckWinetricks(workdir string, logger *core.Logger) error {
 		logger.Error(fmt.Sprintf("winetricks binary not found in PATH and %s not found", winetricksArchive))
 		return fmt.Errorf("winetricks not found")
 	}
-	if err := packages.VerifySHA256(winetricksArchive, packages.WinetricksSHA256); err != nil {
+	privateDir, err := os.MkdirTemp("", "bellum-winetricks-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(privateDir)
+	if err := os.Chmod(privateDir, 0700); err != nil {
+		return err
+	}
+	verifiedArchive := filepath.Join(privateDir, filepath.Base(winetricksArchive))
+	if err := packages.CopyVerifiedSHA256(winetricksArchive, verifiedArchive, packages.WinetricksSHA256); err != nil {
 		return err
 	}
 
-	logger.Info(fmt.Sprintf("Extracting %s into packages/.tmp/winetricks/...", winetricksArchive))
-	tmpDir, err := packages.ExtractPackage(winetricksArchive, "winetricks")
+	logger.Info("Extracting verified winetricks copy into a private temporary directory...")
+	tmpDir, err := packages.ExtractPackage(verifiedArchive, "winetricks")
 	if err != nil {
 		logger.Error(fmt.Sprintf("Failed to extract %s: %v", winetricksArchive, err))
 		return err
@@ -434,11 +447,27 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 		return nil, err
 	}
 
-	// Check launcher installer
+	// Check precheck dependencies and the supplied artifact. The latter check is
+	// followed by a private copy that is independently hashed and verified.
 	if err := CheckLauncherInstaller(launcherInstallerPath, logger); err != nil {
 		return nil, err
 	}
-
+	// Stage and verify a user-supplied launcher before the later install phase.
+	var launcherTempDir string
+	stagedLauncher := launcherInstallerPath
+	if launcherInstallerPath != "" {
+		var stageErr error
+		stagedLauncher, launcherTempDir, stageErr = packages.StageLauncherInstaller(launcherInstallerPath)
+		if stageErr != nil {
+			return nil, stageErr
+		}
+	}
+	keepLauncher := false
+	defer func() {
+		if !keepLauncher && launcherTempDir != "" {
+			_ = os.RemoveAll(launcherTempDir)
+		}
+	}()
 	// Check winetricks
 	if err := CheckWinetricks(".", logger); err != nil {
 		return nil, err
@@ -464,6 +493,7 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 
 	logger.Info("[OK] All prechecks passed!")
 	fmt.Println()
+	keepLauncher = true
 
 	return &PrecheckResult{
 		WINEPREFIX:        wineprefix,
@@ -474,7 +504,8 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 		ProtonVer:         protonVer,
 		ProtonPath:        protonPath,
 		ForceWineVersion:  forceWineVersion,
-		LauncherInstaller: launcherInstallerPath,
+		LauncherInstaller: stagedLauncher,
+		LauncherTempDir:   launcherTempDir,
 	}, nil
 }
 
