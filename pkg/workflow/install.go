@@ -22,7 +22,7 @@ type InstallConfig struct {
 	IsAMDGPU          bool
 	LauncherInstaller string
 	Workdir           string
-	IsFSR4           bool
+	IsFSR4            bool
 }
 
 // RunInstaller runs the main installation workflow
