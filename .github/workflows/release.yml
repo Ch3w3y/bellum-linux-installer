@@ -1,0 +1,58 @@
+name: Tagged release
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: write
+  id-token: write
+  attestations: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    environment: release
+    strategy:
+      matrix:
+        arch: [amd64, arm64]
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Check tag and release gate
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          test "$(git describe --tags --exact-match)" = "$TAG"
+          test "$(git status --porcelain --untracked-files=all)" = ''
+          test -f RELEASE-GATE.md
+          grep -Eq '^QA: \[x\] https?://' RELEASE-GATE.md
+          grep -Eq '^EAC: \[x\] https?://' RELEASE-GATE.md
+          grep -Eq '^Security: \[x\] https?://' RELEASE-GATE.md
+          grep -Eq '^Provenance: \[x\] https?://' RELEASE-GATE.md
+      - name: Code and vulnerability checks
+        run: |
+          make check
+          go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+      - name: Build and verify release
+        env:
+          GOARCH: ${{ matrix.arch }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          make release VERSION="${TAG#v}"
+          make verify-release VERSION="${TAG#v}"
+          sha256sum dist/*.tar.gz > dist/TARBALL-SHA256SUMS
+      - uses: actions/attest-build-provenance@e8998f949152b193b063cb0ec769d69d929409be # v2
+        with:
+          subject-path: dist/*.tar.gz
+      - name: Publish release assets
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          gh release view "$TAG" >/dev/null 2>&1 || gh release create "$TAG" --verify-tag --generate-notes
+          gh release upload "$TAG" dist/*.tar.gz --clobber
