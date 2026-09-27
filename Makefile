@@ -56,7 +56,7 @@ DIST_DIR := dist
 # -X ldflags on config vars when present; empty by default to stay stable.
 GO_LDFLAGS := -s -w
 
-GO_BUILD_FLAGS := -trimpath -mod=readonly -ldflags "$(GO_LDFLAGS)"
+GO_BUILD_FLAGS := -buildvcs=false -trimpath -mod=readonly -ldflags "$(GO_LDFLAGS)"
 
 # Default target
 all: build
