@@ -187,7 +187,7 @@ func (p *Progress) Finish(err error) {
 	if Fancy() {
 		fmt.Print("\r\033[2K")
 	}
-	size := fmt.Sprintf("%.0f MB", float64(p.done)/(1<<20))
+	size := humanSize(p.done)
 	if err != nil {
 		fmt.Printf("  %s✖%s %s %s%s%s\n", ColorBoldRed, ColorReset, p.label, ColorGrayBold, size, ColorReset)
 		return
@@ -326,4 +326,11 @@ func Banner(logo []string, info []string) {
 		time.Sleep(18 * time.Millisecond)
 	}
 	fmt.Println()
+}
+
+func humanSize(n int64) string {
+	if n < 1<<20 {
+		return fmt.Sprintf("%d KB", (n+1023)/1024)
+	}
+	return fmt.Sprintf("%.0f MB", float64(n)/(1<<20))
 }

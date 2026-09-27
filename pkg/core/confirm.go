@@ -49,7 +49,7 @@ func Prompt(prompt, def string) string {
 // AskBool prompts the user for confirmation and returns true if they confirm
 // If the user presses Enter without typing anything, it defaults to true (yes)
 func AskBool(prompt string) bool {
-	fmt.Print(prompt)
+	fmt.Printf("  %s?%s %s", ColorBoldCyan, ColorReset, prompt)
 	if AssumeYes {
 		fmt.Println("y")
 		return true
