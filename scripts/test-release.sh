@@ -35,11 +35,11 @@ if scripts/check-release-gate.sh "$commit" "$gate" >/dev/null 2>&1; then
   echo 'Unchecked evidence was accepted' >&2; exit 1
 fi
 sed -i 's/QA: \[ \]/QA: [x]/' "$gate"
-sed -i 's/github.com\/example/evidence/example.invalid\/evidence/' "$gate"
+sed -i 's#github.com/example/evidence#example.invalid/evidence#' "$gate"
 if scripts/check-release-gate.sh "$commit" "$gate" >/dev/null 2>&1; then
   echo 'Placeholder evidence was accepted' >&2; exit 1
 fi
-sed -i 's/example.invalid\/evidence/github.com\/example/evidence/' "$gate"
+sed -i 's#example.invalid/evidence#github.com/example/evidence#' "$gate"
 sed -i "s/$commit/ffffffffffffffffffffffffffffffffffffffff/" "$gate"
 if scripts/check-release-gate.sh "$commit" "$gate" >/dev/null 2>&1; then
   echo 'Stale candidate evidence was accepted' >&2; exit 1
