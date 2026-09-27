@@ -55,7 +55,4 @@ func CopyVerifiedSHA256(source, destination, expected string) error {
 	return nil
 }
 
-const (
-	WinetricksSHA256 = "ca1d0a5f018412c6d92ed6c615aba27416c8ec00417831bf8c0a85d8b03a14a2"
-	IconSHA256       = "39646334a10452a17537b86b72c480d5a3cdd1a5af5585d8bc86122e411d00df"
-)
+const IconSHA256 = "39646334a10452a17537b86b72c480d5a3cdd1a5af5585d8bc86122e411d00df"

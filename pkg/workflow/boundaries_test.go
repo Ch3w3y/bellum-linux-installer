@@ -46,10 +46,10 @@ func TestHostDiscoveryAndDependencyGuidance(t *testing.T) {
 		name, release, manager, family, command string
 		immutable                               bool
 	}{
-		{"arch", "ID=arch\n", "pacman", "arch", "pacman -S", false},
-		{"fedora", "ID=fedora\n", "dnf", "fedora", "dnf install", false},
-		{"ubuntu", "ID=ubuntu\n", "apt-get", "debian", "apt install", false},
-		{"opensuse", "ID=opensuse-tumbleweed\n", "zypper", "opensuse", "zypper install", false},
+		{"arch", "ID=arch\n", "pacman", "arch", "pacman -S umu-launcher wget", false},
+		{"fedora", "ID=fedora\n", "dnf", "fedora", "dnf install osslsigncode wget", false},
+		{"ubuntu", "ID=ubuntu\n", "apt-get", "debian", "apt install osslsigncode wget", false},
+		{"opensuse", "ID=opensuse-tumbleweed\n", "zypper", "opensuse", "zypper install osslsigncode wget", false},
 		{"steamos", "ID=steamos\n", "pacman", "unknown", "immutable", true},
 		{"bazzite", "ID=bazzite\n", "", "unknown", "immutable", true},
 		{"unknown", "ID=void\n", "", "unknown", "unknown", false},
@@ -65,32 +65,11 @@ func TestHostDiscoveryAndDependencyGuidance(t *testing.T) {
 			if tt.manager != "" && host.PackageManager != tt.manager {
 				t.Fatalf("manager = %q", host.PackageManager)
 			}
-			msg := MissingDependencyGuidance(host, []string{"wine", "umu-run"})
-			if !strings.Contains(msg, tt.command) || !strings.Contains(msg, "wine") {
+			msg := MissingDependencyGuidance(host, []string{"umu-run", "osslsigncode", "wget"})
+			if !strings.Contains(msg, tt.command) || !strings.Contains(msg, "umu-run") {
 				t.Fatalf("guidance: %s", msg)
 			}
 		})
-	}
-}
-
-func TestUMURunPrecheckUsesInjectedHost(t *testing.T) {
-	logger, err := core.NewLogger("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := checkUMURun(fakeCommands{found: "/fake/bin/umu-run"}, logger); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestLauncherPrecheckRequiresOsslsigncodeForDownloadPath(t *testing.T) {
-	logger, err := core.NewLogger("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	err = checkLauncherInstaller("", logger, fakeFileStore{}, namedCommands{available: map[string]string{"wget": "/usr/bin/wget"}})
-	if err == nil || !strings.Contains(err.Error(), "osslsigncode") {
-		t.Fatalf("expected missing osslsigncode precheck error, got %v", err)
 	}
 }
 
@@ -226,22 +205,5 @@ func TestDependencyGuidanceNotesOutOfRepoPackages(t *testing.T) {
 		if !strings.Contains(msg, tt.want) {
 			t.Fatalf("%s/%s guidance missing %q: %s", host.PackageFamily(), tt.tool, tt.want, msg)
 		}
-	}
-}
-
-func TestLauncherPrecheckRequiresOsslsigncode(t *testing.T) {
-	logger, err := core.NewLogger("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	files := releaseFiles{release: "ID=fedora\n"}
-	missing := namedCommands{available: map[string]string{"wget": "/usr/bin/wget", "dnf": "/usr/bin/dnf"}}
-	err = checkLauncherInstaller("", logger, files, missing)
-	if err == nil || !strings.Contains(err.Error(), "osslsigncode") {
-		t.Fatalf("expected osslsigncode precheck failure, got %v", err)
-	}
-	present := namedCommands{available: map[string]string{"wget": "/usr/bin/wget", "osslsigncode": "/usr/bin/osslsigncode"}}
-	if err := checkLauncherInstaller("", logger, files, present); err != nil {
-		t.Fatalf("unexpected error with osslsigncode present: %v", err)
 	}
 }

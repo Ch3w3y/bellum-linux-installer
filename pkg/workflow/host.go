@@ -63,15 +63,16 @@ func (h Host) PackageFamily() string {
 	return "unknown"
 }
 
-// familyPackages lists the distribution-repository packages that provide the
-// host tools, plus notes for tools a family does not ship in its main repos.
+// familyPackages maps each required tool to the distribution package that
+// provides it. A tool with no package there is covered by a note instead.
 var familyPackages = map[string]struct {
-	install, packages string
-	notes             map[string]string
+	install  string
+	packages map[string]string
+	notes    map[string]string
 }{
 	"arch": {
 		install:  "sudo pacman -S",
-		packages: "wine umu-launcher wget mesa-utils",
+		packages: map[string]string{"umu-run": "umu-launcher", "wget": "wget", "glxinfo": "mesa-utils"},
 		notes: map[string]string{
 			"umu-run":      "umu-launcher is in the [multilib] repository, which must be enabled.",
 			"osslsigncode": "osslsigncode is in the AUR (for example: yay -S osslsigncode).",
@@ -79,21 +80,21 @@ var familyPackages = map[string]struct {
 	},
 	"fedora": {
 		install:  "sudo dnf install",
-		packages: "wine osslsigncode wget glx-utils",
+		packages: map[string]string{"osslsigncode": "osslsigncode", "wget": "wget", "glxinfo": "glx-utils"},
 		notes: map[string]string{
 			"umu-run": "umu-launcher is not in the Fedora repositories; install it from " + umuReleasesURL + ".",
 		},
 	},
 	"debian": {
 		install:  "sudo apt install",
-		packages: "wine osslsigncode wget mesa-utils",
+		packages: map[string]string{"osslsigncode": "osslsigncode", "wget": "wget", "glxinfo": "mesa-utils"},
 		notes: map[string]string{
 			"umu-run": "umu-launcher is not in the Debian/Ubuntu repositories; install the .deb from " + umuReleasesURL + ".",
 		},
 	},
 	"opensuse": {
 		install:  "sudo zypper install",
-		packages: "wine osslsigncode wget Mesa-demo-x",
+		packages: map[string]string{"osslsigncode": "osslsigncode", "wget": "wget", "glxinfo": "Mesa-demo-x"},
 		notes: map[string]string{
 			"umu-run": "umu-launcher is in the openSUSE 'games' OBS repository (https://build.opensuse.org/package/show/games/umu-launcher).",
 		},
@@ -102,21 +103,31 @@ var familyPackages = map[string]struct {
 
 const umuReleasesURL = "https://github.com/Open-Wine-Components/umu-launcher/releases"
 
-// MissingDependencyGuidance returns concrete package names and user actions.
-// It never invokes a package manager; immutable systems are strictly guidance-only.
+// MissingDependencyGuidance names exactly the missing tools and one command
+// that installs the ones the distribution packages. It never invokes a
+// package manager; immutable systems get guidance only.
 func MissingDependencyGuidance(h Host, missing []string) string {
 	if len(missing) == 0 {
 		return ""
 	}
 	list := strings.Join(missing, ", ")
 	if h.Immutable {
-		return fmt.Sprintf("Missing %s. This host (%s) is immutable; install dependencies through its supported host or container workflow. Bellum will not modify it automatically.", list, h.ID)
+		return fmt.Sprintf("Missing %s. This host (%s) is immutable; install them through its supported host or container workflow (for example a Distrobox or Flatpak). Bellum will not modify it automatically.", list, h.ID)
 	}
 	family, ok := familyPackages[h.PackageFamily()]
 	if !ok {
-		return fmt.Sprintf("Missing %s. Distribution/package manager is unknown; install wine, umu-launcher (%s), osslsigncode, wget, and glxinfo using your distribution's documented method.", list, umuReleasesURL)
+		return fmt.Sprintf("Missing %s. Distribution/package manager is unknown; install umu-launcher (%s), osslsigncode and wget using your distribution's documented method.", list, umuReleasesURL)
 	}
-	msg := fmt.Sprintf("Missing %s. Install required host packages with: %s %s", list, family.install, family.packages)
+	msg := fmt.Sprintf("Missing %s.", list)
+	var pkgs []string
+	for _, tool := range missing {
+		if pkg := family.packages[tool]; pkg != "" {
+			pkgs = append(pkgs, pkg)
+		}
+	}
+	if len(pkgs) > 0 {
+		msg += fmt.Sprintf(" Install with: `%s %s`.", family.install, strings.Join(pkgs, " "))
+	}
 	for _, tool := range missing {
 		if note := family.notes[tool]; note != "" {
 			msg += " " + note

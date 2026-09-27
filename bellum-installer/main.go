@@ -21,7 +21,9 @@ func main() {
 	printInstallerBanner()
 
 	// Parse command line arguments
-	forceWineVersion := flag.Bool("force-wine-version", false, "Force Wine version check")
+	// Accepted for compatibility with older instructions; system Wine is no
+	// longer used, so there is no version to force.
+	forceWineVersion := flag.Bool("force-wine-version", false, "Deprecated; has no effect")
 	wineprefix := flag.String("wineprefix", "", "Path to WINEPREFIX directory (optional if WINEPREFIX env var is set)")
 	launcherInstaller := flag.String("launcher-installer", "", "Path to launcher installer executable")
 	help := flag.Bool("help", false, "Show help message")
@@ -34,7 +36,6 @@ func main() {
 		fmt.Println("Usage: bellum-installer [options]")
 		fmt.Println()
 		fmt.Println("Options:")
-		fmt.Println("  --force-wine-version  Force Wine version check (not recommended)")
 		fmt.Println("  --wineprefix PATH     Path to WINEPREFIX directory (optional if WINEPREFIX env var is set)")
 		fmt.Println("  --launcher-installer PATH  Path to launcher installer executable")
 		fmt.Println("  --help                Show this help message")
@@ -84,17 +85,31 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Run prechecks with absolute paths
-	result, err := workflow.RunPrechecks(selectedWINEPREFIX, *launcherInstaller, *forceWineVersion, false, logger)
+	if *forceWineVersion {
+		logger.Warn("--force-wine-version is deprecated and has no effect: Bellum no longer uses system Wine.")
+	}
+
+	// Read-only prechecks: nothing is downloaded or written to $HOME yet.
+	launcherPath := *launcherInstaller
+	if launcherPath != "" {
+		if abs, absErr := filepath.Abs(launcherPath); absErr == nil {
+			launcherPath = abs
+		}
+	}
+	result, err := workflow.RunPrechecks(workflow.PrecheckOptions{
+		Wineprefix:        selectedWINEPREFIX,
+		LauncherInstaller: launcherPath,
+		Workdir:           workdir,
+	}, logger)
 	if err != nil {
 		logger.Error(fmt.Sprintf("Prechecks failed: %v", err))
+		fmt.Printf("Full log: %s\n", logFile)
 		os.Exit(1)
 	}
 
 	// Print installer summary
 	core.PrintInstallerSummary(
 		result.ProtonVer,
-		config.DefaultVersions.WineVer,
 		config.DefaultVersions.WinetricksVer,
 		config.DefaultVersions.VKD3DVer,
 		config.DefaultVersions.DXVKVer,
@@ -124,6 +139,17 @@ func main() {
 		Workdir:           workdir,
 		IsFSR41:           result.UseFSR41,
 		ReplaceIncomplete: result.ReplaceIncomplete,
+	}
+
+	// Acquire the pinned Proton only now that the user has confirmed.
+	logger.Info("Preparing Proton...")
+	if err := workflow.AcquireRuntime(result, workdir, logger); err != nil {
+		if result.LauncherTempDir != "" {
+			_ = os.RemoveAll(result.LauncherTempDir)
+		}
+		logger.Error(fmt.Sprintf("Proton setup failed: %v", err))
+		fmt.Printf("Full log: %s\n", logFile)
+		os.Exit(1)
 	}
 
 	// Run installation
