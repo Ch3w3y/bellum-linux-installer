@@ -17,6 +17,12 @@ relies on.
 
 ![The installer's banner and system check](docs/images/install-start.png)
 
+**Tested on:** AMD RX 9070 XT (RDNA4) · CachyOS · KDE Plasma Wayland, with an
+Easy Anti-Cheat online session ([release evidence](docs/release-evidence/)).
+Other GPUs and distributions are expected to work but aren't verified yet; the
+[roadmap](#roadmap) covers what's next, and reports from other setups are very
+welcome.
+
 ## Install
 
 You need **Steam** installed and signed in; see [Before you
@@ -296,6 +302,42 @@ rm -rf ~/.local/share/bellum-installer   # downloaded installer releases and the
 | The launcher keeps updating and restarting | Run the install command again to update the shortcut; current versions install launcher updates before it starts. |
 | *Bellum is already running* | The launcher is still open, perhaps in the system tray. Quit it there, or run `pkill -if astarte` and try again. |
 | Anything else | Check `<install folder>/launcher.log` and the installer log, and [open an issue](https://github.com/Ch3w3y/bellum-linux-installer/issues) with the redacted lines. |
+
+## Roadmap
+
+**v2.3: the right setup for your machine, automatically**
+([#39](https://github.com/Ch3w3y/bellum-linux-installer/issues/39))
+
+The installer will recognise the platform and pick the matching profile by
+itself. It's still one configuration per machine, never a menu of presets.
+The review screen will show what it detected, for example
+`Steam Deck OLED · SteamOS 3 · RDNA2 · Game Mode`.
+
+- **Steam Deck and Steam Machine:** recognised by name. The installer helps
+  add Bellum to Steam so it works in Game Mode, with SD-card-aware install
+  locations.
+- **Controllers:** launching through Steam makes the Deck's controls, the Steam
+  Controller and other pads show up to the game as a standard controller. A
+  recommended controller layout (gamepad plus trackpad mouse for the launcher)
+  and checks for doubled input.
+- **SteamOS and Bazzite:** first-class support, including Bazzite's Deck and
+  NVIDIA images.
+- **AMD by generation:** RDNA4 stays as it is. RDNA3 is tuned from
+  measurements. RDNA2 (including the Steam Deck) drops an FSR4 emulation path
+  that is expected to cost more than it gains there.
+- **NVIDIA on Fedora, Arch, Ubuntu, Debian, Pop!_OS and openSUSE:** checks for
+  the open-source nouveau/NVK drivers, outdated drivers, the `nvidia-drm.modeset`
+  setting and a missing Vulkan driver, each with the exact fix for your distro.
+- **Fixes:** Steam installed as a Snap (Ubuntu) will be found, and GPU detection
+  gets more precise
+  ([#37](https://github.com/Ch3w3y/bellum-linux-installer/issues/37)).
+
+Each profile ships as **verified** once someone has tested it on real hardware
+with Easy Anti-Cheat, and as **expected** until then. Got a Steam Deck, a Steam
+Machine, an RDNA2 or RDNA3 card, Bazzite, or NVIDIA on any distro? Testing a v2.3
+release candidate is the most useful thing you can do. Watch
+[#39](https://github.com/Ch3w3y/bellum-linux-installer/issues/39) for
+candidates.
 
 ## For contributors
 
