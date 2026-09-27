@@ -33,6 +33,7 @@ GO := go
 GOOS ?= linux
 GOARCH ?= amd64
 CGO_ENABLED := 0
+export GOOS GOARCH CGO_ENABLED
 
 # Reproducible-build switches: stable tool behavior regardless of host env.
 export LC_ALL := C
