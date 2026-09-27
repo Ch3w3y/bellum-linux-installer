@@ -190,10 +190,15 @@ func main() {
 	fmt.Println()
 	fmt.Printf("%sInstallation completed successfully!%s\n", core.ColorBoldGreen, core.ColorReset)
 	fmt.Println()
-	fmt.Println("You can now launch Bellum using the 'Bellum' using any of these:")
+	fmt.Println("You can now launch Bellum in any of these ways:")
 	fmt.Printf("%s", core.Colorize(" - Desktop Shortcut (Recommended)\n", core.Bold))
 	fmt.Println(" - Applications Menu -> Games -> Bellum")
-	fmt.Println(" - Terminal Command: `Bellum`")
+	if hint := workflow.LocalBinPathHint(); hint != "" {
+		fmt.Println(" - Terminal Command: `Bellum` (after adding ~/.local/bin to your PATH:")
+		fmt.Printf("     %s )\n", hint)
+	} else {
+		fmt.Println(" - Terminal Command: `Bellum`")
+	}
 	fmt.Println()
 	fmt.Printf("Launch Environment Variable File: %s/launch_vars.env\n", configureConfig.WINEPREFIX)
 	fmt.Println()

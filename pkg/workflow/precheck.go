@@ -245,6 +245,9 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	// RDNA4 needs the Proton driver component for the game's native FSR4.
 	useFSR41 := gpuCaps.Vendor == core.GPUAMD && gpuCaps.Generation == "RDNA4" && !gpuCaps.Ambiguous
 	logger.Info(fmt.Sprintf("GPU Vendor: %s (generation: %s, ambiguous: %t)", gpuType, gpuCaps.Generation, gpuCaps.Ambiguous))
+	if gpuCaps.Vendor == core.GPUUnknown {
+		logger.Warn("Your GPU wasn't recognised (common in VMs and on some hybrid laptops). Bellum will use generic Proton settings without vendor-specific features.")
+	}
 
 	wineprefix, replaceIncomplete, err := validateWINEPREFIXWith(opts.Wineprefix, logger, host.Files, host.Ask)
 	if err != nil {

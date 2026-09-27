@@ -1,7 +1,7 @@
 # Installer workflow boundary audit
 
-Reviewed against `master` on 2026-09-27. Open defects found in this review are
-tracked in #7–#10 and linked inline.
+Reviewed against `main` on 2026-09-27. The defects from the September board
+review (#7–#10) are fixed; remaining risks are listed below.
 
 ## Current effects and mutations
 
@@ -11,12 +11,12 @@ tracked in #7–#10 and linked inline.
 - **Rollback and retry**: prefix-path resolution (`ResolvePrefixPath`) appends `Bellum` in one place for the flag, the environment variable and the GUI. A failed install removes the prefix only if this run created it; no precheck creates it, so this covers the GUI path too. The prefix carries `.bellum-install-incomplete` from creation until configuration finishes. A configuration failure discards the prefix and its launcher assets, and an interrupted run is offered a restart on the next run. The replacement happens only after confirmation. A failed launcher-generation step restores any wrapper, desktop and icon files that existed before.
 - **Configuration** runs Wine registry commands through `MutatePrefix` and writes `launch_vars.env` through `GuardGameTreeWrites`. Registry changes: system DLL overrides (`d3d12`, `d3d12core`, `d3d10core`, `d3d9`, `d3d8` → `native,builtin`), and per-application `d3d11`/`dxgi` overrides for `AstarteLauncher.exe` (builtin) and `Bellum-Win64-Shipping.exe` (native). These change prefix registry state, not files.
 - **Game-directory mutation inventory**: the installer writes no files into the game tree and never copies or replaces DLLs anywhere (board policy, #11). `GuardGameTreeWrites` is a regression guard for installer writes, not a sandbox. Upscaler DLLs that the pinned Proton runtime stages itself at launch are Proton behaviour; see `docs/runtime-pins.md`.
-- **Launcher package** (`pkg/launchers`) owns its own file writes: `~/.local/bin/Bellum` (wrapper), `~/.local/share/applications/Bellum.desktop`, `~/Desktop/Bellum.desktop` (if `~/Desktop` exists), and `~/.local/share/icons/hicolor/256x256/apps/bellum.png`. It also runs `gio`/`update-desktop-database` when they are available. Desktop generation rejects GPU types other than AMD/NVIDIA/Intel (#10).
+- **Launcher package** (`pkg/launchers`) owns its own file writes: `~/.local/bin/Bellum` (wrapper), `~/.local/share/applications/Bellum.desktop`, `~/Desktop/Bellum.desktop` (if `~/Desktop` exists), and `~/.local/share/icons/hicolor/256x256/apps/bellum.png`. It also runs `gio`/`update-desktop-database` when they are available. Desktop and wrapper generation are the same for every GPU vendor, including an unrecognised one, which gets the generic `launch_vars.env`.
 - **Uninstallation** (`RunUninstallationWithBoundaries`) requires an absolute path named `Bellum` that contains `system.reg`, `drive_c`, and `.bellum-manifest.json`, and it refuses `/`, `$HOME`, and symlinks. After an explicit `y` it recursively deletes the prefix, then removes the wrapper, desktop entries and icon only when they reference that prefix. Shared Proton remains, as does `~/.local/bin/winetricks` from installs made before winetricks moved into Proton. Re-running uninstall after the prefix is gone is safe. `--dry-run` reports the target and changes nothing.
 
 ## Hard-coded paths and remaining risks
 
-- The wrapper is `~/.local/bin/Bellum`; that directory is not on `PATH` by default on every distro (#10). Desktop and icon paths use fixed `$HOME/.local/share` layouts.
+- The wrapper is `~/.local/bin/Bellum`; that directory is not on `PATH` by default on every distro, so the success message prints the command to add it for the user's shell. Desktop and icon paths use fixed `$HOME/.local/share` layouts.
 - The EAC runtime is located via `PROTON_EAC_RUNTIME`, then `appmanifest_1826330.acf` in every Steam library listed by `libraryfolders.vdf` under the native (`~/.local/share/Steam`, `~/.steam/steam`, `~/.steam/root`) and Flatpak Steam roots. All six runtime files must exist; an unknown combined digest only warns. The launcher's Authenticode signer is mandatory; an unknown launcher SHA-256 only warns.
 - `STEAM_COMPAT_CLIENT_INSTALL_PATH` is set to `$HOME/.steam/steam` during install and to an empty string in the NVIDIA `launch_vars.env`.
 - Several command errors are deliberately ignored (`winetricks win11` and the RawInput registry write).

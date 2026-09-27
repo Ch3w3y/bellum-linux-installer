@@ -86,3 +86,21 @@ func TestWrapperSecondClickReturnsWhileSessionRuns(t *testing.T) {
 		}
 	}
 }
+
+func TestUnknownGPUStillGetsLauncherAndDesktopEntry(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("PATH", "")
+	prefix := filepath.Join(t.TempDir(), "Bellum")
+	if err := GenerateLauncher(LauncherConfig{Wineprefix: prefix, Protonpath: "/proton", GPUType: "Unknown"}); err != nil {
+		t.Fatalf("unknown GPU failed launcher generation: %v", err)
+	}
+	for _, path := range []string{
+		filepath.Join(home, ".local", "bin", "Bellum"),
+		filepath.Join(home, ".local", "share", "applications", "Bellum.desktop"),
+	} {
+		if _, err := os.Stat(path); err != nil {
+			t.Errorf("missing %s: %v", path, err)
+		}
+	}
+}
