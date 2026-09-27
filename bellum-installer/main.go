@@ -124,6 +124,10 @@ func main() {
 		workdir,
 	)
 
+	if result.Update {
+		fmt.Printf("%sUPDATE:%s the existing install at %s moves to the Proton and settings above.\nThe game, your launcher login and saves are kept.\n", core.ColorBoldYellow, core.ColorReset, result.WINEPREFIX)
+	}
+
 	// Confirm with user before proceeding
 	if !core.ConfirmProceed() {
 		if result.LauncherTempDir != "" {
@@ -153,6 +157,11 @@ func main() {
 			_ = os.RemoveAll(result.LauncherTempDir)
 		}
 		fail(logger, logFile, "Downloading or unpacking Proton failed", err, "Check your internet connection and free space in ~/.local/share, then run the installer again. It picks up where it left off.")
+	}
+
+	if result.Update {
+		runUpdate(result, installConfig, workdir, logFile, logger)
+		return
 	}
 
 	// Run installation
@@ -224,4 +233,30 @@ func fail(logger *core.Logger, logFile, what string, err error, fix string) {
 	fmt.Printf("%sWhat to do:%s %s\n", core.ColorBoldYellow, core.ColorReset, fix)
 	fmt.Printf("Full log: %s\n", logFile)
 	os.Exit(1)
+}
+
+// runUpdate refreshes a finished install onto the current pins without
+// touching the prefix contents, then exits.
+func runUpdate(result *workflow.PrecheckResult, installConfig workflow.InstallConfig, workdir, logFile string, logger *core.Logger) {
+	if result.LauncherTempDir != "" {
+		defer os.RemoveAll(result.LauncherTempDir)
+	}
+	if err := workflow.RunUpdate(installConfig, logger); err != nil {
+		fail(logger, logFile, "Updating the Bellum launcher failed", err, "Your install is unchanged apart from Proton being downloaded. Run the installer again to retry.")
+	}
+	configureConfig := workflow.ConfigureConfig{
+		WINEPREFIX:      result.WINEPREFIX,
+		ProtonPath:      result.ProtonPath,
+		GPUType:         result.GPUType,
+		GPUCapabilities: result.GPUCapabilities,
+		IsAMDGPU:        result.IsAMDGPU,
+		Workdir:         workdir,
+		IsFSR41:         result.UseFSR41,
+	}
+	if err := workflow.RunConfiguration(configureConfig, logger); err != nil {
+		fail(logger, logFile, "Writing Bellum's updated launch settings failed", err, "Run the installer again to retry. The game and your login are untouched.")
+	}
+	logger.Info("Update complete!")
+	fmt.Println()
+	fmt.Printf("%sBellum is up to date.%s Launch it as usual; Proton updates the prefix on the first start.\n", core.ColorBoldGreen, core.ColorReset)
 }

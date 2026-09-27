@@ -255,6 +255,15 @@ validated by this project.
 | GPU shown as *Unknown* (VMs, virtio-gpu, some hybrid laptops) | The install continues with generic Proton settings, without vendor-specific features. Install `glxinfo` for better detection | — |
 | `Bellum: command not found` | The installer prints the command that adds `~/.local/bin` to your `PATH` for your shell | — |
 
+## Updating
+
+Run the same one-line command again. On an existing install it offers to
+update to the latest tested Proton and umu-launcher. Your game, launcher
+login and saves are kept. This project's CI checks new Proton-CachyOS and
+umu-launcher releases daily and pins each one once it passes the checks (see
+[runtime pins](docs/runtime-pins.md#automated-pin-updates)), so updating
+every so often picks up upstream performance and stability fixes.
+
 ## Uninstalling
 
 ```bash

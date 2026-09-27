@@ -16,8 +16,9 @@ import (
 	"bellum-installer/pkg/core"
 )
 
-// playbellum.com/download redirects to this official release endpoint.
-const launcherInstallerURL = "https://releases.astarte.industries/astartelauncher/windows-amd64/AstarteLauncher-amd64-installer.exe"
+// LauncherInstallerURL is the official, unversioned Astarte download;
+// playbellum.com/download redirects here.
+const LauncherInstallerURL = "https://releases.astarte.industries/astartelauncher/windows-amd64/AstarteLauncher-amd64-installer.exe"
 
 // LauncherInstallerState tracks the state of the launcher installer download
 type LauncherInstallerState struct {
@@ -64,7 +65,7 @@ func DownloadLauncherInstaller(workdir string, logger *core.Logger) (*LauncherIn
 
 	logFile := filepath.Join(workdir, "logs", "installer.log")
 	// Create the logs directory
-	if err := downloadFile(dest, launcherInstallerURL, logFile, logger); err != nil {
+	if err := downloadFile(dest, LauncherInstallerURL, logFile, logger); err != nil {
 		os.RemoveAll(downloadDir)
 		logger.Error("Failed to download launcher installer")
 		return nil, fmt.Errorf("failed to download launcher installer: %w", err)
@@ -135,22 +136,30 @@ func GetProtonInstallPath(protonVer string) string {
 	return filepath.Join(homeDir, ".local", "share", "bellum", "proton", fmt.Sprintf("bellum-%s", protonVer))
 }
 
-// EnsureProton downloads and sets up the Proton directory
-func EnsureProton(protonDir, protonVer string, isAMD bool, isFSR41 bool, logger *core.Logger) error {
-	return EnsureProtonWithLog(filepath.Join(protonDir, protonVer), protonVer, isAMD, isFSR41, "", logger)
+func EnsureProton(protonDir, protonVer string, logger *core.Logger) error {
+	return EnsureProtonWithLog(filepath.Join(protonDir, protonVer), protonVer, "", logger)
 }
 
-func EnsureProtonWithLog(protonDir, protonVer string, isAMD bool, isFSR41 bool, logPath string, logger *core.Logger) error {
+// EnsureProtonWithLog installs the pinned Proton archive, unmodified, at
+// protonDir. Launch settings live in each prefix's launch_vars.env; the
+// shared Proton tree is never patched, so every install sees the same
+// runtime. A verified tree that still carries a user_settings.py written by
+// older installers has that file removed, because Proton would otherwise
+// apply its values to every prefix.
+func EnsureProtonWithLog(protonDir, protonVer string, logPath string, logger *core.Logger) error {
 	if len(config.DefaultVersions.ProtonSHA256) != 64 {
 		return fmt.Errorf("approved Proton SHA-256 pin is required")
 	}
 	actualProtonDir := protonDir
-	settingsFile := GetProtonUserSettingsPath(actualProtonDir)
-	if settingsFile != "" && verifyProtonStamp(actualProtonDir) == nil {
-		if err := PatchProtonSettings(settingsFile, isAMD, isFSR41); err != nil {
-			return err
+	if verifyProtonStamp(actualProtonDir) == nil {
+		legacy := filepath.Join(actualProtonDir, "user_settings.py")
+		if _, err := os.Lstat(legacy); err == nil {
+			if err := os.Remove(legacy); err != nil {
+				return fmt.Errorf("remove legacy Proton user settings: %w", err)
+			}
+			return writeProtonStamp(actualProtonDir)
 		}
-		return writeProtonStamp(actualProtonDir)
+		return nil
 	}
 	parent := filepath.Dir(actualProtonDir)
 	if err := os.MkdirAll(parent, 0700); err != nil {
@@ -182,12 +191,8 @@ func EnsureProtonWithLog(protonDir, protonVer string, isAMD bool, isFSR41 bool, 
 	if err := ExtractPackageTo(archivePath, stage, 1); err != nil {
 		return fmt.Errorf("failed to extract Proton: %w", err)
 	}
-	settingsFile = GetProtonUserSettingsPath(stage)
-	if settingsFile == "" {
-		return fmt.Errorf("Proton user settings file missing after extraction")
-	}
-	if err := PatchProtonSettings(settingsFile, isAMD, isFSR41); err != nil {
-		return fmt.Errorf("failed to patch Proton user settings: %w", err)
+	if info, err := os.Stat(filepath.Join(stage, "proton")); err != nil || !info.Mode().IsRegular() {
+		return fmt.Errorf("Proton archive has no proton script")
 	}
 	if err := writeProtonStamp(stage); err != nil {
 		return err
@@ -198,7 +203,6 @@ func EnsureProtonWithLog(protonDir, protonVer string, isAMD bool, isFSR41 bool, 
 	return nil
 }
 
-// copyDirectory copies a directory recursively
 func copyDirectory(srcDir, dstDir string) error {
 	return filepath.Walk(srcDir, func(srcPath string, info os.FileInfo, err error) error {
 		if err != nil {

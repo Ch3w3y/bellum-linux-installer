@@ -52,15 +52,7 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	logger.Info("Starting Installation")
 	fmt.Println()
 
-	// Set environment variables
-	os.Setenv("PROTONPATH", config.ProtonPath)
-	os.Setenv("WINEPREFIX", config.WINEPREFIX)
-	os.Setenv("WINEARCH", "win64")
-	os.Setenv("STEAM_APP_PATH", config.WINEPREFIX)
-	os.Setenv("STEAM_APPID", "1")
-	os.Setenv("STEAM_COMPAT_DATA_PATH", config.WINEPREFIX)
-	os.Setenv("STEAM_COMPAT_CLIENT_INSTALL_PATH", filepath.Join(os.Getenv("HOME"), ".steam", "steam"))
-	os.Setenv("GAMEID", "1")
+	setPrefixEnv(config.WINEPREFIX, config.ProtonPath)
 
 	// Get launcher installer path
 	launcherInstaller := config.LauncherInstaller
@@ -184,6 +176,41 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	boundaries.MutatePrefix(core.RunModeSilent, umuRun("reg", "add", `HKCU\Software\Wine\DirectInput`, "/v", "RawInput", "/t", "REG_DWORD", "/d", "1", "/f"), logger, logFile)
 
 	return nil
+}
+
+// setPrefixEnv points umu-run and Proton at the Bellum prefix for the
+// commands this process runs.
+func setPrefixEnv(prefix, protonPath string) {
+	os.Setenv("PROTONPATH", protonPath)
+	os.Setenv("WINEPREFIX", prefix)
+	os.Setenv("WINEARCH", "win64")
+	os.Setenv("STEAM_APP_PATH", prefix)
+	os.Setenv("STEAM_APPID", "1")
+	os.Setenv("STEAM_COMPAT_DATA_PATH", prefix)
+	os.Setenv("STEAM_COMPAT_CLIENT_INSTALL_PATH", filepath.Join(os.Getenv("HOME"), ".steam", "steam"))
+	os.Setenv("GAMEID", "1")
+}
+
+// RunUpdate moves a finished install onto the current pins: it refreshes the
+// launcher wrapper and desktop entry and rewrites launch_vars.env and the
+// registry overrides (through RunConfiguration afterwards). The prefix, the
+// game and the launcher login are left alone. Proton upgrades the prefix
+// itself on the next launch.
+func RunUpdate(config InstallConfig, logger *core.Logger) error {
+	return runUpdateWith(config, logger, DefaultBoundaries.GenerateLauncher)
+}
+
+func runUpdateWith(config InstallConfig, logger *core.Logger, generate func(launchers.LauncherConfig) error) error {
+	state, err := inspectPrefix(config.WINEPREFIX, DefaultBoundaries.Files)
+	if err != nil {
+		return err
+	}
+	if state != prefixInstalled {
+		return fmt.Errorf("%s is not a finished Bellum install", config.WINEPREFIX)
+	}
+	logger.Info("Updating the Bellum launcher and settings...")
+	setPrefixEnv(config.WINEPREFIX, config.ProtonPath)
+	return generateLauncherWith(config, logger, generate)
 }
 
 // umuRunBinary is the pinned umu-run installed by AcquireRuntime. It
