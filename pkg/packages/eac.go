@@ -48,16 +48,18 @@ func EACRuntimeDigest(root string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func VerifyEACRuntime(root, expected string) error {
-	if len(expected) != 64 {
+func VerifyEACRuntime(root string, approved []string) error {
+	if len(approved) == 0 {
 		return fmt.Errorf("approved EAC runtime SHA-256 pin is required")
 	}
 	got, err := EACRuntimeDigest(root)
 	if err != nil {
 		return err
 	}
-	if !strings.EqualFold(got, expected) {
-		return fmt.Errorf("EAC runtime digest mismatch")
+	for _, expected := range approved {
+		if len(expected) == 64 && strings.EqualFold(got, expected) {
+			return nil
+		}
 	}
-	return nil
+	return fmt.Errorf("EAC runtime digest mismatch")
 }

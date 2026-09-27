@@ -1,9 +1,13 @@
 package packages
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"bellum-installer/pkg/config"
@@ -39,31 +43,38 @@ func DownloadLauncherInstaller(workdir string, logger *core.Logger) (*LauncherIn
 	if config.DefaultVersions.LauncherSigner == "" {
 		return nil, fmt.Errorf("launcher Authenticode signer pin is required before download")
 	}
-	downloadDir := filepath.Join(workdir, "installer-cache")
 	filename := "AstarteLauncher-amd64-installer.exe"
+	downloadDir, err := os.MkdirTemp("", "bellum-launcher-*")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create private download directory: %w", err)
+	}
+	if err := os.Chmod(downloadDir, 0700); err != nil {
+		os.RemoveAll(downloadDir)
+		return nil, err
+	}
 	dest := filepath.Join(downloadDir, filename)
-
-	if err := os.MkdirAll(downloadDir, 0755); err != nil {
-		return nil, fmt.Errorf("failed to create download directory: %w", err)
+	if err := os.MkdirAll(filepath.Join(workdir, "logs"), 0700); err != nil {
+		os.RemoveAll(downloadDir)
+		return nil, fmt.Errorf("failed to create log directory: %w", err)
 	}
 
 	logger.Info(fmt.Sprintf("Downloading AstarteLauncher installer: %s", filename))
 
 	logFile := filepath.Join(workdir, "logs", "installer.log")
 	// Create the logs directory
-	if err := os.MkdirAll(filepath.Dir(logFile), 0755); err != nil {
-		return nil, fmt.Errorf("failed to create log directory: %w", err)
-	}
-	if err := core.RunCommand(core.RunModeSilent, []string{"wget", "-O", dest, launcherInstallerURL}, logger, logFile); err != nil {
+	if err := downloadFile(dest, launcherInstallerURL, logFile, logger); err != nil {
+		os.RemoveAll(downloadDir)
 		logger.Error("Failed to download launcher installer")
 		return nil, fmt.Errorf("failed to download launcher installer: %w", err)
 	}
 
 	if _, err := os.Stat(dest); os.IsNotExist(err) {
+		os.RemoveAll(downloadDir)
 		logger.Error("Download verification failed: launcher installer not found")
 		return nil, fmt.Errorf("download verification failed: launcher installer not found")
 	}
 	if err := VerifyLauncherInstaller(dest); err != nil {
+		os.RemoveAll(downloadDir)
 		return nil, err
 	}
 
@@ -124,113 +135,60 @@ func EnsureProton(protonDir, protonVer string, isAMD bool, isFSR41 bool, logger 
 }
 
 func EnsureProtonWithLog(protonDir, protonVer string, isAMD bool, isFSR41 bool, logPath string, logger *core.Logger) error {
-	// Use proton-cachyos for all GPUs (AMD and NVIDIA)
-	protonURL := GetProtonURL(protonVer, config.DefaultVersions.ProtonBaseURL)
-
-	// Use the dedicated proton install directory
+	if len(config.DefaultVersions.ProtonSHA256) != 64 {
+		return fmt.Errorf("approved Proton SHA-256 pin is required")
+	}
 	actualProtonDir := protonDir
-
-	// Check if proton directory exists
-	dirExists := false
-	if _, err := os.Stat(actualProtonDir); os.IsNotExist(err) {
-		dirExists = false
-	} else {
-		dirExists = true
-	}
-
-	// Check for user_settings.py
 	settingsFile := GetProtonUserSettingsPath(actualProtonDir)
-
-	if !dirExists || settingsFile == "" {
-		// Download and extract
-		logger.Info("Proton directory not found, checking for cached version...")
-
-		// Check for cached version - only if proton directory exists but is empty
-		if dirExists {
-			// Directory exists but may be empty - check if it has any content
-			entries, err := os.ReadDir(actualProtonDir)
-			if err == nil && len(entries) == 0 {
-				// Directory is empty, remove it and re-download
-				logger.Info("Proton directory is empty, removing...")
-				os.RemoveAll(actualProtonDir)
-				dirExists = false
-			}
-		}
-
-		// Now check for cached version
-		if !dirExists {
-			// Also check in packages/ subdirectory since Proton is downloaded there
-			cachedPattern := filepath.Join("./", "packages", "proton-*")
-			matches, err := filepath.Glob(cachedPattern)
-			if err == nil && len(matches) > 0 {
-				// Verify the cached version has the expected files
-				for _, match := range matches {
-					if strings.HasSuffix(match, protonVer) {
-						if _, err := os.Stat(filepath.Join(match, "user_settings.py")); err == nil {
-							logger.Info(fmt.Sprintf("Found cached Proton in %s", match))
-							// Copy from cache to new location
-							logger.Info(fmt.Sprintf("Copying cached Proton from %s to %s...", match, actualProtonDir))
-							if err := copyDirectory(match, actualProtonDir); err != nil {
-								logger.Warn(fmt.Sprintf("Failed to copy cached Proton: %v", err))
-							}
-							// Re-check settings file after copy
-							settingsFile = GetProtonUserSettingsPath(actualProtonDir)
-							if settingsFile != "" {
-								return nil
-							}
-						}
-					}
-				}
-			}
-		}
-
-		logger.Info(fmt.Sprintf("Downloading Proton %s...", protonVer))
-
-		tmpDir, err := os.MkdirTemp("", "proton.XXXXXX")
-		if err != nil {
-			return fmt.Errorf("failed to create temp directory for Proton download: %w", err)
-		}
-		defer os.RemoveAll(tmpDir)
-
-		archivePath := filepath.Join(tmpDir, protonVer+".tar.xz")
-		if err := downloadFile(archivePath, protonURL, logPath, logger); err != nil {
+	if settingsFile != "" && verifyProtonStamp(actualProtonDir) == nil {
+		if err := PatchProtonSettings(settingsFile, isAMD, isFSR41); err != nil {
 			return err
 		}
-		if err := VerifySHA256(archivePath, config.DefaultVersions.ProtonSHA256); err != nil {
-			return err
-		}
-
-		// Verify archive exists
-		if _, err := os.Stat(archivePath); os.IsNotExist(err) {
-			return fmt.Errorf("archive file not found after download: %s", archivePath)
-		}
-
-		logger.Info(fmt.Sprintf("Extracting Proton to %s...", actualProtonDir))
-		if err := os.MkdirAll(actualProtonDir, 0755); err != nil {
-			return fmt.Errorf("failed to create Proton directory: %w", err)
-		}
-
-		// Extract tar.xz (strip one level - the archive root directory)
-		if err := ExtractPackageTo(archivePath, actualProtonDir, 1); err != nil {
-			os.RemoveAll(actualProtonDir)
-			return fmt.Errorf("failed to extract Proton: %w", err)
-		}
+		return writeProtonStamp(actualProtonDir)
 	}
-
-	// Check for user_settings.py
-	settingsFile = GetProtonUserSettingsPath(actualProtonDir)
+	parent := filepath.Dir(actualProtonDir)
+	if err := os.MkdirAll(parent, 0700); err != nil {
+		return err
+	}
+	if err := os.RemoveAll(actualProtonDir); err != nil {
+		return fmt.Errorf("remove unverified Proton tree: %w", err)
+	}
+	private, err := os.MkdirTemp("", "bellum-proton-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(private)
+	if err := os.Chmod(private, 0700); err != nil {
+		return err
+	}
+	archivePath := filepath.Join(private, protonVer+".tar.xz")
+	if err := downloadFile(archivePath, GetProtonURL(protonVer, config.DefaultVersions.ProtonBaseURL), logPath, logger); err != nil {
+		return err
+	}
+	if err := VerifySHA256(archivePath, config.DefaultVersions.ProtonSHA256); err != nil {
+		return err
+	}
+	stage, err := os.MkdirTemp(parent, ".proton-stage-*")
+	if err != nil {
+		return err
+	}
+	defer os.RemoveAll(stage)
+	if err := ExtractPackageTo(archivePath, stage, 1); err != nil {
+		return fmt.Errorf("failed to extract Proton: %w", err)
+	}
+	settingsFile = GetProtonUserSettingsPath(stage)
 	if settingsFile == "" {
-		logger.Error("Proton user settings file missing after setup")
-		return fmt.Errorf("Proton user settings file missing: %s", settingsFile)
+		return fmt.Errorf("Proton user settings file missing after extraction")
 	}
-
-	// Patch settings
 	if err := PatchProtonSettings(settingsFile, isAMD, isFSR41); err != nil {
-		logger.Error("Failed to patch Proton user settings, removing and re-downloading Proton")
-		os.RemoveAll(actualProtonDir)
 		return fmt.Errorf("failed to patch Proton user settings: %w", err)
 	}
-
+	if err := writeProtonStamp(stage); err != nil {
+		return err
+	}
+	if err := os.Rename(stage, actualProtonDir); err != nil {
+		return fmt.Errorf("atomically install Proton: %w", err)
+	}
 	return nil
 }
 
@@ -256,12 +214,104 @@ func copyDirectory(srcDir, dstDir string) error {
 	})
 }
 
+const protonStampName = ".bellum-verified-sha256"
+
+func protonTreeDigest(root string) (string, error) {
+	var paths []string
+	err := filepath.Walk(root, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		if rel == protonStampName {
+			return nil
+		}
+		if rel != "." {
+			paths = append(paths, rel)
+		}
+		return nil
+	})
+	if err != nil {
+		return "", err
+	}
+	// Walk is lexical, and sorting makes the serialized digest explicit.
+	sort.Strings(paths)
+	h := sha256.New()
+	for _, rel := range paths {
+		path := filepath.Join(root, rel)
+		info, err := os.Lstat(path)
+		if err != nil {
+			return "", err
+		}
+		_, _ = io.WriteString(h, rel+"\x00"+info.Mode().String()+"\x00")
+		if info.Mode()&os.ModeSymlink != 0 {
+			link, err := os.Readlink(path)
+			if err != nil {
+				return "", err
+			}
+			_, _ = io.WriteString(h, link)
+		} else if info.Mode().IsRegular() {
+			f, err := os.Open(path)
+			if err != nil {
+				return "", err
+			}
+			_, copyErr := io.Copy(h, f)
+			closeErr := f.Close()
+			if copyErr != nil {
+				return "", copyErr
+			}
+			if closeErr != nil {
+				return "", closeErr
+			}
+		} else if !info.IsDir() {
+			return "", fmt.Errorf("unsupported file in Proton tree: %s", rel)
+		}
+		_, _ = h.Write([]byte{0})
+	}
+	return hex.EncodeToString(h.Sum(nil)), nil
+}
+
+func writeProtonStamp(root string) error {
+	digest, err := protonTreeDigest(root)
+	if err != nil {
+		return err
+	}
+	tmp := filepath.Join(root, protonStampName+".tmp")
+	if err := os.WriteFile(tmp, []byte(digest+"\n"), 0600); err != nil {
+		return err
+	}
+	return os.Rename(tmp, filepath.Join(root, protonStampName))
+}
+
+func verifyProtonStamp(root string) error {
+	stamp, err := os.ReadFile(filepath.Join(root, protonStampName))
+	if err != nil {
+		return err
+	}
+	got, err := protonTreeDigest(root)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(string(stamp)) != got {
+		return fmt.Errorf("Proton cache integrity stamp mismatch")
+	}
+	return nil
+}
+
 // downloadFile downloads a file using wget
 func downloadFile(dest, url, logFile string, logger *core.Logger) error {
-	if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dest), 0700); err != nil {
 		return fmt.Errorf("failed to create directory: %w", err)
 	}
 
+	if _, err := os.Lstat(dest); err == nil {
+		return fmt.Errorf("refusing to download over existing path")
+	} else if !os.IsNotExist(err) {
+		return err
+	}
 	if err := core.RunCommand(core.RunModeSilent, []string{"wget", "-O", dest, url}, logger, logFile); err != nil {
 		logger.Error(fmt.Sprintf("Failed to download %s", url))
 		return fmt.Errorf("failed to download %s: %w", url, err)

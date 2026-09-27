@@ -458,7 +458,7 @@ func RunPrechecks(wineprefixArg string, launcherInstallerPath string, forceWineV
 	if info, err := os.Stat(runtimePath); err != nil || !info.IsDir() {
 		return nil, fmt.Errorf("Proton EasyAntiCheat Runtime is required at %q (set PROTON_EAC_RUNTIME to its installed directory)", runtimePath)
 	}
-	if err := packages.VerifyEACRuntime(runtimePath, config.DefaultVersions.EACRuntimeSHA256); err != nil {
+	if err := packages.VerifyEACRuntime(runtimePath, config.DefaultVersions.EACRuntimeSHA256Allowlist); err != nil {
 		return nil, err
 	}
 

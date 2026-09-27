@@ -13,6 +13,10 @@ import (
 )
 
 func main() {
+	if err := core.RequireNonRoot(os.Geteuid()); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 	// Print banner
 	printInstallerBanner()
 
