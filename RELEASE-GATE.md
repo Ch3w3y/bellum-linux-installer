@@ -1,12 +1,17 @@
 # Release gate evidence
 
 **No tag is authorized.** Keep each item unchecked until its underlying review
-is complete for the exact candidate commit. Each completed HTTPS evidence URL
-must contain the full 40-character candidate commit SHA. The gate script rejects
-unchecked, placeholder and stale URLs. A URL alone is not an approval: the
-required reviewer of GitHub's `release` environment must inspect the linked
+is complete for the exact candidate commit: the commit of the release
+candidate (`vX.Y.Z-rc.N`) that was tested. Record that commit's full SHA on the
+`Candidate:` line; each completed HTTPS evidence URL must contain it. Evidence
+records live under `docs/release-evidence/<candidate SHA>/`. The gate script
+rejects unchecked, placeholder and stale URLs, and any release commit that
+differs from the candidate in anything but this file and those records. A URL
+alone is not an approval: the required reviewer of GitHub's `release` environment must inspect the linked
 record and verify its contents before allowing publication. Do not tag while
 required-reviewer protection is absent.
+
+Candidate: (full SHA of the tested release candidate)
 
 QA: [ ] https://example.invalid/qa-evidence
 EAC: [ ] https://example.invalid/eac-evidence
