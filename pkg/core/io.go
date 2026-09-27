@@ -34,7 +34,9 @@ func RunCommand(mode RunMode, args []string, logger *Logger, logPath string) err
 
 	cmd := exec.Command(args[0], args[1:]...)
 
-	// If no log path is provided, use os.DevNull for file operations
+	// Without a log path the output is discarded: exec connects a nil
+	// Stdout/Stderr to a writable /dev/null. (A read-only one makes writes
+	// fail, and Python programs such as umu-run then exit with status 120.)
 	var logFile *os.File
 	if logPath != "" {
 		var err error
@@ -52,11 +54,6 @@ func RunCommand(mode RunMode, args []string, logger *Logger, logPath string) err
 			fmt.Fprintln(logFile, "--- Command Output Start ---")
 			cmd.Stdout = logFile
 			cmd.Stderr = logFile
-		} else {
-			devNull, _ := os.Open(os.DevNull)
-			cmd.Stdout = devNull
-			cmd.Stderr = devNull
-			defer devNull.Close()
 		}
 		err := cmd.Run()
 		if logFile != nil {
@@ -77,11 +74,6 @@ func RunCommand(mode RunMode, args []string, logger *Logger, logPath string) err
 			fmt.Fprintln(logFile, "--- Command Output Start ---")
 			cmd.Stdout = logFile
 			cmd.Stderr = logFile
-		} else {
-			devNull, _ := os.Open(os.DevNull)
-			cmd.Stdout = devNull
-			cmd.Stderr = devNull
-			defer devNull.Close()
 		}
 		err := cmd.Run()
 		if logFile != nil {
