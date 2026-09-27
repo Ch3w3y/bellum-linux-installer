@@ -30,23 +30,25 @@ A release candidate must NOT be tagged until all of the following are complete:
 # 1. Run the same checks CI runs
 make check
 
-# 2. Build the reproducible release (override VERSION as needed)
-make release VERSION=2.1.0
+# 2. Build the reproducible release from a clean checkout
+make release VERSION=2.1.0 GOARCH=amd64
 
 # 3. Verify checksums of the staged artifacts (uses the last release version)
-make verify-release
+make verify-release GOARCH=amd64
 ```
 
 Outputs (in `dist/`):
 
-- `bellum-installer-linux-amd64-<VERSION>.tar.gz` — the release archive
+- `bellum-installer-linux-<GOARCH>-<VERSION>.tar.gz` — the release archive
 - `dist/bellum-installer-linux-amd64-<VERSION>/MANIFEST.md` — versioned
   manifest: version, build metadata, per-file sha256 + size, provenance notes
 - `dist/bellum-installer-linux-amd64-<VERSION>/SHA256SUMS` — checksums for the
   staged files (excluding itself)
 
 The archive contains `installer`, `uninstaller`, `MANIFEST.md`, `SHA256SUMS`,
-and `packages/`.
+and tracked files from `packages/`. `make release` rejects a dirty tree.
+`make verify-release` checks staged checksums and compares the extracted
+tarball with the staged directory, so a changed archive fails verification.
 
 ## Reproducibility
 
@@ -99,6 +101,11 @@ agent environments. Keep VCS stamping enabled for release provenance.
 
 1. Confirm every release-gate item above is checked on the release commit.
 2. `make release VERSION=<final-version> && make verify-release`
-3. Upload the tarball to the GitHub release, attach `MANIFEST.md` and
-   `SHA256SUMS`, and quote the tarball sha256 in the release notes.
-4. Tag only after steps 1–3 are done and documented.
+3. Record evidence links in `RELEASE-GATE.md` and configure required reviewers
+   on the GitHub `release` environment. The tagged workflow enforces these
+   checks and waits for environment approval.
+4. Tag `v<version>` on the verified commit. The workflow builds both
+   architectures, verifies each archive, publishes the tarballs, and creates
+   GitHub build provenance attestations. Verify a downloaded archive with
+   `gh attestation verify bellum-installer-linux-<GOARCH>-<VERSION>.tar.gz
+   --repo <owner>/<repo>` and compare its SHA256 with the release asset.
