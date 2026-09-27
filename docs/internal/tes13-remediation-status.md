@@ -1,3 +1,5 @@
+> Project lineage: [Credits](../../CREDITS.md).
+
 # TES-13 remediation status
 
 > **Historical record (2026-09-26).** Superseded by later findings:
