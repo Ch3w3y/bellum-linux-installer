@@ -1,10 +1,17 @@
+> **Internal process record, not end-user documentation.** This file tracks a
+> specific engineering task's remediation history and is written for the
+> Paperclip issue tracker/CTO audience. It duplicates and can drift from the
+> user-facing statements in `README.md`, `docs/eac-qa.md`, and
+> `docs/runtime-pins.md`. See TES-42's `review` document for a recommendation
+> on relocating internal-process records like this one out of `docs/`.
+
 # TES-13 remediation status
 
 ## 2026-09-26 approved-pin follow-up
 
 - Pinned proton-cachyos `cachyos-11.0-20260703-slr` x86_64 to SHA-256 `62ff4b2750180723cc00538608fe687e21d1d91a31ef64ce1a7c9f46c3db310b`, from [CachyOS's release asset metadata](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260703-slr). The earlier CI artifact digest differs from the published release digest; the release asset digest is the one used.
 - Bellum's [official download page](https://playbellum.com/download/) redirects through `astarte.launcher.link` to `releases.astarte.industries`. Pinned that current executable to SHA-256 `2c2d17b724bee70883eae782d2ff9ead2533d2d339fd4ee1b9326c60bb3f064a`; its embedded certificate subject is `ASTARTE INDUSTRIES INC.`. The runtime `osslsigncode` verification remains mandatory.
-- RDNA4 now enables Proton's FSR4 driver component by default, with the RDNA3 upgrade off. NVIDIA's DLSS replacement and NGX updater remain off. `BELLUM_MANGOHUD=1`, `BELLUM_VKBASALT=1`, and `BELLUM_GAMESCOPE=1` opt into the permitted overlays.
+- RDNA4 now sets `PROTON_FSR4_UPGRADE=1` to request Proton's FSR4 driver component by default, with `PROTON_FSR4_RDNA3_UPGRADE=0` intended to keep the RDNA3 upgrade off; per [TES-41 research](/TES/issues/TES-41#document-research) the pinned CachyOS Proton release stages FSR4 on RDNA2–4 independently of these flags and has removed `PROTON_FSR4_RDNA3_UPGRADE` upstream, so this flag pair does not confirm actual upscaler behavior — treat it as unverified until a live QA pass records what upscaler the game actually uses. NVIDIA's DLSS replacement and NGX updater remain off. `BELLUM_MANGOHUD=1`, `BELLUM_VKBASALT=1`, and `BELLUM_GAMESCOPE=1` opt into the permitted overlays.
 - Selected the official Steam EAC runtime app `1826330`, depot `1826331`, public manifest `3310269496439035229`, build `10437216` as the reproducible source. SteamCMD anonymous login returned `No subscription`, so no depot files are redistributed. The board-installed entitled Steam client copy at `~/.local/share/Steam/steamapps/common/Proton EasyAntiCheat Runtime` has appmanifest `1826330` / buildid `10437216`. Its six-file manifest digest is pinned as `4d18c3a5b896c757be9e25bf1004b81568bc4d4e56ddd8d1a2a634eebf12d1f9`; per-file SHA-256 and byte counts:
   - `v2/lib32/easyanticheat_x86.dll` (75,080): `7a19573910e775dab97def92d7bea97125534a8c56b1849bf64e0224782125bb`
   - `v2/lib32/easyanticheat_x86.so` (17,244): `c61646ca21bb33d0b738c8d86a540c8bdc7026d7027b069e5e9fcd80a20efc1a`
@@ -19,7 +26,7 @@
 
 - Removed `packages/fsr4/` and the `--fsr41` CLI option. Removed game-directory DLL copies and added a write boundary plus regression test.
 - Generated wrappers for AMD, NVIDIA, and Intel use `umu-run` with the selected Proton and require `PROTON_EAC_RUNTIME` to exist. They write the launch log in the prefix.
-- RDNA4 enables Proton's FSR4 driver component by default under the approved developer guidance. RDNA3 and DLSS replacement upgrades remain off; the game's shipped upscalers are left alone.
+- RDNA4 requests Proton's FSR4 driver component by default (`PROTON_FSR4_UPGRADE=1`) under the approved developer guidance; the RDNA3 upgrade flag and DLSS replacement upgrades remain off. Whether the pinned Proton runtime actually leaves shipped upscalers alone on RDNA3 is unconfirmed — see the FSR-policy note above.
 - Vendored winetricks is hash checked and installed to `~/.local/bin` without sudo or self-update. The uninstaller requires a Bellum prefix with Wine markers, refuses root/home/symlink paths, and defaults its destructive prompt to No.
 - Installer logs use a private directory and `O_NOFOLLOW`; tar entries and link targets are checked before extraction. The user launcher is installed in `~/.local/bin`; desktop permissions are `0644`.
 - SHA-256 pins are implemented for vendored artifacts. Proton and launcher downloads require release pins. Launcher verification also requires an approved Authenticode signer and a successful `osslsigncode verify`.

@@ -8,11 +8,16 @@ That said, my goal is making sure none of my fellow linux gamers have to see the
 
 ### Unpack the Release Package
 
-1. Download the release tarball from the [Releases Page](https://github.com/joepaji/bellum-linux-installer/releases/latest)
+1. Download the release tarball from the [Releases Page](https://github.com/Ch3w3y/bellum-linux-installer/releases/latest)
+   (this is the repository you are reading right now; `v2.0.1` is its latest
+   release as of 2026-09-27 — a different fork, `joepaji/bellum-linux-installer`,
+   publishes its own independent releases under the same project name, so
+   double-check you're on this repo's Releases page).
 
 2. Open a terminal in the directory where you downloaded the release tarball
 
-3. Extract the release tarball & access extracted directory:
+3. Extract the release tarball & access extracted directory (substitute the
+   version you actually downloaded if it differs from the example below):
 
 ```bash
 tar -xzf bellum-installer-linux-amd64-v2.0.1.tar.gz
@@ -28,10 +33,21 @@ cd bellum-installer-linux-amd64-v2.0.1
 ```
 
 
-Runtime FSR and DLSS upgrades are disabled by default; the game uses its shipped
-upscalers. No DLLs are copied into the game directory. The generated launcher
-uses umu-launcher, Proton, and the Proton EasyAntiCheat Runtime for every GPU.
-Set `PROTON_EAC_RUNTIME` to the installed runtime directory if it is outside
+Bellum plays under Easy Anti-Cheat, so the installer treats the game
+directory and any upscaler DLL as things it should not touch without
+developer approval and a live protected-session test: no DLLs are ever
+copied into the game directory, and DLSS replacement/NGX-updater are off by
+default on every GPU. This is a safety default, not proof of EAC
+compatibility — Steam requires the game developer to separately enable
+Proton/Linux support for anti-cheat, and no live evidence of Bellum's Linux
+EAC enablement is published as of 2026-09-27
+([Steamworks Proton anti-cheat instructions](https://partner.steamgames.com/doc/steamhardware/proton)).
+FSR is different: on AMD RDNA4 GPUs the installer opts in to Proton's FSR4
+upscaling component (`PROTON_FSR4_UPGRADE=1`) rather than leaving upscaling
+untouched — see [Implementation Notes](#implementation-notes) below for what
+that does and does not guarantee. The generated launcher uses umu-launcher,
+Proton, and the Proton EasyAntiCheat Runtime for every GPU. Set
+`PROTON_EAC_RUNTIME` to the installed runtime directory if it is outside
 Steam's default location. The launcher logs to `launcher.log` in the prefix;
 check that log for EAC initialization when validating Linux mode.
 See [the EAC QA checklist](docs/eac-qa.md) for the evidence to record.
@@ -116,7 +132,9 @@ CI. Release archives are reproducible and ship a versioned `MANIFEST.md` and
 
 ```bash
 make check                       # same checks CI runs
-make release VERSION=2.1.0       # reproducible tarball + MANIFEST + SHA256SUMS
+make release VERSION=2.0.2       # reproducible tarball + MANIFEST + SHA256SUMS
+                                  # (VERSION defaults to 2.0.1 if omitted; pass
+                                  # the version you are actually cutting)
 make verify-release              # verify staged checksums
 ```
 
@@ -124,16 +142,33 @@ See [RELEASE.md](RELEASE.md) for the full release procedure, the release gate
 (QA + EAC + green CI + reproducibility + provenance checks before any RC tag),
 and the binary/provenance policy.
 
-## NVIDIA Blackwell (RTX 5000 series) driver note
+## NVIDIA driver note
 
-The 595 driver branch has multiple community-reported regressions on Blackwell under Wine/Proton, and reports of UE5 problems on earlier branches (580 and 590 included) also exist. Examples: 595.71.05 fails Vulkan swapchain creation under Proton where 595.58.03 worked ([NVIDIA forum](https://forums.developer.nvidia.com/t/regression-595-71-05-blackwell-rtx-5070-vulkan-swapchain-creation-fails-vk-error-initialization-failed-under-proton-worked-on-595-58-03/371778)), and 595 performance regressions ([CachyOS #378](https://github.com/CachyOS/distribution/issues/378)).
+As of 27 September 2026, NVIDIA lists **595.104.02** as its current Linux
+production driver and **615.71.09** as its current new-feature driver
+([NVIDIA Unix driver archive](https://www.nvidia.com/en-us/drivers/unix/)).
+Some users have reported a Blackwell (RTX 5000 series) Vulkan swapchain
+failure on 595.71.05 that did not reproduce on 595.58.03
+([NVIDIA forum report](https://forums.developer.nvidia.com/t/regression-595-71-05-blackwell-rtx-5070-vulkan-swapchain-creation-fails-vk-error-initialization-failed-under-proton-worked-on-595-58-03/371778),
+2026-05-30), and separate game-specific UE5/Proton regressions on
+615.71.09 have been reported for several titles
+([615 release feedback thread](https://forums.developer.nvidia.com/t/615-release-feedback-discussion/382815),
+2026-09). Neither issue has a confirmed vendor fix version as of this
+writing, and Bellum itself has not validated any driver branch.
 
-If Bellum fails to load shaders or renders a black screen on a 5000 series GPU with a 595 driver, try 595.58.03 or the 590 branch. No driver branch is validated by the Bellum project itself; this is guidance from public reports, not a guarantee.
+Start with a current driver supported by your distribution. If a specific
+update causes a reproducible failure (shader load failure, black screen, or
+crash), compare against a known-working earlier version on your system and
+report the GPU, driver version, compositor, Proton version, and logs. There
+is no universally-safe rollback version for every GPU/driver combination —
+590/595.58.03 is not blanket current advice, and neither is treating 615.x
+as a guaranteed-safe upgrade.
 
 ## Implementation Notes
 
-- Runtime FSR/DLSS DLL upgrades are off by default; no DLLs are copied into the game directory. RDNA4 enables Proton's FSR4 driver component; RDNA3 stays off.
-- DXVK, vkd3d-proton and dxvk-nvapi come from the pinned CachyOS Proton runtime (see [runtime pins](docs/runtime-pins.md)). DLSS/Frame Generation availability depends on that runtime and your driver; it has not been validated against Bellum.
+- Bellum's own upscaler DLL replacement is off by default on every GPU, and no DLLs are ever copied into the game directory — that boundary is enforced for EAC safety, independent of upscaler choice.
+- On AMD RDNA4 GPUs, the installer sets `PROTON_FSR4_UPGRADE=1` to opt in to Proton's FSR4 upscaling component; on RDNA3 it sets `PROTON_FSR4_RDNA3_UPGRADE=0`, intending to keep RDNA3 upgraded FSR off. However, the pinned CachyOS Proton runtime (`proton-cachyos-11.0-20260703-slr`, see [runtime pins](docs/runtime-pins.md)) independently stages an AMD FSR driver DLL in the prefix and, per its own release notes, no longer requires `PROTON_FSR4_UPGRADE` except to request a specific version, and permits FSR4 on supported RDNA2–4 discrete GPUs regardless of that flag. `PROTON_FSR4_RDNA3_UPGRADE` was removed from that CachyOS release entirely. In practice this means Bellum's flags express an intent (FSR4 requested on RDNA4, not requested on RDNA3) but **do not prove** the pinned runtime honors them, and shipped-upscaler-only behavior on RDNA3 is not guaranteed by this installer. Treat upscaler behavior as unverified for Bellum until a live protected-session test confirms it. ([CachyOS 11.0-20260702 SLR release notes](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260702-slr), 2026-07-12)
+- DXVK, vkd3d-proton and dxvk-nvapi come from the pinned CachyOS Proton runtime (see [runtime pins](docs/runtime-pins.md)). `PROTON_ENABLE_NVAPI=1` is set for every GPU; RTX 20/30 support DLSS Super Resolution only (no Frame Generation), RTX 40 adds single Frame Generation, and RTX 50 adds Multi Frame Generation — availability still depends on the runtime, your driver, and whether Bellum's build integrates DLSS/Streamline at all, which has not been validated. Bellum's own DLSS replacement DLL and NVIDIA's NGX updater stay off by default.
 - The launcher uses umu-launcher with the Proton EasyAntiCheat Runtime (see [EAC QA](docs/eac-qa.md)).
 - The installer and uninstaller are Go binaries; packages are bundled in the release tarball, not embedded.
 - All install logging is written to `logs/installer.log`; the uninstaller writes `uninstaller.log`.

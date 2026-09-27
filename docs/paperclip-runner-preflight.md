@@ -1,3 +1,10 @@
+> **Internal Paperclip/DevOps infrastructure record, not Bellum installer
+> documentation.** This file documents the Paperclip agent runner's own
+> adapter/preflight behavior on the machine running these agents — it has no
+> connection to the Bellum game, the installer/uninstaller binaries, or any
+> end user of this repository. See TES-42's `review` document for a
+> recommendation to move this file out of the user-facing `docs/` tree.
+
 # Paperclip managed-run API preflight + durable dist patches (TES-21)
 
 State: implemented, verified locally, and verified against a live service restart (2026-09-26). Owner: DevOps.
