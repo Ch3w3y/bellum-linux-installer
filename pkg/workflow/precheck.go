@@ -79,7 +79,7 @@ func ValidateWINEPREFIX(wineprefixArg string, logger *core.Logger) (string, stri
 
 		// The GUI picker returns the parent path, we need to append "Bellum"
 		selectedPath := strings.TrimSuffix(result.Path, "/")
-		WINEPREFIX = filepath.Join(selectedPath, "Bellum")
+		WINEPREFIX = wineprefixForSelectedDirectory(selectedPath)
 		WINEPREFIXSource = "GUI picker"
 
 		logger.Info(fmt.Sprintf("WINEPREFIX: %s%s%s", core.ColorBoldYellow, WINEPREFIX, core.ColorReset))
@@ -170,7 +170,7 @@ func ValidateWINEPREFIXWithGUI(logger *core.Logger) (string, error) {
 	fmt.Println()
 
 	// The WINEPREFIX will be created at selectedPath/Bellum
-	wineprefixPath := filepath.Join(selectedPath, "Bellum")
+	wineprefixPath := wineprefixForSelectedDirectory(selectedPath)
 
 	// Validate the selected directory
 	valid, errMsg := gui.ValidateDirectory(wineprefixPath, logger)
@@ -181,17 +181,11 @@ func ValidateWINEPREFIXWithGUI(logger *core.Logger) (string, error) {
 	logger.Info("[OK] Directory validation passed")
 	fmt.Println()
 
-	// Create the Bellum directory if it doesn't exist
-	if !isDir(wineprefixPath) {
-		logger.Info(fmt.Sprintf("Creating Bellum directory at %s...", wineprefixPath))
-		if err := os.MkdirAll(wineprefixPath, 0700); err != nil {
-			return "", fmt.Errorf("failed to create Bellum directory %s: %w", wineprefixPath, err)
-		}
-		logger.Info("[OK] Bellum directory created successfully")
-		fmt.Println()
-	}
-
 	return wineprefixPath, nil
+}
+
+func wineprefixForSelectedDirectory(selectedPath string) string {
+	return filepath.Join(selectedPath, "Bellum")
 }
 
 // CheckRequiredWineBinaries checks if all required Wine binaries are present
