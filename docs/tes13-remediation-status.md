@@ -1,5 +1,14 @@
 # TES-13 remediation status
 
+> **Historical record (2026-09-26).** Superseded by later findings:
+> - "RDNA3 upgrade off": the pinned Proton-CachyOS build stages the FSR4 driver
+>   component on RDNA2–RDNA4 by itself, and `PROTON_FSR4_RDNA3_UPGRADE` no longer
+>   exists. Board policy (#11) accepts Proton-native behaviour; the installer
+>   itself never copies DLLs. See `docs/runtime-pins.md`.
+> - The launcher SHA-256 and EAC runtime digest pins are exact-version pins that
+>   break on upstream updates (#9).
+> - `/TES/issues/...` links point to the internal tracker.
+
 ## 2026-09-26 approved-pin follow-up
 
 - Pinned proton-cachyos `cachyos-11.0-20260703-slr` x86_64 to SHA-256 `62ff4b2750180723cc00538608fe687e21d1d91a31ef64ce1a7c9f46c3db310b`, from [CachyOS's release asset metadata](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260703-slr). The earlier CI artifact digest differs from the published release digest; the release asset digest is the one used.
