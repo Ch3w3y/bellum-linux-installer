@@ -94,14 +94,14 @@ jobs:
 
       - name: Dry run against a locally built release
         run: |
-          make release VERSION=0.0.0-ci
-          (cd dist && sha256sum bellum-installer-linux-amd64-0.0.0-ci.tar.gz > SHA256SUMS)
-          BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-ci
+          make release VERSION=0.0.0-rc.1
+          (cd dist && sha256sum bellum-installer-linux-amd64-0.0.0-rc.1.tar.gz > SHA256SUMS)
+          BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-rc.1
 
       - name: Dry run refuses a tampered archive
         run: |
-          printf '%064d  bellum-installer-linux-amd64-0.0.0-ci.tar.gz\n' 0 > dist/SHA256SUMS
-          if BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-ci; then
+          printf '%064d  bellum-installer-linux-amd64-0.0.0-rc.1.tar.gz\n' 0 > dist/SHA256SUMS
+          if BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-rc.1; then
             echo "install.sh accepted a checksum mismatch" >&2
             exit 1
           fi

@@ -323,3 +323,11 @@ func TestUpdateRefreshesLauncherOnlyForFinishedInstalls(t *testing.T) {
 		t.Fatal("updated an unfinished install")
 	}
 }
+
+func TestResolvePrefixPathRejectsControlCharacters(t *testing.T) {
+	for _, input := range []string{"/tmp/Games\nExec=evil", "/tmp/Ga\tmes", "/tmp/\x1b[31mGames"} {
+		if got, err := ResolvePrefixPath(input); err == nil {
+			t.Fatalf("%q accepted as %q", input, got)
+		}
+	}
+}

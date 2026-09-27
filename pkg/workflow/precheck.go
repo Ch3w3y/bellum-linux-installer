@@ -8,6 +8,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unicode"
 
 	"bellum-installer/pkg/config"
 	"bellum-installer/pkg/core"
@@ -40,6 +41,11 @@ func ResolvePrefixPath(input string) (string, error) {
 	input = strings.TrimSpace(input)
 	if input == "" {
 		return "", fmt.Errorf("no install location given")
+	}
+	// The path ends up in desktop entries and registry commands, where a
+	// newline or other control character would inject extra fields.
+	if strings.IndexFunc(input, unicode.IsControl) >= 0 {
+		return "", fmt.Errorf("the install location contains a control character")
 	}
 	abs, err := filepath.Abs(input)
 	if err != nil {

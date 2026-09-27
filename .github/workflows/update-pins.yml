@@ -62,9 +62,9 @@ jobs:
         if: steps.pins.outputs.changed == 'true'
         run: |
           make check
-          make release VERSION=0.0.0-pins
-          (cd dist && sha256sum bellum-installer-linux-amd64-0.0.0-pins.tar.gz > SHA256SUMS)
-          BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-pins
+          make release VERSION=0.0.0-rc.2
+          (cd dist && sha256sum bellum-installer-linux-amd64-0.0.0-rc.2.tar.gz > SHA256SUMS)
+          BELLUM_RELEASE_BASE="file://$PWD/dist" bash install.sh --dry-run --version v0.0.0-rc.2
           rm -rf dist
 
       - name: Open or update the pin pull request
