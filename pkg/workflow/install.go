@@ -23,6 +23,9 @@ type InstallConfig struct {
 	LauncherInstaller string
 	Workdir           string
 	IsFSR41           bool
+	// ReplaceIncomplete asks the installer to remove an unfinished earlier
+	// install at WINEPREFIX (manifest plus install-incomplete marker) first.
+	ReplaceIncomplete bool
 }
 
 // RunInstaller runs the main installation workflow
@@ -77,13 +80,24 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 		defer packages.CleanupLauncherInstaller(state, logger)
 	}
 
-	// The precheck rejects nonempty existing prefixes. Track whether this run
-	// created the selected directory so a failed install can remove only its own.
-	_, statErr := os.Lstat(config.WINEPREFIX)
-	createdPrefix := os.IsNotExist(statErr)
-	if statErr != nil && !createdPrefix {
-		return fmt.Errorf("inspect Wine prefix: %w", statErr)
+	// Prechecks never create the prefix. Replace an unfinished earlier install
+	// only now, after the user confirmed, and refuse anything else that is not
+	// empty. Track whether this run created the directory so a failed install
+	// removes only its own.
+	if config.ReplaceIncomplete {
+		logger.Info("Removing the unfinished previous install...")
+		if err := discardIncompleteInstallWith(config.WINEPREFIX, boundaries.Files); err != nil {
+			return err
+		}
 	}
+	state, err := inspectPrefix(config.WINEPREFIX, boundaries.Files)
+	if err != nil {
+		return fmt.Errorf("inspect Wine prefix: %w", err)
+	}
+	if state != prefixAbsent && state != prefixEmpty {
+		return fmt.Errorf("Wine prefix %s is not empty; refusing to install over it", config.WINEPREFIX)
+	}
+	createdPrefix := state == prefixAbsent
 	defer func() {
 		if resultErr != nil && createdPrefix {
 			if err := rollbackNewPrefix(config.WINEPREFIX, true, boundaries.Files); err != nil {
@@ -102,6 +116,9 @@ func RunInstallerWithBoundaries(config InstallConfig, logger *core.Logger, bound
 	}
 	if err := writeManifest(config.WINEPREFIX, boundaries.Files); err != nil {
 		return fmt.Errorf("write Bellum ownership manifest: %w", err)
+	}
+	if err := writeIncompleteMarker(config.WINEPREFIX, boundaries.Files); err != nil {
+		return fmt.Errorf("mark install as in progress: %w", err)
 	}
 	logFile := filepath.Join(config.Workdir, "logs", "installer.log")
 	if err := boundaries.MutatePrefix(core.RunModeSilent, []string{"umu-run", cfg.DefaultVersions.Binaries.Msidb}, logger, logFile); err != nil {

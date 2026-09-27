@@ -21,7 +21,7 @@ foundational installer and continues to own the original project. See
 | **Easy Anti-Cheat on Linux** | ✅ Astarte has enabled Proton/Linux EAC support for Bellum. |
 | **Latest published release** | ⚠️ [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1) (2026-05-13) **predates** the September hardening on `main`: pinned and verified downloads, the EAC-safe launcher, and ownership-checked uninstall. A new release is pending; until then, [build from `main`](#install-today-build-from-main). |
 | **One-command install** | 🚧 Planned. See [#6](https://github.com/Ch3w3y/bellum-linux-installer/issues/6). Not available yet. |
-| **Known blockers** | [#7](https://github.com/Ch3w3y/bellum-linux-installer/issues/7), [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8), [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9), [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10). Workarounds are under [Known issues](#known-issues-and-workarounds). |
+| **Known blockers** | [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8), [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9), [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10). Workarounds are under [Known issues](#known-issues-and-workarounds). |
 
 ## Where we're going
 
@@ -171,9 +171,14 @@ WINEPREFIX=~/Games/Bellum ./installer     # same thing, via the environment
 ./installer --help
 ```
 
-For both `--wineprefix` and `WINEPREFIX`, `Bellum` is appended unless the path
-already ends in `Bellum`. The target folder must not exist yet, or must be
-empty.
+For `--wineprefix`, `WINEPREFIX` and the folder picker alike, `Bellum` is
+appended unless the path already ends in a `Bellum` folder. The target folder
+must not exist yet, or must be empty. Nothing is created until you confirm the
+summary.
+
+If an install fails, the installer removes the folder it created. If it was
+interrupted instead (for example, the terminal was closed), just run the
+installer again. It recognises the unfinished install and offers to start over.
 
 ## Playing
 
@@ -233,7 +238,6 @@ validated by this project.
 
 | Problem | Workaround | Tracking |
 | --- | --- | --- |
-| After a failed install, re-running says the `Bellum` folder *already exists* | Run `./uninstaller --wineprefix <path>/Bellum`. If the uninstaller refuses because the prefix is incomplete, check it's the right folder and delete it manually, then re-run the installer | [#7](https://github.com/Ch3w3y/bellum-linux-installer/issues/7) |
 | *Wine version mismatch* | Use `--force-wine-version` | [#8](https://github.com/Ch3w3y/bellum-linux-installer/issues/8) |
 | *EAC runtime digest mismatch* after a Steam update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
 | *SHA-256 mismatch* for the launcher installer after an Astarte update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
