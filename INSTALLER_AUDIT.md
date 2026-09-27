@@ -17,7 +17,7 @@ tracked in #7–#10 and linked inline.
 ## Hard-coded paths and remaining risks
 
 - The wrapper is `~/.local/bin/Bellum`; that directory is not on `PATH` by default on every distro (#10). Desktop and icon paths use fixed `$HOME/.local/share` layouts.
-- The EAC runtime path defaults to `~/.local/share/Steam/steamapps/common/Proton EasyAntiCheat Runtime` (override: `PROTON_EAC_RUNTIME`). Flatpak Steam and secondary libraries are not discovered (#9).
+- The EAC runtime is located via `PROTON_EAC_RUNTIME`, then `appmanifest_1826330.acf` in every Steam library listed by `libraryfolders.vdf` under the native (`~/.local/share/Steam`, `~/.steam/steam`, `~/.steam/root`) and Flatpak Steam roots. All six runtime files must exist; an unknown combined digest only warns. The launcher's Authenticode signer is mandatory; an unknown launcher SHA-256 only warns.
 - `STEAM_COMPAT_CLIENT_INSTALL_PATH` is set to `$HOME/.steam/steam` during install and to an empty string in the NVIDIA `launch_vars.env`.
 - Several command errors are deliberately ignored (`winetricks win11` and the RawInput registry write).
 

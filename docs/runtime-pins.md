@@ -25,12 +25,42 @@ uninstaller refuse to run as root. The vendored legacy DXVK archive has been rem
 from the release payload; its old installer helper is not part of the runtime
 setup path. The game-directory integrity boundary is enforced separately.
 
-**Pin durability (#9).** The Proton URL is versioned, so its pin is stable. The
-launcher URL is *not* versioned: it always serves Astarte's current installer,
-so the launcher SHA-256 allowlist will fail every install after the next Astarte
-release. The Authenticode signer check is the durable control. The EAC runtime
-digest (see `docs/eac-qa.md`) is tied to one Steam build and fails after Steam
-updates app `1826330`.
+**Pin durability.** Fail closed only on things this project ships or downloads
+from a versioned URL; accept vendor updates to things the user installs.
+
+| Artifact | Hard control (fails closed) | Allowlist (warns only) |
+| --- | --- | --- |
+| Proton | Versioned URL + SHA-256 pin | none |
+| Astarte Launcher installer | Authenticode signature from `ASTARTE INDUSTRIES INC.` (the URL is not versioned and always serves the current build) | `LauncherSHA256Allowlist` |
+| Proton EasyAntiCheat Runtime | All six runtime files present; installed by Steam as app `1826330` (found through `appmanifest_1826330.acf`) or set explicitly with `PROTON_EAC_RUNTIME` | `EACRuntimeSHA256Allowlist` |
+
+An unknown launcher or EAC digest is logged with the digest value, so the
+allowlists can be extended from user logs.
+
+## How to refresh a pin
+
+Run this monthly, and whenever a Proton-CachyOS release notes EAC, driver or
+upscaler fixes (CachyOS releases often).
+
+1. **Proton.** Check [CachyOS releases](https://github.com/CachyOS/proton-cachyos/releases)
+   for a newer `-slr` build. Download the `x86_64` archive and compare its
+   SHA-256 with the release asset's published digest. Update `ProtonVer` and
+   `ProtonSHA256` in `pkg/config/versions.go` together.
+2. Extract the archive and run
+   `BELLUM_PROTON_DIR=<extracted tree> go test ./pkg/workflow -run Verbs` to
+   confirm that the bundled winetricks still has every verb. Note its
+   `WINETRICKS_VERSION` in `WinetricksVer` and in the table above.
+3. Re-read the new tag's `protonfixes` upscaler patches and update
+   [Upscaler behaviour](#upscaler-behaviour-of-the-pinned-proton).
+4. **Launcher.** Download `AstarteLauncher-amd64-installer.exe`, run
+   `osslsigncode verify -in <file>`, confirm the leaf signer, and append its
+   SHA-256 to `LauncherSHA256Allowlist` (keep the older entries).
+5. **EAC runtime.** After Steam updates app `1826330`, compute the digest with
+   `packages.EACRuntimeDigest`, or take it from an installer-log warning, run the
+   [EAC checklist](eac-qa.md), and append the digest to
+   `EACRuntimeSHA256Allowlist`.
+6. Update the snapshot date and table in this file, run `make check`, and open
+   a PR.
 
 **Newer Proton-CachyOS builds.** As of 2026-09-27, `cachyos-11.0-20260703-slr`
 (published 2026-07-22) is still the latest tagged release. Any re-pin must

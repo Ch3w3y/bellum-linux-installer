@@ -72,9 +72,13 @@ func DownloadLauncherInstaller(workdir string, logger *core.Logger) (*LauncherIn
 		logger.Error("Download verification failed: launcher installer not found")
 		return nil, fmt.Errorf("download verification failed: launcher installer not found")
 	}
-	if err := VerifyLauncherInstaller(dest); err != nil {
+	check, err := VerifyLauncherInstaller(dest)
+	if err != nil {
 		os.RemoveAll(downloadDir)
 		return nil, err
+	}
+	if warning := check.Warning(); warning != "" {
+		logger.Warn(warning)
 	}
 
 	return &LauncherInstallerState{

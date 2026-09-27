@@ -32,74 +32,97 @@ func VerifyLauncherAuthenticode(path string) error {
 	return nil
 }
 
-func VerifyLauncherInstaller(path string) error {
-	if len(config.DefaultVersions.LauncherSHA256Allowlist) == 0 {
-		return fmt.Errorf("approved AstarteLauncher SHA-256 pin is required")
+// LauncherCheck reports what launcher verification established. The
+// Authenticode signer is the mandatory control; the SHA-256 allowlist only
+// records builds that were inspected, because Astarte's download URL is not
+// versioned and always serves the current build.
+type LauncherCheck struct {
+	Digest      string
+	KnownDigest bool
+}
+
+// Warning returns the message to log for a signed build that is not in the
+// allowlist, or "" when the digest is known.
+func (c LauncherCheck) Warning() string {
+	if c.KnownDigest {
+		return ""
 	}
-	var accepted bool
-	for _, digest := range config.DefaultVersions.LauncherSHA256Allowlist {
-		if len(digest) == 64 && VerifySHA256(path, digest) == nil {
-			accepted = true
-			break
+	return fmt.Sprintf("AstarteLauncher installer SHA-256 %s is not in the inspected allowlist; accepting it because its Authenticode signature from %q is valid. Add it to LauncherSHA256Allowlist after review.", c.Digest, config.DefaultVersions.LauncherSigner)
+}
+
+func digestAllowed(digest string, allowlist []string) bool {
+	for _, pin := range allowlist {
+		if len(pin) == 64 && strings.EqualFold(digest, pin) {
+			return true
 		}
 	}
-	if !accepted {
-		return fmt.Errorf("AstarteLauncher SHA-256 is not in the approved allowlist")
+	return false
+}
+
+// VerifyLauncherInstaller requires a valid Authenticode signature from the
+// approved signer and reports whether the digest is a known build.
+func VerifyLauncherInstaller(path string) (LauncherCheck, error) {
+	return verifyLauncherInstaller(path, config.DefaultVersions.LauncherSHA256Allowlist, VerifyLauncherAuthenticode)
+}
+
+func verifyLauncherInstaller(path string, allowlist []string, verify func(string) error) (LauncherCheck, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return LauncherCheck{}, err
 	}
-	return VerifyLauncherAuthenticode(path)
+	h := sha256.New()
+	_, copyErr := io.Copy(h, f)
+	closeErr := f.Close()
+	if err := firstErr(copyErr, closeErr); err != nil {
+		return LauncherCheck{}, err
+	}
+	digest := hex.EncodeToString(h.Sum(nil))
+	if err := verify(path); err != nil {
+		return LauncherCheck{}, err
+	}
+	return LauncherCheck{Digest: digest, KnownDigest: digestAllowed(digest, allowlist)}, nil
 }
 
 // StageLauncherInstaller copies an untrusted source into a private directory,
 // computes its digest during that copy, and verifies only the staged file.
-func StageLauncherInstaller(source string) (string, string, error) {
+func StageLauncherInstaller(source string) (string, string, LauncherCheck, error) {
 	return stageLauncherInstaller(source, config.DefaultVersions.LauncherSHA256Allowlist, VerifyLauncherAuthenticode)
 }
 
-func stageLauncherInstaller(source string, pins []string, verify func(string) error) (string, string, error) {
+func stageLauncherInstaller(source string, pins []string, verify func(string) error) (string, string, LauncherCheck, error) {
 	privateDir, err := os.MkdirTemp("", "bellum-launcher-*")
 	if err != nil {
-		return "", "", err
+		return "", "", LauncherCheck{}, err
 	}
 	if err := os.Chmod(privateDir, 0700); err != nil {
 		os.RemoveAll(privateDir)
-		return "", "", err
+		return "", "", LauncherCheck{}, err
 	}
 	staged := filepath.Join(privateDir, "launcher-installer.exe")
 	in, err := os.Open(source)
 	if err != nil {
 		os.RemoveAll(privateDir)
-		return "", "", err
+		return "", "", LauncherCheck{}, err
 	}
 	out, err := os.OpenFile(staged, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0600)
 	if err != nil {
 		in.Close()
 		os.RemoveAll(privateDir)
-		return "", "", err
+		return "", "", LauncherCheck{}, err
 	}
 	h := sha256.New()
 	_, copyErr := io.Copy(io.MultiWriter(out, h), in)
 	closeOutErr, closeInErr := out.Close(), in.Close()
 	if copyErr != nil || closeOutErr != nil || closeInErr != nil {
 		os.RemoveAll(privateDir)
-		return "", "", fmt.Errorf("copy launcher installer: %w", firstErr(copyErr, closeOutErr, closeInErr))
+		return "", "", LauncherCheck{}, fmt.Errorf("copy launcher installer: %w", firstErr(copyErr, closeOutErr, closeInErr))
 	}
 	digest := hex.EncodeToString(h.Sum(nil))
-	approved := false
-	for _, pin := range pins {
-		if digest == pin {
-			approved = true
-			break
-		}
-	}
-	if !approved {
-		os.RemoveAll(privateDir)
-		return "", "", fmt.Errorf("AstarteLauncher SHA-256 is not in the approved allowlist")
-	}
 	if err := verify(staged); err != nil {
 		os.RemoveAll(privateDir)
-		return "", "", err
+		return "", "", LauncherCheck{}, err
 	}
-	return staged, privateDir, nil
+	return staged, privateDir, LauncherCheck{Digest: digest, KnownDigest: digestAllowed(digest, pins)}, nil
 }
 
 func firstErr(errs ...error) error {

@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"bellum-installer/pkg/core"
+	"bellum-installer/pkg/packages"
 )
 
 type precheckCommands struct{ available map[string]bool }
@@ -47,15 +48,17 @@ func newPrecheckFixture(t *testing.T, tools ...string) (string, precheckHost, Pr
 		available[tool] = true
 	}
 	host := precheckHost{
-		Commands:       precheckCommands{available: available},
-		Files:          fedoraFiles{},
-		DetectGPU:      func() (core.GPUCapabilities, error) { return core.GPUCapabilities{Vendor: core.GPUAMD}, nil },
-		Ask:            func(string) bool { return true },
-		FreeBytes:      func(string) (uint64, error) { return 100 << 30, nil },
-		VerifyEAC:      func(string, []string) error { return nil },
-		StageLauncher:  func(string) (string, string, error) { return "", "", errors.New("unexpected launcher staging") },
-		ProtonDir:      func(v string) string { return filepath.Join(home, ".local", "share", "bellum", "proton", v) },
-		EACRuntimePath: func() string { return runtime },
+		Commands:  precheckCommands{available: available},
+		Files:     fedoraFiles{},
+		DetectGPU: func() (core.GPUCapabilities, error) { return core.GPUCapabilities{Vendor: core.GPUAMD}, nil },
+		Ask:       func(string) bool { return true },
+		FreeBytes: func(string) (uint64, error) { return 100 << 30, nil },
+		VerifyEAC: func(string, []string) (string, bool, error) { return "digest", true, nil },
+		StageLauncher: func(string) (string, string, packages.LauncherCheck, error) {
+			return "", "", packages.LauncherCheck{}, errors.New("unexpected launcher staging")
+		},
+		ProtonDir: func(v string) string { return filepath.Join(home, ".local", "share", "bellum", "proton", v) },
+		FindEAC:   func() (EACRuntime, error) { return EACRuntime{Path: runtime}, nil },
 	}
 	opts := PrecheckOptions{Wineprefix: filepath.Join(t.TempDir(), "Bellum"), Workdir: t.TempDir()}
 	return home, host, opts
@@ -77,7 +80,7 @@ func assertEmptyDir(t *testing.T, dir string) {
 
 func TestPrechecksReportEveryMissingToolAtOnce(t *testing.T) {
 	home, host, opts := newPrecheckFixture(t, "wget")
-	host.EACRuntimePath = func() string { return filepath.Join(home, "missing-eac") }
+	host.FindEAC = func() (EACRuntime, error) { return findEACRuntime(home, "", host.Files) }
 	logger, _ := core.NewLogger("")
 	_, err := runPrechecksWith(opts, logger, host)
 	if err == nil {

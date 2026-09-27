@@ -21,7 +21,7 @@ foundational installer and continues to own the original project. See
 | **Easy Anti-Cheat on Linux** | ✅ Astarte has enabled Proton/Linux EAC support for Bellum. |
 | **Latest published release** | ⚠️ [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1) (2026-05-13) **predates** the September hardening on `main`: pinned and verified downloads, the EAC-safe launcher, and ownership-checked uninstall. A new release is pending; until then, [build from `main`](#install-today-build-from-main). |
 | **One-command install** | 🚧 Planned. See [#6](https://github.com/Ch3w3y/bellum-linux-installer/issues/6). Not available yet. |
-| **Known blockers** | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9), [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10). Workarounds are under [Known issues](#known-issues-and-workarounds). |
+| **Known blockers** | [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10). Workarounds are under [Known issues](#known-issues-and-workarounds). |
 
 ## Where we're going
 
@@ -76,17 +76,10 @@ installer ─► ~/.local/share/bellum/proton/…  (pinned Proton-CachyOS, SHA-2
 In Steam, open **Library → Tools**, find **Proton EasyAntiCheat Runtime**, and
 install it. You can also open `steam://install/1826330` in your browser.
 
-The installer looks for it in
-`~/.local/share/Steam/steamapps/common/Proton EasyAntiCheat Runtime`. If you use
-**Flatpak Steam** or another Steam library folder, point the installer at it:
-
-```bash
-export PROTON_EAC_RUNTIME="$HOME/.var/app/com.valvesoftware.Steam/.local/share/Steam/steamapps/common/Proton EasyAntiCheat Runtime"
-```
-
-> ⚠️ The installer currently expects one specific runtime build (Steam build
-> `10437216`) and refuses to continue if Steam has updated it. Tracked in
-> [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9).
+The installer finds it in native or **Flatpak** Steam, in any of your Steam
+library folders. Steam keeps it up to date, and newer builds are accepted. If
+you keep it somewhere unusual, point the installer at the folder with
+`export PROTON_EAC_RUNTIME="/path/to/Proton EasyAntiCheat Runtime"`.
 
 ### 2. Install host packages
 
@@ -232,8 +225,6 @@ validated by this project.
 
 | Problem | Workaround | Tracking |
 | --- | --- | --- |
-| *EAC runtime digest mismatch* after a Steam update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
-| *SHA-256 mismatch* for the launcher installer after an Astarte update | No workaround yet; wait for a pin update | [#9](https://github.com/Ch3w3y/bellum-linux-installer/issues/9) |
 | Install fails at the very end with *unsupported GPU type* (VMs, unrecognised GPUs) | Not supported yet | [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10) |
 
 ## Uninstalling

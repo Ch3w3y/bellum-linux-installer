@@ -185,27 +185,33 @@ type PrecheckOptions struct {
 // precheckHost holds every host effect RunPrechecks reaches, so tests can run
 // the full precheck phase against fakes.
 type precheckHost struct {
-	Commands       CommandRunner
-	Files          FileStore
-	DetectGPU      func() (core.GPUCapabilities, error)
-	Ask            func(string) bool
-	FreeBytes      func(string) (uint64, error)
-	VerifyEAC      func(string, []string) error
-	StageLauncher  func(string) (string, string, error)
-	ProtonDir      func(string) string
-	EACRuntimePath func() string
+	Commands      CommandRunner
+	Files         FileStore
+	DetectGPU     func() (core.GPUCapabilities, error)
+	Ask           func(string) bool
+	FreeBytes     func(string) (uint64, error)
+	VerifyEAC     func(string, []string) (string, bool, error)
+	StageLauncher func(string) (string, string, packages.LauncherCheck, error)
+	ProtonDir     func(string) string
+	FindEAC       func() (EACRuntime, error)
 }
 
 var defaultPrecheckHost = precheckHost{
-	Commands:       DefaultBoundaries.Commands,
-	Files:          DefaultBoundaries.Files,
-	DetectGPU:      core.DetectGPUCapabilities,
-	Ask:            core.AskBool,
-	FreeBytes:      freeBytes,
-	VerifyEAC:      packages.VerifyEACRuntime,
-	StageLauncher:  packages.StageLauncherInstaller,
-	ProtonDir:      packages.GetProtonInstallPath,
-	EACRuntimePath: eacRuntimePath,
+	Commands:      DefaultBoundaries.Commands,
+	Files:         DefaultBoundaries.Files,
+	DetectGPU:     core.DetectGPUCapabilities,
+	Ask:           core.AskBool,
+	FreeBytes:     freeBytes,
+	VerifyEAC:     packages.VerifyEACRuntime,
+	StageLauncher: packages.StageLauncherInstaller,
+	ProtonDir:     packages.GetProtonInstallPath,
+	FindEAC: func() (EACRuntime, error) {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return EACRuntime{}, err
+		}
+		return findEACRuntime(home, os.Getenv("PROTON_EAC_RUNTIME"), DefaultBoundaries.Files)
+	},
 }
 
 // requiredTools lists the host commands the install needs. Every Wine
@@ -259,13 +265,18 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 		problems = append(problems, MissingDependencyGuidance(DetectHost(host.Files, host.Commands), missing))
 	}
 
-	runtimePath := host.EACRuntimePath()
-	if !isDirWith(runtimePath, host.Files) {
-		problems = append(problems, fmt.Sprintf("The Proton EasyAntiCheat Runtime was not found at %q. Install it through Steam (steam steam://install/1826330), or set PROTON_EAC_RUNTIME to its folder.", runtimePath))
-	} else if err := host.VerifyEAC(runtimePath, config.DefaultVersions.EACRuntimeSHA256Allowlist); err != nil {
-		problems = append(problems, fmt.Sprintf("The Proton EasyAntiCheat Runtime at %q failed verification: %v", runtimePath, err))
+	if runtime, err := host.FindEAC(); err != nil {
+		problems = append(problems, err.Error())
+	} else if digest, known, err := host.VerifyEAC(runtime.Path, config.DefaultVersions.EACRuntimeSHA256Allowlist); err != nil {
+		problems = append(problems, fmt.Sprintf("The Proton EasyAntiCheat Runtime at %q is incomplete (%v). In Steam, verify the integrity of \"Proton EasyAntiCheat Runtime\", or reinstall it with: %s", runtime.Path, err, eacRuntimeInstallCmd))
 	} else {
-		logger.Info("[OK] Proton EasyAntiCheat Runtime verified")
+		logger.Info(fmt.Sprintf("[OK] Proton EasyAntiCheat Runtime found: %s", runtime.Path))
+		if runtime.FromEnv {
+			logger.Warn("Using PROTON_EAC_RUNTIME from the environment; it is not checked against a Steam install.")
+		}
+		if !known {
+			logger.Warn(fmt.Sprintf("EAC runtime digest %s is not in the known list; Steam has probably updated it. Continuing.", digest))
+		}
 	}
 
 	protonVer := config.DefaultVersions.ProtonVer
@@ -293,9 +304,13 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	// bad file fails before confirmation. osslsigncode was checked above.
 	var stagedLauncher, launcherTempDir string
 	if opts.LauncherInstaller != "" {
-		stagedLauncher, launcherTempDir, err = host.StageLauncher(opts.LauncherInstaller)
+		var check packages.LauncherCheck
+		stagedLauncher, launcherTempDir, check, err = host.StageLauncher(opts.LauncherInstaller)
 		if err != nil {
 			return nil, err
+		}
+		if warning := check.Warning(); warning != "" {
+			logger.Warn(warning)
 		}
 		logger.Info(fmt.Sprintf("[OK] Launcher installer verified: %s", opts.LauncherInstaller))
 	}

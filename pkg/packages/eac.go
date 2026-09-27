@@ -48,18 +48,19 @@ func EACRuntimeDigest(root string) (string, error) {
 	return hex.EncodeToString(h.Sum(nil)), nil
 }
 
-func VerifyEACRuntime(root string, approved []string) error {
-	if len(approved) == 0 {
-		return fmt.Errorf("approved EAC runtime SHA-256 pin is required")
-	}
+// VerifyEACRuntime requires every expected runtime file and reports whether
+// the combined digest is a known build. Steam updates app 1826330 on its own
+// schedule and users cannot roll it back, so an unknown digest is a warning
+// for the caller to log, not a failure.
+func VerifyEACRuntime(root string, approved []string) (digest string, known bool, err error) {
 	got, err := EACRuntimeDigest(root)
 	if err != nil {
-		return err
+		return "", false, err
 	}
 	for _, expected := range approved {
 		if len(expected) == 64 && strings.EqualFold(got, expected) {
-			return nil
+			return got, true, nil
 		}
 	}
-	return fmt.Errorf("EAC runtime digest mismatch")
+	return got, false, nil
 }
