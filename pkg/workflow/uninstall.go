@@ -198,6 +198,12 @@ func validateBellumPrefix(prefix string) error {
 	if filepath.Base(clean) != "Bellum" {
 		return fmt.Errorf("prefix lacks Bellum directory marker: %q", clean)
 	}
+	// An unfinished install (manifest plus install-incomplete marker) may not
+	// have reached wineboot yet, so it lacks the Wine markers checked below.
+	if _, err := os.Stat(filepath.Join(clean, incompleteMarkerName)); err == nil {
+		_, err := readManifest(clean, DefaultBoundaries.Files)
+		return err
+	}
 	if _, err := os.Stat(filepath.Join(clean, "system.reg")); err != nil {
 		return fmt.Errorf("prefix lacks Wine system.reg marker: %q", clean)
 	}

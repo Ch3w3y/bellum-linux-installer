@@ -67,31 +67,21 @@ func main() {
 
 	logger.Info("Bellum Linux Installer")
 
-	// Determine WINEPREFIX
+	// Determine WINEPREFIX. Flag, environment and GUI all resolve through
+	// workflow.ResolvePrefixPath, which appends "Bellum" when needed.
 	var selectedWINEPREFIX string
 	if *wineprefix != "" {
-		selectedWINEPREFIX = *wineprefix
-		logger.Info(fmt.Sprintf("WINEPREFIX from flag: %s", core.Colorize(selectedWINEPREFIX, core.ColorBoldYellow)))
+		logger.Info(fmt.Sprintf("Install location from flag: %s", core.Colorize(*wineprefix, core.ColorBoldYellow)))
+		selectedWINEPREFIX, err = workflow.ResolvePrefixPath(*wineprefix)
 	} else if envPrefix := os.Getenv("WINEPREFIX"); envPrefix != "" {
-		selectedWINEPREFIX = envPrefix
-		logger.Info(fmt.Sprintf("WINEPREFIX from environment: %s", core.Colorize(selectedWINEPREFIX, core.ColorBoldYellow)))
+		logger.Info(fmt.Sprintf("Install location from environment: %s", core.Colorize(envPrefix, core.ColorBoldYellow)))
+		selectedWINEPREFIX, err = workflow.ResolvePrefixPath(envPrefix)
 	} else {
-		// Use GUI-based WINEPREFIX selection
-		selectedWINEPREFIX, err = workflow.ValidateWINEPREFIXWithGUI(logger)
-		if err != nil {
-			logger.Error(fmt.Sprintf("WINEPREFIX selection failed: %v", err))
-			os.Exit(1)
-		}
+		selectedWINEPREFIX, err = workflow.PickWINEPREFIXWithGUI(logger)
 	}
-
-	// Resolve WINEPREFIX to absolute path if needed
-	if !filepath.IsAbs(selectedWINEPREFIX) {
-		absWINEPREFIX, err := filepath.Abs(selectedWINEPREFIX)
-		if err != nil {
-			logger.Error(fmt.Sprintf("Failed to resolve WINEPREFIX to absolute path: %v", err))
-			os.Exit(1)
-		}
-		selectedWINEPREFIX = absWINEPREFIX
+	if err != nil {
+		logger.Error(fmt.Sprintf("WINEPREFIX selection failed: %v", err))
+		os.Exit(1)
 	}
 
 	// Run prechecks with absolute paths
@@ -133,6 +123,7 @@ func main() {
 		LauncherInstaller: result.LauncherInstaller,
 		Workdir:           workdir,
 		IsFSR41:           result.UseFSR41,
+		ReplaceIncomplete: result.ReplaceIncomplete,
 	}
 
 	// Run installation
@@ -159,6 +150,13 @@ func main() {
 
 	if err := workflow.RunConfiguration(configureConfig, logger); err != nil {
 		logger.Error(fmt.Sprintf("Configuration failed: %v", err))
+		if rmErr := workflow.DiscardIncompleteInstall(result.WINEPREFIX, logger); rmErr != nil {
+			logger.Warn(fmt.Sprintf("Could not remove the unfinished install; re-running the installer will offer to start over: %v", rmErr))
+		}
+		os.Exit(1)
+	}
+	if err := workflow.MarkInstallComplete(result.WINEPREFIX); err != nil {
+		logger.Error(fmt.Sprintf("Failed to mark the install as complete: %v", err))
 		os.Exit(1)
 	}
 
