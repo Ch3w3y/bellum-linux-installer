@@ -21,7 +21,7 @@ foundational installer and continues to own the original project. See
 | **Easy Anti-Cheat on Linux** | ✅ Astarte has enabled Proton/Linux EAC support for Bellum. |
 | **Latest published release** | ⚠️ [`v2.0.1`](https://github.com/Ch3w3y/bellum-linux-installer/releases/tag/v2.0.1) (2026-05-13) **predates** the September hardening on `main`: pinned and verified downloads, the EAC-safe launcher, and ownership-checked uninstall. A new release is pending; until then, [build from `main`](#install-today-build-from-main). |
 | **One-command install** | 🚧 Planned. See [#6](https://github.com/Ch3w3y/bellum-linux-installer/issues/6). Not available yet. |
-| **Known blockers** | [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10). Workarounds are under [Known issues](#known-issues-and-workarounds). |
+| **Known blockers** | None open. See [Known issues](#known-issues-and-workarounds). |
 
 ## Where we're going
 
@@ -225,7 +225,8 @@ validated by this project.
 
 | Problem | Workaround | Tracking |
 | --- | --- | --- |
-| Install fails at the very end with *unsupported GPU type* (VMs, unrecognised GPUs) | Not supported yet | [#10](https://github.com/Ch3w3y/bellum-linux-installer/issues/10) |
+| GPU shown as *Unknown* (VMs, virtio-gpu, some hybrid laptops) | The install continues with generic Proton settings, without vendor-specific features. Install `glxinfo` for better detection | — |
+| `Bellum: command not found` | The installer prints the command that adds `~/.local/bin` to your `PATH` for your shell | — |
 
 ## Uninstalling
 

@@ -123,13 +123,9 @@ func generateDesktopFiles(config LauncherConfig) error {
 		return fmt.Errorf("create applications directory: %w", err)
 	}
 
-	var entryComment string
-	switch config.GPUType {
-	case "AMD", "NVIDIA", "Intel":
-		entryComment = "Launch Bellum via Proton and umu"
-	default:
-		return fmt.Errorf("unsupported GPU type for desktop file: %s", config.GPUType)
-	}
+	// The desktop entry does not depend on the GPU: every vendor, including
+	// an unrecognised one, launches through the same umu wrapper.
+	entryComment := "Launch Bellum via Proton and umu"
 	entryName := "Bellum"
 	entryExec := filepath.Join(homeDir, ".local", "bin", "Bellum")
 
@@ -511,18 +507,7 @@ func RemoveLauncherBinary(gpuType string) error {
 
 // EnsureLauncherWrapper installs the shared umu wrapper in the user bin directory.
 func EnsureLauncherWrapper(gpuType, wineprefix, protonpath string) error {
-	var scriptContent string
-	var err error
-
-	switch gpuType {
-	case "AMD":
-		scriptContent, err = GetLauncherScript(wineprefix, protonpath)
-	case "NVIDIA", "Intel":
-		scriptContent, err = GetProtonLauncherScript(wineprefix, protonpath)
-	default:
-		return fmt.Errorf("unsupported GPU type: %s", gpuType)
-	}
-
+	scriptContent, err := GetLauncherScript(wineprefix, protonpath)
 	if err != nil {
 		return fmt.Errorf("failed to generate launcher script: %w", err)
 	}
@@ -544,13 +529,7 @@ func EnsureLauncherDesktop(gpuType, wineprefix, iconPath string) error {
 
 	entryName := "Bellum"
 	entryExec := filepath.Join(os.Getenv("HOME"), ".local", "bin", "Bellum")
-	var entryComment string
-	switch gpuType {
-	case "AMD", "NVIDIA", "Intel":
-		entryComment = "Launch Bellum via Proton and umu"
-	default:
-		return fmt.Errorf("unsupported GPU type: %s", gpuType)
-	}
+	entryComment := "Launch Bellum via Proton and umu"
 
 	installedIcon := iconPath
 	if installedIcon == "" {
