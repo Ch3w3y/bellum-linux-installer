@@ -11,12 +11,12 @@ alone is not an approval: the required reviewer of GitHub's `release` environmen
 record and verify its contents before allowing publication. Do not tag while
 required-reviewer protection is absent.
 
-Candidate: (full SHA of the tested release candidate)
+Candidate: 59ae4837bfde5a72e010741cc8792e6b08993f4a
 
 QA: [ ] https://example.invalid/qa-evidence
 EAC: [ ] https://example.invalid/eac-evidence
-Security: [ ] https://example.invalid/security-evidence
-Provenance: [ ] https://example.invalid/pin-evidence
+Security: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/security.md
+Provenance: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/provenance.md
 
 Release candidates (`vX.Y.Z-rc.N`) are exempt: they publish as GitHub
 pre-releases so the QA and EAC evidence above can be gathered on real
