@@ -19,7 +19,14 @@ foundational installer and continues to own the original project. See
 Open a terminal and paste:
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh)
+curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash
+```
+
+This works in any shell, fish included. To pass options, add them after
+`bash -s --`, for example to try a release candidate:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version v2.2.0-rc.1
 ```
 
 Then press **Enter** at each question to accept the defaults. The installer:

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Bellum Linux Installer bootstrap.
 #
-#   bash <(curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh)
+#   curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version vX.Y.Z-rc.N   # with options
 #
 # Downloads the latest release from this repository, checks it against the
 # release's SHA256SUMS, unpacks it to ~/.local/share/bellum-installer/<version>
