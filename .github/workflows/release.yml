@@ -3,12 +3,38 @@ name: Tagged release
 on:
   push:
     tags: ['v*']
+  # Also startable from the Actions tab: creates the tag at the selected
+  # branch's head, then runs the same pipeline. (Tags pushed with the
+  # workflow token don't trigger workflows, so tagging happens in here.)
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Tag to create and release, e.g. v2.2.0-rc.1 (candidates publish as pre-releases)'
+        required: true
+        type: string
 
 permissions:
   contents: read
 
 jobs:
+  tag:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Create the tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-rc\.[0-9]+)?$ ]] || { echo "Tag must look like v1.2.3 or v1.2.3-rc.1" >&2; exit 1; }
+          gh api "repos/${GITHUB_REPOSITORY}/git/refs" -f ref="refs/tags/$TAG" -f sha="$GITHUB_SHA"
+          echo "Tagged $GITHUB_SHA as $TAG"
+
   build:
+    needs: tag
+    if: ${{ !cancelled() && (needs.tag.result == 'success' || needs.tag.result == 'skipped') }}
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -21,13 +47,14 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
+          ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
           persist-credentials: false
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.26.8'
       - name: Check tag and release gate
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           test "$(git describe --tags --exact-match)" = "$TAG"
           test "$(git status --porcelain --untracked-files=all)" = ''
@@ -49,7 +76,7 @@ jobs:
       - name: Build and verify release
         env:
           GOARCH: ${{ matrix.arch }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           make release VERSION="${TAG#v}"
           make verify-release VERSION="${TAG#v}"
@@ -66,6 +93,7 @@ jobs:
 
   publish:
     needs: build
+    if: ${{ !cancelled() && needs.build.result == 'success' }}
     runs-on: ubuntu-latest
     environment: release
     permissions:
@@ -82,13 +110,13 @@ jobs:
           merge-multiple: true
       - name: Verify complete asset set and checksums
         env:
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           scripts/check-release-assets.sh "${TAG#v}" dist
       - name: Publish release assets
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.ref_name }}
+          TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           if [[ "$TAG" =~ -rc\.[0-9]+$ ]]; then
             gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --prerelease \
