@@ -201,14 +201,6 @@ export DXIL_SPIRV_CONFIG=wmma_rdna3_workaround
 	return nil
 }
 
-func eacRuntimePath() string {
-	if path := os.Getenv("PROTON_EAC_RUNTIME"); path != "" {
-		return path
-	}
-	home, _ := os.UserHomeDir()
-	return filepath.Join(home, ".local", "share", "Steam", "steamapps", "common", "Proton EasyAntiCheat Runtime")
-}
-
 func quoteShellEnv(value string) string { return "'" + strings.ReplaceAll(value, "'", "'\"'\"'") + "'" }
 
 func createLaunchVarsFileGeneric(wineprefix, protonpath string, files FileStore) error {
