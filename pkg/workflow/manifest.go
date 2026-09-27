@@ -54,10 +54,7 @@ func rollbackNewPrefix(prefix string, created bool, files FileStore) error {
 	if !created {
 		return nil
 	}
-	if _, err := os.Lstat(prefix); os.IsNotExist(err) {
-		return nil
-	}
-	return files.RemoveAll(prefix)
+	return removeBellumPrefix(prefix, proofCreatedThisRun, files)
 }
 
 // incompleteMarkerName is written next to the manifest when an install starts
@@ -98,7 +95,7 @@ func discardIncompleteInstallWith(prefix string, files FileStore) error {
 	case prefixAbsent:
 		return nil
 	case prefixIncomplete:
-		return files.RemoveAll(prefix)
+		return removeBellumPrefix(prefix, proofIncomplete, files)
 	default:
 		return fmt.Errorf("refusing to remove %s: it is not an unfinished Bellum install", prefix)
 	}

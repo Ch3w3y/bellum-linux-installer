@@ -48,6 +48,7 @@ func RunUninstallationWithBoundaries(config UninstallConfig, logger *core.Logger
 		if _, err := readManifest(config.WINEPREFIX, boundaries.Files); err != nil {
 			return err
 		}
+		logger.Info("[OK] Verified a Bellum install: its ownership manifest names this exact folder")
 	} else if err := validateMissingBellumPrefix(config.WINEPREFIX); err != nil {
 		return err
 	}
@@ -95,16 +96,9 @@ func RunUninstallationWithBoundaries(config UninstallConfig, logger *core.Logger
 }
 
 func validateMissingBellumPrefix(prefix string) error {
-	if !filepath.IsAbs(prefix) || filepath.Base(filepath.Clean(prefix)) != "Bellum" {
-		return fmt.Errorf("unsafe Bellum prefix path: %q", prefix)
-	}
-	home, err := os.UserHomeDir()
+	clean, err := checkPrefixPath(prefix)
 	if err != nil {
 		return err
-	}
-	clean := filepath.Clean(prefix)
-	if clean == "/" || clean == filepath.Clean(home) {
-		return fmt.Errorf("refusing unsafe Bellum prefix: %q", clean)
 	}
 	if _, err := os.Lstat(clean); err == nil {
 		return fmt.Errorf("prefix exists but is not a directory: %q", clean)
@@ -164,10 +158,7 @@ func removeWINEPREFIX(wineprefix string, logger *core.Logger) error {
 	return removeWINEPREFIXWith(wineprefix, logger, DefaultBoundaries.Files)
 }
 func removeWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileStore) error {
-	if err := validateBellumPrefix(wineprefix); err != nil {
-		return err
-	}
-	if err := files.RemoveAll(wineprefix); err != nil {
+	if err := removeBellumPrefix(wineprefix, proofInstalled, files); err != nil {
 		logger.Error(fmt.Sprintf("Failed to remove WINEPREFIX: %v", err))
 		return err
 	}
@@ -176,44 +167,11 @@ func removeWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileStor
 	return nil
 }
 
+// validateBellumPrefix proves that an existing prefix is a Bellum install
+// this user owns (see verifyBellumPrefix). It changes nothing.
 func validateBellumPrefix(prefix string) error {
-	if !filepath.IsAbs(prefix) {
-		return fmt.Errorf("Bellum prefix must be absolute: %q", prefix)
-	}
-	clean := filepath.Clean(prefix)
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	if clean == "/" || clean == filepath.Clean(home) {
-		return fmt.Errorf("refusing destructive prefix: %q", clean)
-	}
-	resolved, err := filepath.EvalSymlinks(clean)
-	if err != nil {
-		return fmt.Errorf("cannot resolve Bellum prefix %q: %w", clean, err)
-	}
-	if resolved == "/" || resolved == filepath.Clean(home) || resolved != clean {
-		return fmt.Errorf("refusing symlinked or unsafe Bellum prefix: %q", clean)
-	}
-	if filepath.Base(clean) != "Bellum" {
-		return fmt.Errorf("prefix lacks Bellum directory marker: %q", clean)
-	}
-	// An unfinished install (manifest plus install-incomplete marker) may not
-	// have reached wineboot yet, so it lacks the Wine markers checked below.
-	if _, err := os.Stat(filepath.Join(clean, incompleteMarkerName)); err == nil {
-		_, err := readManifest(clean, DefaultBoundaries.Files)
-		return err
-	}
-	if _, err := os.Stat(filepath.Join(clean, "system.reg")); err != nil {
-		return fmt.Errorf("prefix lacks Wine system.reg marker: %q", clean)
-	}
-	if info, err := os.Stat(filepath.Join(clean, "drive_c")); err != nil || !info.IsDir() {
-		return fmt.Errorf("prefix lacks Wine drive_c marker: %q", clean)
-	}
-	if _, err := readManifest(clean, DefaultBoundaries.Files); err != nil {
-		return err
-	}
-	return nil
+	_, err := verifyBellumPrefix(prefix, proofInstalled, DefaultBoundaries.Files)
+	return err
 }
 
 // ValidateWINEPREFIXWithGUIForUninstall prompts user to select a WINEPREFIX using GUI picker
