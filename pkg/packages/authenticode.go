@@ -18,9 +18,9 @@ import (
 // to the system's trusted roots, whose leaf certificate has exactly one
 // common name equal to the approved signer (case-sensitive).
 func VerifyLauncherAuthenticode(path string) error {
-	roots, err := x509.SystemCertPool()
+	roots, err := launcherRoots()
 	if err != nil {
-		return fmt.Errorf("load the system's trusted certificates: %w", err)
+		return fmt.Errorf("load trusted certificates: %w", err)
 	}
 	return verifyLauncherAuthenticodeWith(path, config.DefaultVersions.LauncherSigner, roots, time.Now())
 }

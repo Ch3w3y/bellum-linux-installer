@@ -118,11 +118,26 @@ func TestAuthenticodeRealWorldSample(t *testing.T) {
 	if path == "" {
 		t.Skip("set BELLUM_AUTHENTICODE_SAMPLE to a signed .exe")
 	}
-	roots, err := x509.SystemCertPool()
+	roots, err := launcherRoots()
 	if err != nil {
 		t.Fatal(err)
 	}
 	if err := verifyLauncherAuthenticodeWith(path, os.Getenv("BELLUM_AUTHENTICODE_SIGNER"), roots, time.Now()); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestEmbeddedRootsMatchPins(t *testing.T) {
+	roots, err := embeddedRoots()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(roots) != len(pinnedRoots) {
+		t.Fatalf("%d embedded roots, %d pinned", len(roots), len(pinnedRoots))
+	}
+	for _, r := range roots {
+		if !r.IsCA {
+			t.Errorf("%s is not a CA certificate", r.Subject)
+		}
 	}
 }

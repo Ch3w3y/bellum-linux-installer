@@ -26,7 +26,7 @@ Current pins, kept up to date by the
 | DXVK, vkd3d-proton, dxvk-nvapi | Integrated in the pinned Proton; never overlaid separately | zlib, LGPL-2.1-or-later and MIT respectively, shipped by the Proton archive. |
 | winetricks | `protonfixes/winetricks` inside the pinned Proton, run as `umu-run winetricks` | [Winetricks](https://github.com/Winetricks/winetricks), LGPL-2.1-or-later, shipped by the Proton archive. |
 | umu-launcher | Self-contained zipapp, downloaded, SHA-256 verified, installed to `~/.local/share/bellum/umu/<version>`; needs only python3 3.10+ | [umu-launcher releases](https://github.com/Open-Wine-Components/umu-launcher/releases), GPL-3.0, downloaded at install time rather than redistributed. |
-| Astarte Launcher installer | Official unversioned URL; the Authenticode signature from `ASTARTE INDUSTRIES INC.` is required, the digest allowlist only records inspected builds | Downloaded from the official Astarte release endpoint. |
+| Astarte Launcher installer | Official unversioned URL; the Authenticode signature from `ASTARTE INDUSTRIES INC.` is required, the digest allowlist only records inspected builds | Downloaded from the official Astarte release endpoint. It is signed through GlobalSign GCC R45 EV CodeSigning CA 2020, whose root (GlobalSign Code Signing Root R45) is code-signing-only and absent from Linux CA bundles, so that root ships in `pkg/packages/trust/`, pinned by SHA-256 `7b9d553e…97df86`, and is added to the system roots for launcher verification only. |
 
 The SHA-256 pins are content pins for the exact downloaded files. A missing or
 mismatched pin fails closed. Proton is extracted into a sibling staging
