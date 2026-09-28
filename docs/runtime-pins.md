@@ -63,6 +63,12 @@ Actions tab). It builds `tools/pinupdate`, which:
    binary hook and winetricks verb the installer relies on, such as
    `PROTON_EAC_RUNTIME` in `ntdll.so`, the FSR4 provider in `amdxc64.dll`, and
    every winetricks verb. It also records the bundled `WINETRICKS_VERSION`.
+   The contract also requires the bundled DXVK to be 3.x
+   (`files/lib/wine/dxvk/version`): the installer's NVIDIA minimum driver
+   (575.51.02, `minNVIDIADriver` in `pkg/workflow/nvidia.go`) is DXVK 3.x's
+   documented minimum, so a new DXVK major blocks the update until that
+   minimum is reviewed. The current pin bundles DXVK v3.0.2, vkd3d-proton
+   `3dfc6f0` and dxvk-nvapi v0.9.2-70.
 2. **umu-launcher.** Picks the newest stable release with a zipapp and checks
    its digest and contents.
 3. **Astarte Launcher.** Downloads the current installer, verifies its
@@ -140,11 +146,17 @@ disassembly of `files/lib/wine/x86_64-windows/amdxc64.dll`.
   [20260702 release notes](https://github.com/CachyOS/proton-cachyos/releases/tag/cachyos-11.0-20260702-slr)
   say it "is not required any more in most cases", and that
   `PROTON_FSR4_RDNA3_UPGRADE` was removed.
-- **What the installer sets:** `PROTON_FSR4_UPGRADE=1` on an unambiguous
-  RDNA4 only (native FP8), and never the RDNA3 workaround there. Other AMD
-  GPUs keep `PROTON_FSR4_UPGRADE=0`, which leaves Proton's automatic check in
-  charge, plus the workaround, which is the existing behaviour. This is
-  the only AMD configuration.
+- **What the installer sets** (per launch profile, `core.LaunchProfileFor`):
+  - **RDNA4:** `PROTON_FSR4_UPGRADE=1` on an unambiguous RDNA4 only (native
+    FP8), never the RDNA3 workaround. *Verified.*
+  - **RDNA3:** `PROTON_FSR4_UPGRADE=0`, which leaves Proton's automatic check
+    in charge, plus the workaround (the v2.2 behaviour, kept until frame-time
+    measurements show whether it is a net gain). *Expected.*
+  - **RDNA2 (Steam Deck), RDNA1, GCN, and unknown or ambiguous AMD:**
+    `PROTON_FSR4_UPGRADE=0` and no workaround. These GPUs lack the RDNA3
+    matrix instructions it targets, so FSR4 through FP16 emulation is
+    expected to cost more than it gains; the game falls back to its own
+    FSR 3.x. *Expected.*
 - Whether the game gets FSR4 also depends on Bellum using the FidelityFX API
   on D3D12. The game ships D3D12 (Unreal Engine 5); its FSR version is **not
   yet verified**. Check in game with `PROTON_FSR4_INDICATOR=1`, which sets

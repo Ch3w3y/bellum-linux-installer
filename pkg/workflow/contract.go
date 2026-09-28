@@ -27,6 +27,9 @@ func ProtonContract() []ProtonRequirement {
 		{"files/lib/wine/x86_64-windows/amdxc64.dll", "FSR4_UPGRADE", "FSR4 provider for AMD GPUs"},
 		{"files/lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll", "descriptor_heap", "VKD3D_CONFIG option"},
 		{"files/lib/wine/dxvk/x86_64-windows/dxgi.dll", "DXVK_ENABLE_NVAPI", "NVIDIA launch setting"},
+		// minNVIDIADriver is DXVK 3.x's documented minimum; a new DXVK major
+		// needs that minimum reviewed before the pin moves.
+		{"files/lib/wine/dxvk/version", "dxvk (v3.", "NVIDIA minimum driver check (" + minNVIDIADriver + ")"},
 	}
 	for _, verb := range WinetricksVerbs() {
 		reqs = append(reqs, ProtonRequirement{"protonfixes/winetricks", "w_metadata " + verb + " ", "winetricks verb used during install"})

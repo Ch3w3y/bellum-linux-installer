@@ -1,7 +1,7 @@
 # Installer side-effect audit
 
 Every change the installer, the `Bellum` wrapper and the uninstaller make to
-the host, and the checks around them. Reviewed against `main` for v2.2.0.
+the host, and the checks around them. Reviewed for v2.3.0.
 
 ## Files written
 
@@ -20,6 +20,8 @@ the host, and the checks around them. Reviewed against `main` for v2.2.0.
 | `~/.local/bin/Bellum` | installer | the launch wrapper |
 | `~/.local/share/applications/Bellum.desktop`, `~/Desktop/Bellum.desktop` | installer | shortcuts (the second only if `~/Desktop` exists), mode `0644` |
 | `~/.local/share/icons/hicolor/256x256/apps/bellum.png` | installer | the shortcut icon |
+| `<Steam>/userdata/<account>/config/shortcuts.vdf` | installer (opt-in, default No), uninstaller | the Bellum non-Steam game entry; native Steam only, written only while Steam is closed |
+| `<Steam>/userdata/<account>/config/shortcuts.vdf.bellum-backup-<time>` (`0600`) | installer, uninstaller | the untouched original, before each change to `shortcuts.vdf` |
 
 Nothing is written outside `$HOME`, except packages you agree to install with
 your package manager.
@@ -34,12 +36,27 @@ your package manager.
   runs the installer with the terminal as input.
 - **Prechecks are read-only.** `RunPrechecks` (host effects injected through
   `precheckHost`, so the phase is tested against fakes) resolves the prefix
-  path, detects the GPU and display session, and checks the tools, free space
-  and the EAC runtime. It reports every problem in one message. It creates
+  path, detects the platform (below), and checks the tools, free space and
+  the EAC runtime. NVIDIA driver problems, a microSD install folder and, on
+  SteamOS, a folder outside `$HOME` and removable media are warnings with the
+  fix; they never block. It reports every problem in one message. It creates
   nothing and downloads nothing. A `--launcher-installer` file is verified into
   a private temporary copy. If the EAC runtime is missing and Steam is
   installed, it offers to run `steam steam://install/1826330` (Steam asks for
   its own confirmation) and waits up to 20 minutes.
+- **Platform detection (read-only).** `core.DetectPlatform` reads
+  `/etc/os-release` (or `/usr/lib/os-release`), `/run/ostree-booted`, DMI
+  `sys_vendor` and `product_name`, `/sys/module/{nvidia,nouveau}`,
+  `/proc/driver/nvidia/version`, the `nvidia_drm` modeset parameter, Vulkan
+  ICD manifests (system, `$HOME` and `VK_*` loader overrides),
+  `/proc/bus/input/devices`, `/dev/input/by-id`, the Steam roots under
+  `$HOME`, and `/proc/<pid>/{comm,status}` to see whether the user's Steam is
+  running. It runs `glxinfo -B`, then `lspci -nn`, then reads DRM sysfs, for
+  the GPU. Every read is size-bounded, scans are capped, symlinks are
+  resolved with loop and escape checks, untrusted strings are sanitized
+  before display, and the whole detection has a 15-second budget. Command
+  lines, serial numbers and Bluetooth addresses are never read or stored.
+  Diagnostics go to `installer.log` only.
 - **Runtime.** After the user confirms the summary, `AcquireRuntime` downloads
   umu-launcher and Proton with Go's HTTP client, checks their SHA-256 pins,
   and unpacks Proton into a staging directory. Unpacking rejects path
@@ -71,19 +88,36 @@ your package manager.
     (builtin) and `Bellum-Win64-Shipping.exe` (native);
   - DirectInput `RawInput=1`.
 
-  It then writes `launch_vars.env` through `GuardGameTreeWrites`, which
-  refuses any write into the game directory. The installer never adds,
+  It then writes `launch_vars.env` for the detected launch profile
+  (`core.LaunchProfileFor`) through `GuardGameTreeWrites`, which refuses any
+  write into the game directory. The installer never adds,
   copies or replaces DLLs (#11). Finally it removes the incomplete marker.
 - **Launcher files.** `pkg/launchers` writes the wrapper, desktop entries and
   icon, and runs `gio` and `update-desktop-database` when available. If
   generation fails, the previous files are restored. The same wrapper serves
   every GPU vendor.
+- **Steam shortcut (opt-in).** On Valve hardware, SteamOS, Bazzite Deck
+  images and in Game Mode, after a successful install or update, the
+  installer asks `[y/N]` whether to add Bellum to Steam; `--yes` never
+  answers it. Only a native Steam root is used (Flatpak and Snap Steam can't
+  start `~/.local/bin/Bellum`), and only the single signed-in account or the
+  `MostRecent` one in `loginusers.vdf`. The write requires Steam to be
+  closed (checked through `/proc`, unknown counts as running, and re-checked
+  just before the rename); refuses a symlinked config folder or file, a file
+  owned by another user, and any file the strict binary-VDF parser
+  (`pkg/steamvdf`, size-, depth- and node-bounded, fuzzed) rejects; backs up
+  the original with `O_EXCL`; writes a temporary file in the same folder,
+  re-parses the encoded bytes, keeps the original mode, fsyncs and renames.
+  An existing Bellum entry is left as is.
 - **Wrapper (each launch).** It sources `launch_vars.env` and checks the EAC
   runtime, Proton and umu-run. It takes a non-blocking `flock` on the prefix,
   so a second click returns at once. It runs `bellum-installer
   update-launcher <prefix>` (a failure is logged, and the launch continues),
   then `umu-run` on the launcher with `PROTON_VERB=waitforexitandrun`, logging
-  to `launcher.log`.
+  to `launcher.log`. Inside gamescope (Game Mode) `BELLUM_GAMESCOPE=1` is
+  ignored rather than nesting a second gamescope. Started outside Steam
+  (`SteamGameId` unset) while the user's Steam runs (`pgrep -u`), it logs a
+  double-input hint.
 - **Update mode.** On a finished install (manifest present, no incomplete
   marker) the installer offers an update instead of refusing. It downloads the
   current pins, regenerates the wrapper and desktop files, rewrites
@@ -114,7 +148,9 @@ never followed.
 
 The uninstaller asks before deleting (default No; `--dry-run` changes nothing).
 It then removes the wrapper, desktop entries and icon only when they point at
-that prefix. Shared files in `~/.local/share/bellum` and
+that prefix. When it removes the wrapper, it also removes the Bellum entry
+from Steam's `shortcuts.vdf` with the same checks and backup as the installer
+(Steam must be closed; otherwise it only warns). Shared files in `~/.local/share/bellum` and
 `~/.local/share/bellum-installer` are kept. Running it again after the prefix
 is gone is safe.
 
@@ -124,11 +160,14 @@ is gone is safe.
   prints the line that adds it for the user's shell.
 - The EAC runtime is located through `PROTON_EAC_RUNTIME`, then
   `appmanifest_1826330.acf` in every Steam library listed in
-  `libraryfolders.vdf` under the native and Flatpak Steam roots. All six
+  `libraryfolders.vdf` under the native, Flatpak and Snap Steam roots. All six
   runtime files must exist; an unknown combined digest only warns, because
   Steam updates the runtime.
 - The launcher is accepted on its signer. An unknown launcher digest only
   warns, because Astarte's download URL always serves the current build.
+- Steam could start between the final running check and the rename of
+  `shortcuts.vdf`, and then overwrite it from memory when it exits; the
+  backup keeps the original either way.
 - Some command errors are deliberately non-fatal: `winetricks win11`, the
   RawInput registry write, and the launcher update (retried at every launch).
 
@@ -137,6 +176,8 @@ is gone is safe.
 `make check` (gofmt, `go vet`, `go test ./...`, module pinning) and
 `scripts/test-release.sh` pass on `main`. The behaviour above is covered by
 tests in `pkg/workflow` (prechecks, install transaction, update mode, prefix
-guard, uninstall), `pkg/packages` (extraction, pins, Authenticode, launcher
+guard, uninstall, NVIDIA checks, Steam shortcut), `pkg/core` (platform
+detection golden fixtures, profiles), `pkg/steamvdf` (binary VDF, fuzzed),
+`pkg/packages` (extraction, pins, Authenticode, launcher
 updates) and `pkg/launchers` (wrapper behaviour, run in bash). Live installs
 are verified on hardware per [the QA checklist](docs/eac-qa.md).

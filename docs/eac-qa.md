@@ -16,6 +16,26 @@ curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/
 Test a fresh install where possible, and an update of an existing install
 (run the same command on it).
 
+## Evidence per profile
+
+Since v2.3 the installer picks a launch profile from the detected platform
+and marks it **verified** or **expected** (see the README's
+[Platforms](../README.md#platforms)). A profile becomes verified only with
+QA and EAC evidence from real hardware running it; untested profiles ship as
+expected, with settings no riskier than the nearest verified one. Record which
+profile you tested: copy the review screen's **Detected** line into the
+record.
+
+| Profile | Controller check | Status |
+| --- | --- | --- |
+| RDNA4 · Arch/CachyOS · KDE Wayland | desktop pad, Steam closed and running | verified in v2.2.0 (controller not yet tested) |
+| Steam Deck (LCD or OLED) · SteamOS · Game Mode and Desktop | built-in controls through Steam Input | needs a tester |
+| Steam Machine · SteamOS | Steam Controller through Steam Input | needs a tester |
+| RDNA2 or RDNA3 desktop · Bazzite | desktop pad | needs a tester |
+| NVIDIA RTX · Fedora or Ubuntu | desktop pad | needs a tester |
+| NVIDIA · Arch | — | nice to have |
+| Ubuntu with Snap Steam | — | needs a tester (Snap EAC runtime) |
+
 ## Checklist
 
 **Install**
@@ -24,6 +44,13 @@ Test a fresh install where possible, and an update of an existing install
   umu-launcher and winetricks versions.
 - [ ] The system check reports the GPU (vendor and generation), the display
   session and the Proton EasyAntiCheat Runtime correctly.
+- [ ] The review screen's **Detected** line matches the machine (hardware,
+  distro, GPU generation, session) and names the expected status.
+- [ ] NVIDIA only: any driver warning is accurate and its fix command is right
+  for this distribution; a healthy driver gives no warning.
+- [ ] `launch_vars.env` matches the profile: RDNA4 has
+  `PROTON_FSR4_UPGRADE="1"`; RDNA3 has `DXIL_SPIRV_CONFIG=wmma_rdna3_workaround`;
+  RDNA2 and older AMD have neither.
 - [ ] The install finishes with *Bellum is installed*, with no `✖` lines.
 - [ ] The launcher update step reports `Astarte Launcher vX.Y.Z is up to date`
   or `updated to vX.Y.Z`.
@@ -55,6 +82,36 @@ Test a fresh install where possible, and an update of an existing install
   Linux module loading and the session being admitted. Match the IDs below;
   the IDs alone don't prove success.
 - [ ] The game stays running until you quit it.
+
+**Steam Deck and Steam Machine**
+
+- [ ] The review screen names the device (`Steam Deck LCD`, `Steam Deck OLED`
+  or `Steam Machine (provisional)`). For a Steam Machine, record
+  `/sys/class/dmi/id/product_name` and the `glxinfo -B` renderer string.
+- [ ] Installing to a microSD card shows the microSD note; installing to the
+  internal SSD doesn't.
+- [ ] With Steam closed, *Add Bellum to Steam* adds the entry, and a
+  `shortcuts.vdf.bellum-backup-*` file appears. With Steam running, it
+  refuses and leaves `shortcuts.vdf` unchanged.
+- [ ] In **Game Mode**, Bellum starts from the library. The launcher is usable
+  with the trackpad (as a mouse) and **Steam + X** keyboard for sign-in, and
+  the Play button works.
+- [ ] The game's menus and gameplay work on the built-in controls.
+- [ ] The Steam button and Quick Access overlay work over the game.
+- [ ] Suspend and resume mid-session keep input and the EAC session (note what
+  happens).
+- [ ] The uninstaller removes the Steam entry (Steam closed).
+
+**Controllers (desktop)**
+
+- [ ] Xbox, PlayStation and 8BitDo pads (whichever you have), started from the
+  desktop shortcut with Steam **closed**: menus and gameplay; rumble.
+- [ ] The same with Steam **running**: note any double input; `launcher.log`
+  shows the double-input note.
+- [ ] Started from Steam as a non-Steam game: the pad works through Steam
+  Input; no double input.
+- [ ] Hot-plugging a pad mid-session.
+- [ ] Easy Anti-Cheat is unaffected by the input path.
 
 **Graphics (optional but useful)**
 
@@ -88,8 +145,10 @@ Include:
 - the candidate tag and full commit SHA;
 - the date, and who tested;
 - hardware and software: CPU, GPU, driver (Mesa or NVIDIA version), distro and
-  kernel, desktop and session (X11, Wayland or gamescope), and whether Steam is
-  native or Flatpak;
+  kernel, desktop and session (X11, Wayland or gamescope/Game Mode), and
+  whether Steam is native, Flatpak or Snap;
+- the review screen's **Detected** line (the profile tested);
+- controllers used and how Bellum was started (from Steam or the shortcut);
 - the Proton EasyAntiCheat Runtime build (Steam shows it; the installer logs
   its digest);
 - each checklist item as passed, failed or not tested, with notes;
