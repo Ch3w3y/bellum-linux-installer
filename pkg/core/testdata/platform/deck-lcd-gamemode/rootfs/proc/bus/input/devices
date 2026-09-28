@@ -1,0 +1,5 @@
+I: Bus=0003 Vendor=28de Product=1205 Version=0100
+N: Name="Valve Software Steam Deck"
+H: Handlers=event4 js0
+B: EV=1b
+

@@ -1,0 +1,117 @@
+{
+  "platform": {
+    "os": {
+      "id": "steamos",
+      "idLike": [
+        "arch"
+      ],
+      "variantId": "",
+      "versionId": "3",
+      "prettyName": "SteamOS 3.6",
+      "family": "arch",
+      "immutable": "yes",
+      "immutableEvidence": "known distro identity: steamos",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "Valve",
+      "productName": "Galileo",
+      "sku": "deck-oled",
+      "match": "exact",
+      "evidence": "dmi:sys_vendor,product_name"
+    },
+    "gpu": {
+      "Vendor": "AMD",
+      "Renderer": "AMD Radeon RX 7900 XTX gfx1100",
+      "Generation": "RDNA3",
+      "Ambiguous": false,
+      "DLSS": false,
+      "NVAPI": false,
+      "FSR": true,
+      "FSR41": false,
+      "FrameGeneration": false
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "AMD Radeon RX 7900 XTX gfx1100",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:deck-external-rdna3-negative"
+    },
+    "nvidia": {
+      "kernel": "not-observed",
+      "userspace": "unknown",
+      "association": "unknown",
+      "rawVersion": "",
+      "version": "",
+      "versionSource": "",
+      "modeset": "unknown",
+      "vulkan": {
+        "manifests": [],
+        "scanState": "complete",
+        "nvidiaCandidate": "not-observed",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "wayland",
+      "desktop": "KDE",
+      "gameMode": "no",
+      "evidence": "wayland-display"
+    },
+    "steam": {
+      "installs": [],
+      "discovery": "unknown",
+      "running": "unknown"
+    },
+    "controllers": {
+      "devices": [],
+      "discovery": "unknown"
+    },
+    "diagnostics": [
+      {
+        "code": "controllers/input-unreadable",
+        "subsystem": "controllers",
+        "source": "/proc/bus/input/devices",
+        "outcome": "missing",
+        "detail": "input device inventory unavailable"
+      },
+      {
+        "code": "hardware/gpu-conflict",
+        "subsystem": "hardware",
+        "source": "gpu:renderer",
+        "outcome": "conflict",
+        "detail": "Deck DMI with a non-RDNA2 active renderer (AMD RDNA3); SKU mapping kept, GPU result unchanged"
+      },
+      {
+        "code": "steam/home-unreadable",
+        "subsystem": "steam",
+        "source": "/home/tester",
+        "outcome": "missing",
+        "detail": "home directory unreadable; Steam inventory unknown"
+      },
+      {
+        "code": "steam/proc-unreadable",
+        "subsystem": "steam",
+        "source": "/proc",
+        "outcome": "missing",
+        "detail": "process listing unavailable; Steam running state unknown"
+      }
+    ]
+  },
+  "profile": {
+    "version": 1,
+    "osId": "steamos",
+    "osVariant": "",
+    "osFamily": "arch",
+    "sku": "deck-oled",
+    "gpuVendor": "AMD",
+    "gpuGeneration": "RDNA3",
+    "gpuAmbiguous": false,
+    "session": "wayland",
+    "gameMode": "no",
+    "hardwareMatch": "exact"
+  },
+  "profileKey": "v1|os=steamos|variant=|family=arch|sku=deck-oled|gpu=AMD|gen=RDNA3|stable|session=wayland|gamemode=no|match=exact"
+}

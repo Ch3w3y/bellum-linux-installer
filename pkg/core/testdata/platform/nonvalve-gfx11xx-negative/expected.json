@@ -1,0 +1,108 @@
+{
+  "platform": {
+    "os": {
+      "id": "arch",
+      "idLike": [],
+      "variantId": "",
+      "versionId": "",
+      "prettyName": "Arch Linux",
+      "family": "arch",
+      "immutable": "no",
+      "immutableEvidence": "mutable distro model",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "ASUSTeK COMPUTER INC.",
+      "productName": "ROG Strix G733",
+      "sku": "generic",
+      "match": "unknown",
+      "evidence": "dmi:sys_vendor,product_name"
+    },
+    "gpu": {
+      "Vendor": "AMD",
+      "Renderer": "AMD Radeon RX 7900 XTX gfx1100",
+      "Generation": "RDNA3",
+      "Ambiguous": false,
+      "DLSS": false,
+      "NVAPI": false,
+      "FSR": true,
+      "FSR41": false,
+      "FrameGeneration": false
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "AMD Radeon RX 7900 XTX gfx1100",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:nonvalve-gfx11xx-negative"
+    },
+    "nvidia": {
+      "kernel": "not-observed",
+      "userspace": "unknown",
+      "association": "unknown",
+      "rawVersion": "",
+      "version": "",
+      "versionSource": "",
+      "modeset": "unknown",
+      "vulkan": {
+        "manifests": [],
+        "scanState": "complete",
+        "nvidiaCandidate": "not-observed",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "wayland",
+      "desktop": "KDE",
+      "gameMode": "no",
+      "evidence": "wayland-display"
+    },
+    "steam": {
+      "installs": [],
+      "discovery": "unknown",
+      "running": "unknown"
+    },
+    "controllers": {
+      "devices": [],
+      "discovery": "unknown"
+    },
+    "diagnostics": [
+      {
+        "code": "controllers/input-unreadable",
+        "subsystem": "controllers",
+        "source": "/proc/bus/input/devices",
+        "outcome": "missing",
+        "detail": "input device inventory unavailable"
+      },
+      {
+        "code": "steam/home-unreadable",
+        "subsystem": "steam",
+        "source": "/home/tester",
+        "outcome": "missing",
+        "detail": "home directory unreadable; Steam inventory unknown"
+      },
+      {
+        "code": "steam/proc-unreadable",
+        "subsystem": "steam",
+        "source": "/proc",
+        "outcome": "missing",
+        "detail": "process listing unavailable; Steam running state unknown"
+      }
+    ]
+  },
+  "profile": {
+    "version": 1,
+    "osId": "arch",
+    "osVariant": "",
+    "osFamily": "arch",
+    "sku": "generic",
+    "gpuVendor": "AMD",
+    "gpuGeneration": "RDNA3",
+    "gpuAmbiguous": false,
+    "session": "wayland",
+    "gameMode": "no",
+    "hardwareMatch": "unknown"
+  },
+  "profileKey": "v1|os=arch|variant=|family=arch|sku=generic|gpu=AMD|gen=RDNA3|stable|session=wayland|gamemode=no|match=unknown"
+}

@@ -1,0 +1,150 @@
+{
+  "platform": {
+    "os": {
+      "id": "",
+      "idLike": [],
+      "variantId": "",
+      "versionId": "",
+      "prettyName": "",
+      "family": "unknown",
+      "immutable": "unknown",
+      "immutableEvidence": "no distro identity evidence",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "",
+      "productName": "",
+      "sku": "unknown",
+      "match": "unknown",
+      "evidence": "dmi:unreadable"
+    },
+    "gpu": {
+      "Vendor": "Unknown",
+      "Renderer": "llvmpipe (LLVM 18.1.2)",
+      "Generation": "",
+      "Ambiguous": false,
+      "DLSS": false,
+      "NVAPI": false,
+      "FSR": false,
+      "FSR41": false,
+      "FrameGeneration": false
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "llvmpipe (LLVM 18.1.2)",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:faults-symlink-denied"
+    },
+    "nvidia": {
+      "kernel": "not-observed",
+      "userspace": "unknown",
+      "association": "unknown",
+      "rawVersion": "",
+      "version": "",
+      "versionSource": "",
+      "modeset": "unknown",
+      "vulkan": {
+        "manifests": [
+          {
+            "path": "/usr/share/vulkan/icd.d/broken.json",
+            "libraryPath": "",
+            "apiVersion": "",
+            "vendorHint": "",
+            "parseState": "malformed"
+          }
+        ],
+        "scanState": "partial",
+        "nvidiaCandidate": "unknown",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "headless",
+      "desktop": "",
+      "gameMode": "no",
+      "evidence": "no-display"
+    },
+    "steam": {
+      "installs": [
+        {
+          "kind": "native",
+          "root": "/home/tester/.local/share/Steam",
+          "evidence": "root:native"
+        }
+      ],
+      "discovery": "partial",
+      "running": "unknown"
+    },
+    "controllers": {
+      "devices": [],
+      "discovery": "unknown"
+    },
+    "diagnostics": [
+      {
+        "code": "controllers/input-unreadable",
+        "subsystem": "controllers",
+        "source": "/proc/bus/input/devices",
+        "outcome": "missing",
+        "detail": "input device inventory unavailable"
+      },
+      {
+        "code": "hardware/dmi-unreadable",
+        "subsystem": "hardware",
+        "source": "dmi:sys_vendor,product_name",
+        "outcome": "missing",
+        "detail": "DMI vendor or product unreadable; hardware unknown"
+      },
+      {
+        "code": "os/os-release-unreadable",
+        "subsystem": "os",
+        "source": "/etc/os-release",
+        "outcome": "permission",
+        "detail": "os-release unreadable; OS identity unknown"
+      },
+      {
+        "code": "steam/root-unresolvable",
+        "subsystem": "steam",
+        "source": "/home/tester/.steam/root",
+        "outcome": "conflict",
+        "detail": "Steam root alias unresolvable"
+      },
+      {
+        "code": "steam/root-unresolvable",
+        "subsystem": "steam",
+        "source": "/home/tester/.steam/steam",
+        "outcome": "conflict",
+        "detail": "Steam root alias unresolvable"
+      },
+      {
+        "code": "steam/proc-ownership-unknown",
+        "subsystem": "steam",
+        "source": "/proc",
+        "outcome": "unsupported",
+        "detail": "process ownership unreadable; running state unknown"
+      },
+      {
+        "code": "vulkan/manifest-malformed",
+        "subsystem": "vulkan",
+        "source": "/usr/share/vulkan/icd.d/broken.json",
+        "outcome": "malformed",
+        "detail": "ICD manifest is not valid JSON"
+      }
+    ]
+  },
+  "profile": {
+    "version": 1,
+    "osId": "",
+    "osVariant": "",
+    "osFamily": "unknown",
+    "sku": "unknown",
+    "gpuVendor": "Unknown",
+    "gpuGeneration": "unknown",
+    "gpuAmbiguous": false,
+    "session": "headless",
+    "gameMode": "no",
+    "hardwareMatch": "unknown"
+  },
+  "profileKey": "v1|os=|variant=|family=unknown|sku=unknown|gpu=Unknown|gen=unknown|stable|session=headless|gamemode=no|match=unknown"
+}

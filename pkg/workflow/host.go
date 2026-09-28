@@ -1,9 +1,10 @@
 package workflow
 
 import (
-	"bufio"
 	"fmt"
 	"strings"
+
+	"bellum-installer/pkg/core"
 )
 
 // Host describes the Linux distribution and package tools available to the user.
@@ -20,23 +21,17 @@ func DetectHost(files FileStore, commands CommandRunner) Host {
 	if commands == nil {
 		commands = DefaultBoundaries.Commands
 	}
+	// OS identity parsing is owned by core; this adapter preserves the
+	// historical Host shape, package-manager lookup and guidance output.
 	b, _ := files.ReadFile("/etc/os-release")
-	values := map[string]string{}
-	s := bufio.NewScanner(strings.NewReader(string(b)))
-	for s.Scan() {
-		line := strings.TrimSpace(s.Text())
-		if line == "" || strings.HasPrefix(line, "#") {
-			continue
-		}
-		k, v, ok := strings.Cut(line, "=")
-		if !ok {
-			continue
-		}
-		v = strings.Trim(strings.TrimSpace(v), "\"'")
-		values[k] = v
+	id, idLike, variant, _, _, idLikeTokens, _ := core.ParseOSRelease(b)
+	ostreeBooted := false
+	if _, err := files.Stat("/run/ostree-booted"); err == nil {
+		ostreeBooted = true
 	}
-	h := Host{ID: strings.ToLower(values["ID"]), IDLike: strings.ToLower(values["ID_LIKE"]), VariantID: strings.ToLower(values["VARIANT_ID"])}
-	h.Immutable = strings.Contains(h.ID, "steamos") || strings.Contains(h.ID, "bazzite") || strings.Contains(h.VariantID, "immutable") || strings.Contains(h.VariantID, "atomic")
+	immutable, _ := core.ClassifyImmutable(id, variant, core.ClassifyOSFamily(id, idLikeTokens), ostreeBooted)
+	h := Host{ID: id, IDLike: idLike, VariantID: variant}
+	h.Immutable = immutable == core.TriYes
 	for _, bin := range []string{"pacman", "dnf", "apt-get", "zypper"} {
 		if commands.LookPath(bin) != "" {
 			h.PackageManager = bin

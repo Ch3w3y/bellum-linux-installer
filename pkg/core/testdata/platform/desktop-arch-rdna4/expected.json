@@ -1,0 +1,111 @@
+{
+  "platform": {
+    "os": {
+      "id": "cachyos",
+      "idLike": [
+        "arch"
+      ],
+      "variantId": "",
+      "versionId": "2026.09.01",
+      "prettyName": "CachyOS Linux",
+      "family": "arch",
+      "immutable": "no",
+      "immutableEvidence": "mutable distro model",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "LENOVO",
+      "productName": "82JM",
+      "sku": "generic",
+      "match": "unknown",
+      "evidence": "dmi:sys_vendor,product_name"
+    },
+    "gpu": {
+      "Vendor": "AMD",
+      "Renderer": "AMD Radeon RX 9070 XT gfx1201",
+      "Generation": "RDNA4",
+      "Ambiguous": false,
+      "DLSS": false,
+      "NVAPI": false,
+      "FSR": true,
+      "FSR41": true,
+      "FrameGeneration": true
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "AMD Radeon RX 9070 XT gfx1201",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:desktop-arch-rdna4"
+    },
+    "nvidia": {
+      "kernel": "not-observed",
+      "userspace": "unknown",
+      "association": "unknown",
+      "rawVersion": "",
+      "version": "",
+      "versionSource": "",
+      "modeset": "unknown",
+      "vulkan": {
+        "manifests": [],
+        "scanState": "complete",
+        "nvidiaCandidate": "not-observed",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "wayland",
+      "desktop": "KDE",
+      "gameMode": "no",
+      "evidence": "wayland-display"
+    },
+    "steam": {
+      "installs": [
+        {
+          "kind": "native",
+          "root": "/home/tester/.local/share/Steam",
+          "evidence": "root:native"
+        },
+        {
+          "kind": "flatpak",
+          "root": "/home/tester/.var/app/com.valvesoftware.Steam/data/Steam",
+          "evidence": "root:flatpak"
+        }
+      ],
+      "discovery": "complete",
+      "running": "unknown"
+    },
+    "controllers": {
+      "devices": [
+        {
+          "name": "Microsoft X-Box 360 pad",
+          "bus": "0003",
+          "vendorId": "045e",
+          "productId": "028e",
+          "handlers": [
+            "event5",
+            "js1"
+          ],
+          "confidence": "controller"
+        }
+      ],
+      "discovery": "complete"
+    },
+    "diagnostics": []
+  },
+  "profile": {
+    "version": 1,
+    "osId": "cachyos",
+    "osVariant": "",
+    "osFamily": "arch",
+    "sku": "generic",
+    "gpuVendor": "AMD",
+    "gpuGeneration": "RDNA4",
+    "gpuAmbiguous": false,
+    "session": "wayland",
+    "gameMode": "no",
+    "hardwareMatch": "unknown"
+  },
+  "profileKey": "v1|os=cachyos|variant=|family=arch|sku=generic|gpu=AMD|gen=RDNA4|stable|session=wayland|gamemode=no|match=unknown"
+}

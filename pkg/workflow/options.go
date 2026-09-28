@@ -41,14 +41,17 @@ func DisplaySession() string {
 }
 
 func displaySession(env func(string) string) string {
-	desktop := env("XDG_CURRENT_DESKTOP")
-	switch {
-	case strings.EqualFold(desktop, "gamescope") || env("GAMESCOPE_WAYLAND_DISPLAY") != "":
+	// Session precedence is owned by core; this wrapper keeps the existing
+	// presentation string for current callers until step 3 migrates the
+	// display. The new UI uses typed session information, never this string.
+	info := core.ClassifySessionFunc(env)
+	switch info.Kind {
+	case core.SessionGamescope:
 		return "gamescope (Steam Deck / Game Mode)"
-	case env("WAYLAND_DISPLAY") != "" || strings.EqualFold(env("XDG_SESSION_TYPE"), "wayland"):
-		return strings.TrimSpace("Wayland " + desktop + " (the game runs through XWayland)")
-	case env("DISPLAY") != "":
-		return strings.TrimSpace("X11 " + desktop)
+	case core.SessionWayland:
+		return strings.TrimSpace("Wayland " + info.Desktop + " (the game runs through XWayland)")
+	case core.SessionX11:
+		return strings.TrimSpace("X11 " + info.Desktop)
 	}
 	return "no graphical session detected"
 }

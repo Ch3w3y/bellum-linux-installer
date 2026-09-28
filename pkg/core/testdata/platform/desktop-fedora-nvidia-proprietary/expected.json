@@ -1,0 +1,108 @@
+{
+  "platform": {
+    "os": {
+      "id": "fedora",
+      "idLike": [],
+      "variantId": "",
+      "versionId": "41",
+      "prettyName": "Fedora Linux 41 (Workstation Edition)",
+      "family": "fedora",
+      "immutable": "no",
+      "immutableEvidence": "mutable distro model",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "Dell Inc.",
+      "productName": "XPS 8960",
+      "sku": "generic",
+      "match": "unknown",
+      "evidence": "dmi:sys_vendor,product_name"
+    },
+    "gpu": {
+      "Vendor": "NVIDIA",
+      "Renderer": "NVIDIA GeForce RTX 4070",
+      "Generation": "Ada",
+      "Ambiguous": false,
+      "DLSS": true,
+      "NVAPI": true,
+      "FSR": true,
+      "FSR41": false,
+      "FrameGeneration": true
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "NVIDIA GeForce RTX 4070",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:desktop-fedora-nvidia-proprietary"
+    },
+    "nvidia": {
+      "kernel": "proprietary",
+      "userspace": "nvidia",
+      "association": "yes",
+      "rawVersion": "550.54.14",
+      "version": "550.54.14",
+      "versionSource": "/sys/module/nvidia/version",
+      "modeset": "yes",
+      "vulkan": {
+        "manifests": [
+          {
+            "path": "/usr/share/vulkan/icd.d/nvidia_icd.json",
+            "libraryPath": "libGLX_nvidia.so.0",
+            "apiVersion": "1.3.0",
+            "vendorHint": "nvidia",
+            "parseState": "ok"
+          }
+        ],
+        "scanState": "complete",
+        "nvidiaCandidate": "present",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "x11",
+      "desktop": "GNOME",
+      "gameMode": "no",
+      "evidence": "x11-display"
+    },
+    "steam": {
+      "installs": [
+        {
+          "kind": "snap",
+          "root": "/home/tester/snap/steam/common/.local/share/Steam",
+          "evidence": "root:snap"
+        }
+      ],
+      "discovery": "complete",
+      "running": "no"
+    },
+    "controllers": {
+      "devices": [],
+      "discovery": "unknown"
+    },
+    "diagnostics": [
+      {
+        "code": "controllers/input-unreadable",
+        "subsystem": "controllers",
+        "source": "/proc/bus/input/devices",
+        "outcome": "missing",
+        "detail": "input device inventory unavailable"
+      }
+    ]
+  },
+  "profile": {
+    "version": 1,
+    "osId": "fedora",
+    "osVariant": "",
+    "osFamily": "fedora",
+    "sku": "generic",
+    "gpuVendor": "NVIDIA",
+    "gpuGeneration": "Ada",
+    "gpuAmbiguous": false,
+    "session": "x11",
+    "gameMode": "no",
+    "hardwareMatch": "unknown"
+  },
+  "profileKey": "v1|os=fedora|variant=|family=fedora|sku=generic|gpu=NVIDIA|gen=Ada|stable|session=x11|gamemode=no|match=unknown"
+}
