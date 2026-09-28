@@ -89,8 +89,18 @@ if [ "${BELLUM_GAMEMODE:-0}" = 1 ]; then
   cmd=(gamemoderun "${cmd[@]}")
 fi
 if [ "${BELLUM_GAMESCOPE:-0}" = 1 ]; then
-  command -v gamescope >/dev/null || { echo "gamescope is required for BELLUM_GAMESCOPE=1" >&2; exit 1; }
-  cmd=(gamescope -- "${cmd[@]}")
+  # Game Mode already runs inside gamescope; never nest a second one.
+  if [ -n "${GAMESCOPE_WAYLAND_DISPLAY:-}" ]; then
+    echo "BELLUM_GAMESCOPE=1 ignored: already running inside gamescope (Game Mode)." >> "$WINEPREFIX/launcher.log"
+  else
+    command -v gamescope >/dev/null || { echo "gamescope is required for BELLUM_GAMESCOPE=1" >&2; exit 1; }
+    cmd=(gamescope -- "${cmd[@]}")
+  fi
+fi
+# Started outside Steam while Steam runs: Steam's desktop controller layout
+# and the game can both read the same pad.
+if [ -z "${SteamGameId:-}" ] && command -v pgrep >/dev/null && pgrep -u "$(id -u)" -x steam >/dev/null 2>&1; then
+  echo "Note: Bellum was started outside Steam while Steam is running. If a controller sends double input, close Steam or start Bellum from Steam (Add a Non-Steam Game)." >> "$WINEPREFIX/launcher.log"
 fi
 exec "${cmd[@]}" >> "$WINEPREFIX/launcher.log" 2>&1
 `, shellQuote(filepath.Join(config.Wineprefix, "launch_vars.env")), shellQuote(launcherExe), launcherUpdateBlock(config.ToolPath))

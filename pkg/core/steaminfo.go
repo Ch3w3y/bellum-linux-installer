@@ -2,15 +2,15 @@ package core
 
 import (
 	"context"
+	"os"
 	"path"
 	"sort"
 	"strconv"
 	"strings"
 )
 
-// Typed Steam inventory. The catalog covers native, Flatpak and Snap roots;
-// step 2 adds this detection while step 5 migrates the EAC search, so the
-// existing EAC resolution is deliberately untouched. Simultaneous
+// Typed Steam inventory. The catalog covers native, Flatpak and Snap roots
+// (the EAC runtime search in pkg/workflow covers the same roots). Simultaneous
 // installations of several kinds are all reported; no profile choice is
 // ever requested.
 
@@ -119,6 +119,15 @@ func steamRootProven(fs DetectionFS, root string) (bool, error) {
 func homeListable(fs DetectionFS, home string) bool {
 	_, err := fs.ReadDir(home)
 	return err == nil
+}
+
+// SteamRunningNow re-checks, at action time, whether the current user's
+// Steam client is running. Anything short of positive evidence that it is
+// not running reports unknown, so callers that must only write while Steam
+// is closed treat unknown as running.
+func SteamRunningNow(ctx context.Context) TriState {
+	state, _ := detectSteamRunning(ctx, osDetectionFS{}, os.Geteuid(), true)
+	return state
 }
 
 // detectSteamRunning matches same-user /proc process-name evidence. Only the

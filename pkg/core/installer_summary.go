@@ -8,8 +8,10 @@ import (
 
 // PrintInstallerSummary prints the installer summary after prechecks complete.
 // This mirrors the bash version's print_installer_summary function.
+// detected is the one-line platform profile (workflow.ProfileSummary); it is
+// omitted when empty.
 func PrintInstallerSummary(protonVer, winetricksVer, vkd3dVer, dxvkVer,
-	wineprefix, launcherInstallerPath, gpuType, choices string, workdir string) {
+	wineprefix, launcherInstallerPath, detected, gpuType, choices string, workdir string) {
 
 	// Determine launcher summary
 	launcherSummary := "(will be downloaded)"
@@ -21,6 +23,9 @@ func PrintInstallerSummary(protonVer, winetricksVer, vkd3dVer, dxvkVer,
 		fmt.Printf("  %s%-15s%s %s\n", ColorGrayBold, key, ColorReset, value)
 	}
 	row("Install to", ColorBoldYellow+wineprefix+ColorReset)
+	if detected != "" {
+		row("Detected", detected)
+	}
 	row("GPU", gpuType)
 	row("Configuration", choices)
 	row("Proton", protonVer)

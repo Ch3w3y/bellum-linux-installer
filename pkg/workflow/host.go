@@ -41,21 +41,11 @@ func DetectHost(files FileStore, commands CommandRunner) Host {
 	return h
 }
 
+// PackageFamily is the package-manager family, classified by core so the
+// guidance and platform detection agree (CachyOS, Nobara, Pop!_OS and the
+// other derivatives included).
 func (h Host) PackageFamily() string {
-	ids := strings.Fields(h.ID + " " + h.IDLike)
-	for _, id := range ids {
-		switch id {
-		case "arch", "manjaro", "endeavouros":
-			return "arch"
-		case "fedora", "rhel", "centos":
-			return "fedora"
-		case "debian", "ubuntu", "linuxmint", "pop":
-			return "debian"
-		case "opensuse", "opensuse-leap", "opensuse-tumbleweed", "suse":
-			return "opensuse"
-		}
-	}
-	return "unknown"
+	return string(core.ClassifyOSFamily(h.ID, strings.Fields(h.IDLike)))
 }
 
 // familyPackages maps each required tool to the distribution package that

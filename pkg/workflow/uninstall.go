@@ -130,6 +130,13 @@ func removeOwnedLauncherAssets(prefix string, logger *core.Logger, files FileSto
 			return fmt.Errorf("remove owned launcher: %w", err)
 		}
 		logger.Info(fmt.Sprintf("[OK] Removed %s", launcher))
+		// The Steam entry (if the installer added one) starts that wrapper.
+		// A failure here only warns: the prefix is already gone.
+		if n, err := removeBellumSteamShortcut(home, defaultSteamShortcutHost); err != nil {
+			logger.Warn("The Bellum entry in Steam was left in place: " + err.Error() + ". Remove it in Steam: right-click Bellum → Manage → Remove non-Steam game from your library.")
+		} else if n > 0 {
+			logger.Info("[OK] Removed Bellum from your Steam library")
+		}
 	}
 	if ownedDesktop {
 		icon := filepath.Join(home, ".local", "share", "icons", "hicolor", "256x256", "apps", "bellum.png")

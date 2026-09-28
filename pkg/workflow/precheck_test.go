@@ -162,3 +162,77 @@ func TestPrechecksOfferToInstallEACThroughSteam(t *testing.T) {
 		t.Fatalf("expected the EAC problem, got %v", err)
 	}
 }
+
+func TestPrechecksCarryTheDetectedPlatform(t *testing.T) {
+	_, host, opts := newPrecheckFixture(t, "python3", "flock")
+	detected := core.Platform{
+		OS:       core.OSInfo{ID: "steamos", VersionID: "3.7", Family: core.OSArch},
+		Hardware: core.HardwareInfo{SKU: core.SKUDeckOLED},
+		GPU:      core.GPUCapabilities{Vendor: core.GPUAMD, Generation: "RDNA2", FSR: true},
+		Session:  core.SessionInfo{Kind: core.SessionGamescope, GameMode: core.TriYes},
+	}
+	host.DetectGPU = func() (core.GPUCapabilities, error) { t.Fatal("GPU probed twice"); return core.GPUCapabilities{}, nil }
+	host.DetectPlatform = func() (core.Platform, error) { return detected, nil }
+	logger, _ := core.NewLogger("")
+	result, err := runPrechecksWith(opts, logger, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Platform.Hardware.SKU != core.SKUDeckOLED || result.GPUCapabilities.Generation != "RDNA2" || result.UseFSR41 || !result.IsAMDGPU {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if got := ProfileSummary(result.Platform); got != "Steam Deck OLED · SteamOS 3 · RDNA2 · Game Mode (expected)" {
+		t.Fatalf("profile summary %q", got)
+	}
+
+	// A platform probe failure is reported, like a GPU probe failure was.
+	host.DetectPlatform = func() (core.Platform, error) { return core.Platform{}, errors.New("probe failed") }
+	if _, err := runPrechecksWith(opts, logger, host); err == nil {
+		t.Fatal("expected the probe error")
+	}
+}
+
+func TestSteamOSLocationWarning(t *testing.T) {
+	steamos := core.Platform{OS: core.OSInfo{ID: "steamos"}}
+	for prefix, warn := range map[string]bool{
+		"/home/deck/Games/Bellum":         false,
+		"/run/media/deck/SD/Bellum":       false,
+		"/opt/Bellum":                     true,
+		"/home/deckhand/Bellum":           true,
+		"/home/deck/../other/Bellum":      true,
+		"/run/media-not-really/sd/Bellum": true,
+	} {
+		if got := steamOSLocationWarning(filepath.Clean(prefix), "/home/deck", steamos) != ""; got != warn {
+			t.Errorf("%s: warning=%t, want %t", prefix, got, warn)
+		}
+	}
+	if steamOSLocationWarning("/opt/Bellum", "/home/deck", core.Platform{OS: core.OSInfo{ID: "arch"}}) != "" {
+		t.Error("only SteamOS resets the system on update")
+	}
+}
+
+func TestIsSDCard(t *testing.T) {
+	for out, want := range map[string]bool{
+		"Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/mmcblk0p1 500000 1 499999 1% /run/media/deck/SD\n": true,
+		"Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/nvme0n1p8 500000 1 499999 1% /home\n":              false,
+		"": false,
+	} {
+		if got := isSDCardWith("/x", fakeCommands{output: out}); got != want {
+			t.Errorf("%q: got %t, want %t", out, got, want)
+		}
+	}
+}
+
+func TestPackageFamilyCoversDerivatives(t *testing.T) {
+	for id, want := range map[string]string{
+		"cachyos": "arch", "endeavouros": "arch", "nobara": "fedora", "pop": "debian",
+		"linuxmint": "debian", "opensuse-tumbleweed": "opensuse", "gentoo": "unknown",
+	} {
+		if got := (Host{ID: id}).PackageFamily(); got != want {
+			t.Errorf("%s: got %s, want %s", id, got, want)
+		}
+	}
+	if got := (Host{ID: "zorin", IDLike: "ubuntu debian"}).PackageFamily(); got != "debian" {
+		t.Errorf("ID_LIKE fallback: %s", got)
+	}
+}

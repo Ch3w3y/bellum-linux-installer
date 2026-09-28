@@ -131,6 +131,7 @@ func main() {
 		config.DefaultVersions.DXVKVer,
 		result.WINEPREFIX,
 		result.LauncherInstaller,
+		workflow.ProfileSummary(result.Platform),
 		result.GPUType,
 		workflow.ConfigSummary(result.GPUCapabilities),
 		workdir,
@@ -209,11 +210,13 @@ func main() {
 	}
 
 	logger.Info("Installation complete!")
-	printFinish("Bellum is installed", configureConfig.WINEPREFIX)
+	inSteam := workflow.OfferSteamShortcut(result.Platform, logger)
+	printFinish("Bellum is installed", configureConfig.WINEPREFIX, workflow.FinishAdvice(result.Platform, inSteam))
 }
 
-// printFinish shows the closing screen with the ways to start the game.
-func printFinish(title, prefix string) {
+// printFinish shows the closing screen with the ways to start the game and,
+// on Steam hardware or with a controller, how to play through Steam.
+func printFinish(title, prefix string, advice []string) {
 	fmt.Println()
 	fmt.Printf("  %s✔ %s%s\n\n", core.ColorBoldGreen, title, core.ColorReset)
 	fmt.Println("  Start it from:")
@@ -224,6 +227,13 @@ func printFinish(title, prefix string) {
 		fmt.Printf("        %s%s%s\n", core.ColorGrayBold, hint, core.ColorReset)
 	} else {
 		fmt.Printf("    %s▸%s the %sBellum%s command in a terminal\n", core.ColorBoldCyan, core.ColorReset, core.Bold, core.ColorReset)
+	}
+	if len(advice) > 0 {
+		fmt.Println()
+		fmt.Printf("  %s%s%s\n", core.Bold, advice[0], core.ColorReset)
+		for _, line := range advice[1:] {
+			fmt.Printf("  %s\n", line)
+		}
 	}
 	fmt.Println()
 	fmt.Printf("  %sKeep the Astarte Launcher open while you play. Settings: %s/launch_vars.env%s\n", core.ColorGrayBold, prefix, core.ColorReset)
@@ -290,7 +300,8 @@ func runUpdate(result *workflow.PrecheckResult, installConfig workflow.InstallCo
 		fail(logger, logFile, "Writing Bellum's updated launch settings failed", err, "Run the installer again to retry. The game and your login are untouched.")
 	}
 	logger.Info("Update complete!")
-	printFinish("Bellum is up to date", result.WINEPREFIX)
+	inSteam := workflow.OfferSteamShortcut(result.Platform, logger)
+	printFinish("Bellum is up to date", result.WINEPREFIX, workflow.FinishAdvice(result.Platform, inSteam))
 }
 
 // runUpdateLauncher installs the latest Astarte Launcher into prefix. Its
