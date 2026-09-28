@@ -8,7 +8,7 @@ and continues to own that project. This repository is an independently
 maintained successor by Ch3w3y and contributors. Its Git history keeps Joheb's
 foundational commits and authorship. The original project was published
 without a license; its code remains Joheb's, and it is covered by this
-repository's [MIT license](LICENSE) only once he agrees.
+repository's [MIT license](../LICENSE) only once he agrees.
 
 The history also records the original project's v2.1.0 commit as an ancestor.
 That records lineage only: v2.1.0 bundled an EAC runtime and changed launch and

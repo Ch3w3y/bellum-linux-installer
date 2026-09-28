@@ -8,7 +8,7 @@
 set -euo pipefail
 
 commit=${1:?release commit required}
-gate=${2:-RELEASE-GATE.md}
+gate=${2:-docs/release-gate.md}
 fail() { echo "$*" >&2; exit 1; }
 [[ $commit =~ ^[0-9a-f]{40}$ ]] || fail 'Release commit must be a full commit SHA'
 

@@ -60,14 +60,14 @@ jobs:
         run: |
           test "$(git describe --tags --exact-match)" = "$TAG"
           test "$(git status --porcelain --untracked-files=all)" = ''
-          test -f RELEASE-GATE.md
+          test -f docs/release-gate.md
           # Release candidates (vX.Y.Z-rc.N) exist to gather the QA and EAC
           # evidence the gate asks for, so they skip it and publish as
           # pre-releases that the one-line installer never picks by default.
           if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
             echo "Release candidate $TAG: evidence gate deferred to the final release."
           else
-            scripts/check-release-gate.sh "$(git rev-parse HEAD)" RELEASE-GATE.md
+            scripts/check-release-gate.sh "$(git rev-parse HEAD)" docs/release-gate.md
           fi
       - name: Code and vulnerability checks
         run: |

@@ -33,28 +33,29 @@ trap 'rm -rf "$repo"; rm -f .release-dirty-probe; rm -rf "dist/bellum-installer-
   git config user.email test@example.com
   git config user.name test
   echo code > main.go
-  printf 'QA: [ ] https://example.invalid/qa\n' > RELEASE-GATE.md
+  mkdir -p docs
+  printf 'QA: [ ] https://example.invalid/qa\n' > docs/release-gate.md
   git add . && git commit -qm candidate
   candidate=$(git rev-parse HEAD)
-  gate_passes() { "$gate_script" "$(git rev-parse HEAD)" RELEASE-GATE.md >/dev/null 2>&1; }
+  gate_passes() { "$gate_script" "$(git rev-parse HEAD)" docs/release-gate.md >/dev/null 2>&1; }
   write_gate() {
-    printf 'Candidate: %s\n' "$candidate" > RELEASE-GATE.md
+    printf 'Candidate: %s\n' "$candidate" > docs/release-gate.md
     for label in QA EAC Security Provenance; do
-      printf '%s: [x] https://github.com/example/blob/v1/docs/release-evidence/%s/%s.md\n' "$label" "$candidate" "$label" >> RELEASE-GATE.md
+      printf '%s: [x] https://github.com/example/blob/v1/docs/release-evidence/%s/%s.md\n' "$label" "$candidate" "$label" >> docs/release-gate.md
     done
   }
   write_gate
   mkdir -p "docs/release-evidence/$candidate" && echo record > "docs/release-evidence/$candidate/QA.md"
   git add . && git commit -qm evidence
-  "$gate_script" "$(git rev-parse HEAD)" RELEASE-GATE.md
+  "$gate_script" "$(git rev-parse HEAD)" docs/release-gate.md
 
-  sed -i 's/QA: \[x\]/QA: [ ]/' RELEASE-GATE.md && git commit -qam unchecked
+  sed -i 's/QA: \[x\]/QA: [ ]/' docs/release-gate.md && git commit -qam unchecked
   if gate_passes; then echo 'Unchecked evidence was accepted' >&2; exit 1; fi
-  write_gate && sed -i 's#https://github.com/example#https://example.invalid#' RELEASE-GATE.md && git commit -qam placeholder
+  write_gate && sed -i 's#https://github.com/example#https://example.invalid#' docs/release-gate.md && git commit -qam placeholder
   if gate_passes; then echo 'Placeholder evidence was accepted' >&2; exit 1; fi
-  write_gate && sed -i "s#release-evidence/$candidate#release-evidence/ffffffffffffffffffffffffffffffffffffffff#" RELEASE-GATE.md && git commit -qam stale
+  write_gate && sed -i "s#release-evidence/$candidate#release-evidence/ffffffffffffffffffffffffffffffffffffffff#" docs/release-gate.md && git commit -qam stale
   if gate_passes; then echo 'Stale candidate evidence was accepted' >&2; exit 1; fi
-  write_gate && sed -i '/^Candidate:/d' RELEASE-GATE.md && git commit -qam nocandidate
+  write_gate && sed -i '/^Candidate:/d' docs/release-gate.md && git commit -qam nocandidate
   if gate_passes; then echo 'Missing candidate was accepted' >&2; exit 1; fi
   write_gate && git commit -qam restore && gate_passes
   echo changed > main.go && git commit -qam 'code after candidate'

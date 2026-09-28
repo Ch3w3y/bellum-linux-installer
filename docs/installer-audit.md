@@ -180,4 +180,4 @@ guard, uninstall, NVIDIA checks, Steam shortcut), `pkg/core` (platform
 detection golden fixtures, profiles), `pkg/steamvdf` (binary VDF, fuzzed),
 `pkg/packages` (extraction, pins, Authenticode, launcher
 updates) and `pkg/launchers` (wrapper behaviour, run in bash). Live installs
-are verified on hardware per [the QA checklist](docs/eac-qa.md).
+are verified on hardware per [the QA checklist](eac-qa.md).

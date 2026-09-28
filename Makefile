@@ -133,7 +133,7 @@ release:
 		printf '\n'; \
 		printf 'notes: |\n'; \
 		printf '  Packages are bundled as distributed by upstream projects.\n'; \
-		printf '  Provenance and pinned-source verification: see RELEASE.md.\n'; \
+		printf '  Provenance and pinned-source verification: see docs/releasing.md.\n'; \
 	} > "$$MANIFEST"
 	@cd $(RELEASE_DIR) && find . -type f ! -name SHA256SUMS -print0 | LC_ALL=C sort -z \
 		| xargs -0 sha256sum > SHA256SUMS
