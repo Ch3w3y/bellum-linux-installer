@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -151,7 +152,7 @@ func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileSt
 	}
 	logger.Info("[OK] Install folder is writable")
 
-	if isSDCardWith(parent, DefaultBoundaries.Commands) {
+	if isSDCardWith(parent, DefaultBoundaries.Commands, files) {
 		// lsblk reports SD cards as non-rotational, so check them first.
 		logger.Warn("Install folder is on a microSD card. Bellum works there, but loading is slower than on the internal SSD.")
 	} else if isSSD(parent, logger) {
@@ -608,37 +609,39 @@ func isSSDWith(path string, logger *core.Logger, commands CommandRunner) bool {
 	}
 
 	// Fallback to checking device name
-	device, err := commands.Output([]string{"df", "-P", path})
-	if err != nil {
-		return false
-	}
-
-	// Parse device name from df output
-	lines := strings.Split(device, "\n")
-	if len(lines) >= 2 {
-		fields := strings.Fields(lines[1])
-		if len(fields) >= 1 {
-			deviceName := filepath.Base(fields[0])
-			return strings.HasPrefix(deviceName, "nvme") || strings.HasPrefix(deviceName, "sd") || strings.HasPrefix(deviceName, "vd")
-		}
-	}
-
-	return false
+	deviceName := filepath.Base(dfDevice(path, commands))
+	return strings.HasPrefix(deviceName, "nvme") || strings.HasPrefix(deviceName, "sd") || strings.HasPrefix(deviceName, "vd")
 }
 
-// isSDCardWith reports whether path is on an SD/MMC card (the Steam Deck's
-// microSD slot shows up as /dev/mmcblk*).
-func isSDCardWith(path string, commands CommandRunner) bool {
+// dfDevice returns the device backing path according to `df -P`, or "".
+func dfDevice(path string, commands CommandRunner) string {
 	out, err := commands.Output([]string{"df", "-P", path})
 	if err != nil {
-		return false
+		return ""
 	}
 	lines := strings.Split(strings.TrimSpace(out), "\n")
 	if len(lines) < 2 {
-		return false
+		return ""
 	}
 	fields := strings.Fields(lines[len(lines)-1])
-	return len(fields) > 0 && strings.HasPrefix(filepath.Base(fields[0]), "mmcblk")
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
+var mmcPartitionRe = regexp.MustCompile(`^(mmcblk[0-9]+)(?:p[0-9]+)?$`)
+
+// isSDCardWith reports whether path is on an SD card (the Steam Deck's
+// microSD slot). Internal eMMC storage is also an mmcblk device, so the
+// kernel's card type decides: "SD" for SD cards, "MMC" for eMMC.
+func isSDCardWith(path string, commands CommandRunner, files FileStore) bool {
+	m := mmcPartitionRe.FindStringSubmatch(filepath.Base(dfDevice(path, commands)))
+	if m == nil {
+		return false
+	}
+	data, err := files.ReadFile(filepath.Join("/sys/block", m[1], "device", "type"))
+	return err == nil && strings.TrimSpace(string(data)) == "SD"
 }
 
 // Scanner for user input

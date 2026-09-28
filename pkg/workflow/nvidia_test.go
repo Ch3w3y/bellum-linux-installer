@@ -52,7 +52,8 @@ func TestNVIDIAWarningsPerProblemAndDistro(t *testing.T) {
 			p.NVIDIA.Kernel, p.NVIDIA.Userspace = core.NVIDIAKernelNouveau, core.NVIDIAUserspaceNouveau
 		}, []string{"nouveau/NVK", "akmod-nvidia", "RPM Fusion"}},
 		{"nvk-arch", "arch", core.OSArch, func(p *core.Platform) {
-			p.NVIDIA.Kernel, p.NVIDIA.Userspace = core.NVIDIAKernelNouveau, core.NVIDIAUserspaceNVK
+			p.NVIDIA.Kernel, p.NVIDIA.Userspace = core.NVIDIAKernelNotObserved, core.NVIDIAUserspaceNVK
+			p.GPU.Renderer = "NVK AD104"
 		}, []string{"nouveau/NVK", "nvidia-open-dkms"}},
 		{"old-ubuntu", "ubuntu", core.OSDebian, func(p *core.Platform) { p.NVIDIA.Version = "550.54.14" }, []string{"550.54.14 is older than 575.51.02", "ubuntu-drivers"}},
 		{"old-opensuse", "opensuse-tumbleweed", core.OSOpenSUSE, func(p *core.Platform) { p.NVIDIA.Version = "575.51.1" }, []string{"older than 575.51.02", "zypper dup"}},
@@ -85,6 +86,21 @@ func TestNVIDIAWarningsPerProblemAndDistro(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+// Mesa's NVK manifest beside NVIDIA's driver, with the kernel flavor
+// unknown, is not proof that nouveau/NVK is in use.
+func TestNVIDIAWarningsIgnoreNVKManifestBesideNVIDIA(t *testing.T) {
+	p := nvidiaPlatform("fedora", core.OSFedora, func(p *core.Platform) {
+		p.GPU.Renderer = "NVIDIA GeForce RTX 4070/PCIe/SSE2"
+		p.NVIDIA.Kernel = core.NVIDIAKernelUnknown
+		p.NVIDIA.Userspace = core.NVIDIAUserspaceNouveau
+		p.NVIDIA.Version = "550.54.14"
+	})
+	warnings := strings.Join(NVIDIAWarnings(p), "\n")
+	if strings.Contains(warnings, "nouveau/NVK") || !strings.Contains(warnings, "older than 575.51.02") {
+		t.Fatalf("warnings:\n%s", warnings)
 	}
 }
 

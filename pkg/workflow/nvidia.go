@@ -196,8 +196,12 @@ func NVIDIAWarnings(p core.Platform) []string {
 	nv := p.NVIDIA
 	var warnings []string
 
+	// Only the loaded nouveau module or the active renderer proves nouveau/NVK.
+	// Mesa's NVK Vulkan manifest is installed by default beside NVIDIA's
+	// driver on several distributions, so ICD inventory alone doesn't count.
+	renderer := strings.ToLower(p.GPU.Renderer)
 	openSource := nv.Kernel == core.NVIDIAKernelNouveau ||
-		nv.Userspace == core.NVIDIAUserspaceNouveau || nv.Userspace == core.NVIDIAUserspaceNVK
+		strings.Contains(renderer, "nouveau") || strings.Contains(renderer, "nvk")
 	if openSource {
 		warnings = append(warnings, fmt.Sprintf("The open-source nouveau/NVK driver is in use. It has no DLSS or NVAPI, and Bellum with Easy Anti-Cheat is untested on it. Install NVIDIA's driver on %s: %s.", fix.name, fix.driver))
 		// Version, modeset and ICD checks are about NVIDIA's own driver.

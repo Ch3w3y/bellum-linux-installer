@@ -20,6 +20,10 @@ import (
 func ConfigSummary(caps core.GPUCapabilities) string {
 	switch core.LaunchProfileFor(caps) {
 	case core.LaunchNVIDIARTX:
+		if !caps.DLSS {
+			// GTX 16-series: Turing without the tensor cores DLSS needs.
+			return "NVIDIA: Reflex through the driver (NVAPI), CUDA/NVENC bridges"
+		}
 		return "NVIDIA: DLSS and Reflex through the driver (NVAPI), CUDA/NVENC bridges"
 	case core.LaunchNVIDIABasic:
 		return "NVIDIA (no RTX features): standard Proton settings"

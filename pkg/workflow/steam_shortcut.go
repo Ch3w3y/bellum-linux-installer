@@ -65,11 +65,7 @@ func bellumShortcut(home string) steamvdf.Shortcut {
 func nativeSteamRoots(home string) []string {
 	var roots []string
 	seen := map[string]bool{}
-	for _, r := range []string{
-		filepath.Join(home, ".local", "share", "Steam"),
-		filepath.Join(home, ".steam", "steam"),
-		filepath.Join(home, ".steam", "root"),
-	} {
+	for _, r := range nativeSteamRootCandidates(home) {
 		resolved, err := filepath.EvalSymlinks(r)
 		if err != nil || seen[resolved] {
 			continue
@@ -86,7 +82,8 @@ func nativeSteamRoots(home string) []string {
 // steamID64Base converts a SteamID64 to the account ID used in userdata.
 const steamID64Base = 76561197960265728
 
-var mostRecentUserRe = regexp.MustCompile(`"(\d{17})"\s*\{[^{}]*"MostRecent"\s*"1"`)
+// Steam treats VDF keys case-insensitively; older files write "mostrecent".
+var mostRecentUserRe = regexp.MustCompile(`"(\d{17})"\s*\{[^{}]*"(?i:mostrecent)"\s*"1"`)
 
 // steamShortcutsFile finds the shortcuts.vdf of the Steam account to use:
 // the only account on the machine, or the most recently signed-in one.
@@ -96,15 +93,9 @@ func steamShortcutsFile(home string) (string, error) {
 		return "", fmt.Errorf("no native Steam install with a signed-in account was found (Flatpak and Snap Steam can't start Bellum's launcher directly)")
 	}
 	root := roots[0]
-	names, err := os.ReadDir(filepath.Join(root, "userdata"))
+	accounts, err := steamAccounts(root)
 	if err != nil {
 		return "", err
-	}
-	var accounts []string
-	for _, e := range names {
-		if n, err := strconv.ParseUint(e.Name(), 10, 32); err == nil && n != 0 && e.IsDir() {
-			accounts = append(accounts, e.Name())
-		}
 	}
 	account := ""
 	switch len(accounts) {
@@ -130,6 +121,22 @@ func steamShortcutsFile(home string) (string, error) {
 		}
 	}
 	return filepath.Join(root, "userdata", account, "config", "shortcuts.vdf"), nil
+}
+
+// steamAccounts lists the signed-in account folders under root/userdata
+// (numeric, never the anonymous "0").
+func steamAccounts(root string) ([]string, error) {
+	names, err := os.ReadDir(filepath.Join(root, "userdata"))
+	if err != nil {
+		return nil, err
+	}
+	var accounts []string
+	for _, e := range names {
+		if n, err := strconv.ParseUint(e.Name(), 10, 32); err == nil && n != 0 && e.IsDir() {
+			accounts = append(accounts, e.Name())
+		}
+	}
+	return accounts, nil
 }
 
 func readBoundedFile(path string, limit int64) ([]byte, error) {
@@ -266,33 +273,54 @@ func addBellumSteamShortcut(home string, host steamShortcutHost) (path, backup s
 	return path, backup, err
 }
 
-// removeBellumSteamShortcut removes the Bellum entry the installer added.
-// It reports how many entries were removed.
+// removeBellumSteamShortcut removes the Bellum entry from every native
+// Steam account that has one, so switching accounts after the install
+// doesn't strand it. It reports how many entries were removed; an error means
+// at least one file could not be checked or changed.
 func removeBellumSteamShortcut(home string, host steamShortcutHost) (int, error) {
-	path, err := steamShortcutsFile(home)
-	if err != nil {
-		return 0, nil // no native Steam account: nothing was ever added
-	}
-	if _, err := os.Lstat(path); os.IsNotExist(err) {
-		return 0, nil
-	}
-	root, original, mode, err := loadShortcuts(path, host.EUID)
-	if err != nil {
-		return 0, err
-	}
 	s := bellumShortcut(home)
-	if !steamvdf.HasShortcut(root, s.Exe) {
-		return 0, nil
+	removed := 0
+	var firstErr error
+	fail := func(err error) {
+		if firstErr == nil {
+			firstErr = err
+		}
 	}
-	if host.SteamRunning() != core.TriNo {
-		return 0, errSteamRunning
+	for _, root := range nativeSteamRoots(home) {
+		accounts, err := steamAccounts(root)
+		if err != nil {
+			fail(err)
+			continue
+		}
+		for _, account := range accounts {
+			path := filepath.Join(root, "userdata", account, "config", "shortcuts.vdf")
+			if _, err := os.Lstat(path); os.IsNotExist(err) {
+				continue
+			}
+			doc, original, mode, err := loadShortcuts(path, host.EUID)
+			if err != nil {
+				fail(err)
+				continue
+			}
+			if !steamvdf.HasShortcut(doc, s.Exe) {
+				continue
+			}
+			if host.SteamRunning() != core.TriNo {
+				fail(errSteamRunning)
+				continue
+			}
+			n := steamvdf.RemoveShortcuts(doc, s.Exe, s.AppName)
+			if n == 0 {
+				continue
+			}
+			if _, err := saveShortcuts(path, doc, original, mode, host); err != nil {
+				fail(err)
+				continue
+			}
+			removed += n
+		}
 	}
-	n := steamvdf.RemoveShortcuts(root, s.Exe, s.AppName)
-	if n == 0 {
-		return 0, nil
-	}
-	_, err = saveShortcuts(path, root, original, mode, host)
-	return n, err
+	return removed, firstErr
 }
 
 // OfferSteamShortcut asks, default No, whether to add Bellum to Steam, on

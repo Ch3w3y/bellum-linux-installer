@@ -227,3 +227,50 @@ func TestFinishAdvice(t *testing.T) {
 		t.Errorf("pad advice:\n%s", got)
 	}
 }
+
+// The uninstaller finds the entry under every account, even after another
+// account became the most recent one, and reports files it can't check.
+func TestRemoveBellumSteamShortcutAllAccounts(t *testing.T) {
+	home := t.TempDir()
+	first := steamAccount(t, home, "111")
+	second := steamAccount(t, home, "222")
+	for _, path := range []string{first, second} {
+		root := steamvdf.NewDocument()
+		steamvdf.AddShortcut(root, bellumShortcut(home))
+		data, _ := steamvdf.Encode(root)
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if n, err := removeBellumSteamShortcut(home, shortcutHost(core.TriNo)); err != nil || n != 2 {
+		t.Fatalf("removed %d, %v", n, err)
+	}
+
+	// An unreadable file is reported, not silently skipped.
+	if err := os.WriteFile(first, []byte("not vdf"), 0600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := removeBellumSteamShortcut(home, shortcutHost(core.TriNo)); err == nil {
+		t.Fatal("expected an error for an unreadable shortcuts.vdf")
+	}
+	// Steam running with an entry present is reported too.
+	root := steamvdf.NewDocument()
+	steamvdf.AddShortcut(root, bellumShortcut(home))
+	data, _ := steamvdf.Encode(root)
+	_ = os.WriteFile(second, data, 0600)
+	_ = os.Remove(first)
+	if _, err := removeBellumSteamShortcut(home, shortcutHost(core.TriYes)); err == nil {
+		t.Fatal("expected errSteamRunning")
+	}
+}
+
+func TestSteamShortcutsFileLowercaseMostRecent(t *testing.T) {
+	home := t.TempDir()
+	steamAccount(t, home, "111")
+	steamAccount(t, home, "222")
+	loginusers := "\"users\"\n{\n\t\"76561197960265950\"\n\t{\n\t\t\"mostrecent\"\t\t\"1\"\n\t}\n}\n"
+	writeFile(t, filepath.Join(home, ".local", "share", "Steam", "config", "loginusers.vdf"), loginusers)
+	if got, err := steamShortcutsFile(home); err != nil || !strings.Contains(got, filepath.Join("userdata", "222")) {
+		t.Fatalf("got %q, %v", got, err)
+	}
+}

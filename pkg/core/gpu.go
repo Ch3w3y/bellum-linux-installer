@@ -260,6 +260,8 @@ var (
 	// RTX 40/50 numbering, so "RTX 5000 Ada Generation" would otherwise read as
 	// Blackwell. The "Ada Generation" suffix settles it.
 	rendererAdaWorkstation = regexp.MustCompile(`\bada generation\b`)
+	// The Turing-era "Quadro RTX 4000/5000/6000/8000" reuse the numbers too.
+	rendererQuadroRTX = regexp.MustCompile(`\bquadro\s+rtx\s*\d{4}\b`)
 
 	rendererRTX50 = regexp.MustCompile(`\brtx\s*50\d{2}\b`)
 	rendererRTX40 = regexp.MustCompile(`\brtx\s*40\d{2}\b`)
@@ -267,15 +269,26 @@ var (
 	rendererRTX20 = regexp.MustCompile(`\brtx\s*20\d{2}\b`)
 	rendererGTX16 = regexp.MustCompile(`\bgtx\s*16\d{2}\b`)
 
-	rendererGFX12   = regexp.MustCompile(`\bgfx12\d{2}\b`)
-	rendererGFX11   = regexp.MustCompile(`\bgfx11\d{2}\b`)
-	rendererGFX103x = regexp.MustCompile(`\bgfx103[[:xdigit:]]\b`)
-	rendererGFX101x = regexp.MustCompile(`\bgfx101[[:xdigit:]]\b`)
-	rendererGFX9    = regexp.MustCompile(`\bgfx9[[:xdigit:]]{2}\b`)
-	rendererRX9000  = regexp.MustCompile(`\brx\s*9\d{3}\b`)
-	rendererRX7000  = regexp.MustCompile(`\brx\s*7\d{3}\b`)
-	rendererRX6000  = regexp.MustCompile(`\brx\s*6\d{3}\b`)
-	rendererRX5000  = regexp.MustCompile(`\brx\s*5\d{3}\b`)
+	// Mesa's gfx chip IDs, optionally with a revision suffix such as the
+	// Phoenix APUs' "gfx1103_r1".
+	rendererGFX12   = regexp.MustCompile(`\bgfx12\d{2}(?:_r\d+)?\b`)
+	rendererGFX11   = regexp.MustCompile(`\bgfx11\d{2}(?:_r\d+)?\b`)
+	rendererGFX103x = regexp.MustCompile(`\bgfx103[[:xdigit:]](?:_r\d+)?\b`)
+	rendererGFX101x = regexp.MustCompile(`\bgfx101[[:xdigit:]](?:_r\d+)?\b`)
+	rendererGFX9    = regexp.MustCompile(`\bgfx9[[:xdigit:]]{2}(?:_r\d+)?\b`)
+	// Marketing names, including laptop parts such as "RX 7600S" and
+	// "RX 6800M".
+	rendererRX9000 = regexp.MustCompile(`\brx\s*9\d{3}[ms]?\b`)
+	rendererRX7000 = regexp.MustCompile(`\brx\s*7\d{3}[ms]?\b`)
+	rendererRX6000 = regexp.MustCompile(`\brx\s*6\d{3}[ms]?\b`)
+	rendererRX5000 = regexp.MustCompile(`\brx\s*5\d{3}[ms]?\b`)
+	// Mesa before 24.1 reported chip codenames instead of gfx IDs
+	// ("radeonsi, navi21"); Ubuntu LTS and Debian stable still ship such
+	// versions. Only RDNA codenames are mapped.
+	rendererNavi4x = regexp.MustCompile(`\bnavi4\d\b`)
+	rendererNavi3x = regexp.MustCompile(`\b(?:navi3\d|phoenix\d?|hawk_?point\d?|strix(?:_halo)?)\b`)
+	rendererNavi2x = regexp.MustCompile(`\b(?:navi2\d|vangogh|rembrandt|raphael|mendocino|beige_goby|dimgrey_cavefish|navy_flounder|sienna_cichlid)\b`)
+	rendererNavi1x = regexp.MustCompile(`\bnavi1\d\b`)
 )
 
 // ClassifyGPUCapabilities uses explicit renderer identifiers only. Generation
@@ -288,6 +301,9 @@ func ClassifyGPUCapabilities(renderer string) GPUCapabilities {
 		// RTX names encode architecture. GTX 16xx is Turing too, but without
 		// the tensor cores DLSS needs, so it gets NVAPI only.
 		switch {
+		case rendererQuadroRTX.MatchString(r):
+			c.Generation = "Turing"
+			c.DLSS, c.NVAPI = true, true
 		case rendererAdaWorkstation.MatchString(r):
 			c.Generation = "Ada"
 			c.DLSS, c.NVAPI, c.FrameGeneration = true, true, true
@@ -314,16 +330,16 @@ func ClassifyGPUCapabilities(renderer string) GPUCapabilities {
 		// fallback. An AMD GPU whose generation matches nothing below keeps an
 		// empty Generation and the conservative settings that go with it.
 		switch {
-		case rendererGFX12.MatchString(r) || rendererRX9000.MatchString(r):
+		case rendererGFX12.MatchString(r) || rendererRX9000.MatchString(r) || rendererNavi4x.MatchString(r):
 			c.Generation = "RDNA4"
 			// FSR4's FP8 path is native on RDNA4 only (#21).
 			c.FSR41, c.FrameGeneration = true, true
-		case rendererGFX11.MatchString(r) || rendererRX7000.MatchString(r):
+		case rendererGFX11.MatchString(r) || rendererRX7000.MatchString(r) || rendererNavi3x.MatchString(r):
 			c.Generation = "RDNA3"
-		case rendererGFX103x.MatchString(r) || rendererRX6000.MatchString(r):
+		case rendererGFX103x.MatchString(r) || rendererRX6000.MatchString(r) || rendererNavi2x.MatchString(r):
 			// gfx103x is RDNA2, including the Steam Deck's gfx1033.
 			c.Generation = "RDNA2"
-		case rendererGFX101x.MatchString(r) || rendererRX5000.MatchString(r):
+		case rendererGFX101x.MatchString(r) || rendererRX5000.MatchString(r) || rendererNavi1x.MatchString(r):
 			// gfx101x is RDNA1; the old gfx10 prefix match called it RDNA2.
 			c.Generation = "RDNA1"
 		case rendererGFX9.MatchString(r):

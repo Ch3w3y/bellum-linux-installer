@@ -211,14 +211,36 @@ func TestSteamOSLocationWarning(t *testing.T) {
 	}
 }
 
+// cardTypeFiles serves /sys/block/mmcblk0/device/type.
+type cardTypeFiles struct {
+	osFiles
+	cardType string
+}
+
+func (f cardTypeFiles) ReadFile(path string) ([]byte, error) {
+	if path == "/sys/block/mmcblk0/device/type" && f.cardType != "" {
+		return []byte(f.cardType + "\n"), nil
+	}
+	return nil, os.ErrNotExist
+}
+
 func TestIsSDCard(t *testing.T) {
-	for out, want := range map[string]bool{
-		"Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/mmcblk0p1 500000 1 499999 1% /run/media/deck/SD\n": true,
-		"Filesystem 1024-blocks Used Available Capacity Mounted on\n/dev/nvme0n1p8 500000 1 499999 1% /home\n":              false,
-		"": false,
+	const header = "Filesystem 1024-blocks Used Available Capacity Mounted on\n"
+	for _, tc := range []struct {
+		df, cardType string
+		want         bool
+	}{
+		{header + "/dev/mmcblk0p1 500000 1 499999 1% /run/media/deck/SD\n", "SD", true},
+		{header + "/dev/mmcblk0 500000 1 499999 1% /run/media/deck/SD\n", "SD", true},
+		// Internal eMMC is also mmcblk.
+		{header + "/dev/mmcblk0p8 500000 1 499999 1% /home\n", "MMC", false},
+		{header + "/dev/mmcblk0p1 500000 1 499999 1% /x\n", "", false},
+		{header + "/dev/nvme0n1p8 500000 1 499999 1% /home\n", "SD", false},
+		{header + "/dev/mmcblk0p1/../../etc 1 1 1 1% /x\n", "SD", false},
+		{"", "SD", false},
 	} {
-		if got := isSDCardWith("/x", fakeCommands{output: out}); got != want {
-			t.Errorf("%q: got %t, want %t", out, got, want)
+		if got := isSDCardWith("/x", fakeCommands{output: tc.df}, cardTypeFiles{cardType: tc.cardType}); got != tc.want {
+			t.Errorf("%q (%s): got %t, want %t", tc.df, tc.cardType, got, tc.want)
 		}
 	}
 }

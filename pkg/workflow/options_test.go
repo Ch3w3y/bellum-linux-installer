@@ -79,6 +79,7 @@ func TestConfigSummaryPerVendor(t *testing.T) {
 		{Vendor: core.GPUAMD, Generation: "RDNA2"}: "own FSR 3.x",
 		{Vendor: core.GPUAMD}:                      "own FSR 3.x",
 		{Vendor: core.GPUIntel}:                    "Intel",
+		{Vendor: core.GPUNVIDIA, NVAPI: true}:      "NVIDIA: Reflex",
 		{Vendor: core.GPUUnknown}:                  "Unrecognised",
 	} {
 		if got := ConfigSummary(caps); !strings.Contains(got, want) {

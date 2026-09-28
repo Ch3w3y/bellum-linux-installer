@@ -339,3 +339,34 @@ func TestDetectGPUCapabilitiesFromDRMMatchesKnownVendors(t *testing.T) {
 		t.Fatalf("fallback renderer must identify the DRM card, got %q", renderer)
 	}
 }
+
+// Review follow-ups for the whole-token patterns: Mesa revision suffixes,
+// laptop marketing names, pre-24.1 Mesa codenames and Turing Quadro RTX.
+func TestClassifyGPURevisionSuffixesCodenamesAndWorkstations(t *testing.T) {
+	for renderer, want := range map[string]string{
+		"AMD Radeon 780M (radeonsi, gfx1103_r1, LLVM 18.1.8, DRM 3.57)": "RDNA3",
+		"AMD Radeon 760M (radeonsi, gfx1103_r2, ACO, DRM 3.59)":         "RDNA3",
+		"AMD Radeon RX 7600S (radeonsi, navi33, LLVM 15.0.7, DRM 3.49)": "RDNA3",
+		"AMD Radeon RX 6800M (navi22, LLVM 15.0.7, DRM 3.49)":           "RDNA2",
+		"AMD Radeon RX 6800 XT (navi21, LLVM 15.0.7, DRM 3.49)":         "RDNA2",
+		"AMD Custom GPU 0405 (vangogh, LLVM 15.0.7, DRM 3.49)":          "RDNA2",
+		"AMD Radeon Graphics (rembrandt, LLVM 15.0.7, DRM 3.49)":        "RDNA2",
+		"AMD Radeon RX 5700 XT (navi10, LLVM 15.0.7, DRM 3.49)":         "RDNA1",
+		"AMD Radeon RX 7900 XTX (navi31, LLVM 16.0.6, DRM 3.54)":        "RDNA3",
+		"AMD Radeon 890M (radeonsi, strix_halo, ACO)":                   "RDNA3",
+		"AMD Radeon RX 9070 XT (radeonsi, gfx1201_r1, ACO)":             "RDNA4",
+		"AMD Radeon RX 580 Series (radeonsi, polaris10, ACO, DRM 3.57)": "",
+		"AMD Radeon Graphics (radeonsi, gfx11000, ACO)":                 "",
+		"Quadro RTX 5000/PCIe/SSE2":                                     "Turing",
+		"Quadro RTX 4000/PCIe/SSE2":                                     "Turing",
+		"NVIDIA RTX 5000 Ada Generation/PCIe/SSE2":                      "Ada",
+		"NVIDIA GeForce RTX 5070/PCIe/SSE2":                             "Blackwell",
+	} {
+		if got := ClassifyGPUCapabilities(renderer).Generation; got != want {
+			t.Errorf("%q: generation %q, want %q", renderer, got, want)
+		}
+	}
+	if c := ClassifyGPUCapabilities("Quadro RTX 5000/PCIe/SSE2"); c.FrameGeneration || !c.DLSS {
+		t.Errorf("Turing Quadro RTX: %+v", c)
+	}
+}
