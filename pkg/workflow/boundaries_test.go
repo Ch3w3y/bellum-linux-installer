@@ -50,8 +50,8 @@ func TestHostDiscoveryAndDependencyGuidance(t *testing.T) {
 		{"fedora", "ID=fedora\n", "dnf", "fedora", "dnf install python3 util-linux", false},
 		{"ubuntu", "ID=ubuntu\n", "apt-get", "debian", "apt install python3 util-linux", false},
 		{"opensuse", "ID=opensuse-tumbleweed\n", "zypper", "opensuse", "zypper install python3 util-linux", false},
-		{"steamos", "ID=steamos\n", "pacman", "unknown", "immutable", true},
-		{"bazzite", "ID=bazzite\n", "", "unknown", "immutable", true},
+		{"steamos", "ID=steamos\n", "pacman", "arch", "immutable", true},
+		{"bazzite", "ID=bazzite\n", "", "fedora", "immutable", true},
 		{"unknown", "ID=void\n", "", "unknown", "unknown", false},
 	}
 	for _, tt := range tests {
@@ -124,7 +124,7 @@ func TestRDNA4EnablesOnlyNativeFSR4DriverComponent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := createLaunchVarsFileAMD("/prefix", "/proton", true, "", logger, files); err != nil {
+	if err := createLaunchVarsFileAMD("/prefix", "/proton", amdLaunchSettings{FSR4Upgrade: true}, "", logger, files); err != nil {
 		t.Fatal(err)
 	}
 	content := string(files.written["/prefix/launch_vars.env"])

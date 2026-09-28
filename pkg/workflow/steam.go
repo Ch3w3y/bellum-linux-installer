@@ -27,14 +27,23 @@ type EACRuntime struct {
 }
 
 // steamRoots lists where Steam keeps its data: native installs (including the
-// ~/.steam symlinks some distributions create) and the Flatpak.
+// ~/.steam symlinks some distributions create), the Flatpak and the Snap
+// (Ubuntu's steam snap keeps its data under ~/snap/steam/common).
 func steamRoots(home string) []string {
+	return append(nativeSteamRootCandidates(home),
+		filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
+		filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", "data", "Steam"),
+		filepath.Join(home, "snap", "steam", "common", ".local", "share", "Steam"),
+	)
+}
+
+// nativeSteamRootCandidates lists where a native (unsandboxed) Steam keeps
+// its data, including the ~/.steam symlinks some distributions create.
+func nativeSteamRootCandidates(home string) []string {
 	return []string{
 		filepath.Join(home, ".local", "share", "Steam"),
 		filepath.Join(home, ".steam", "steam"),
 		filepath.Join(home, ".steam", "root"),
-		filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"),
-		filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", "data", "Steam"),
 	}
 }
 

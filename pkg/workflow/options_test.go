@@ -38,6 +38,15 @@ func TestSingleConfigPerVendor(t *testing.T) {
 		// RDNA4 gets the forced FSR4 offer and never the FP16 emulation switch.
 		{"rdna4", rdna4, []string{`PROTON_FSR4_UPGRADE="1"`}, []string{"wmma_rdna3_workaround", "PROTON_FSR4_RDNA3_UPGRADE"}},
 		{"rdna3", rdna3, []string{`PROTON_FSR4_UPGRADE="0"`, "wmma_rdna3_workaround"}, []string{"PROTON_FSR4_RDNA3_UPGRADE"}},
+		// RDNA2 (the Steam Deck), older and unknown AMD generations drop the
+		// RDNA3-only FP16 emulation path.
+		{"rdna2", core.GPUCapabilities{Vendor: core.GPUAMD, Generation: "RDNA2"}, []string{`PROTON_FSR4_UPGRADE="0"`}, []string{"wmma_rdna3_workaround", "DXIL_SPIRV_CONFIG"}},
+		{"rdna1", core.GPUCapabilities{Vendor: core.GPUAMD, Generation: "RDNA1"}, []string{`PROTON_FSR4_UPGRADE="0"`}, []string{"DXIL_SPIRV_CONFIG"}},
+		{"amd-unknown", core.GPUCapabilities{Vendor: core.GPUAMD}, []string{`PROTON_FSR4_UPGRADE="0"`}, []string{"DXIL_SPIRV_CONFIG"}},
+		{"amd-ambiguous", core.GPUCapabilities{Vendor: core.GPUAMD, Ambiguous: true}, []string{`PROTON_FSR4_UPGRADE="0"`}, []string{"DXIL_SPIRV_CONFIG"}},
+		// An RDNA4 name without the FSR41 capability never gets the forced offer.
+		{"rdna4-no-fsr41", core.GPUCapabilities{Vendor: core.GPUAMD, Generation: "RDNA4"}, []string{`PROTON_FSR4_UPGRADE="0"`}, []string{"DXIL_SPIRV_CONFIG"}},
+		{"nvidia-basic", core.GPUCapabilities{Vendor: core.GPUNVIDIA}, []string{"PROTON_DLSS_UPGRADE=0"}, []string{"PROTON_NVIDIA_LIBS", "DXIL_SPIRV_CONFIG"}},
 		{"intel", core.GPUCapabilities{Vendor: core.GPUIntel}, []string{"PROTON_DLSS_UPGRADE=0"}, []string{"PROTON_FSR4_RDNA3_UPGRADE"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -67,7 +76,10 @@ func TestConfigSummaryPerVendor(t *testing.T) {
 		rtx:   "DLSS",
 		rdna4: "RDNA4",
 		{Vendor: core.GPUAMD, Generation: "RDNA3"}: "FSR4 through Proton where",
+		{Vendor: core.GPUAMD, Generation: "RDNA2"}: "own FSR 3.x",
+		{Vendor: core.GPUAMD}:                      "own FSR 3.x",
 		{Vendor: core.GPUIntel}:                    "Intel",
+		{Vendor: core.GPUNVIDIA, NVAPI: true}:      "NVIDIA: Reflex",
 		{Vendor: core.GPUUnknown}:                  "Unrecognised",
 	} {
 		if got := ConfigSummary(caps); !strings.Contains(got, want) {

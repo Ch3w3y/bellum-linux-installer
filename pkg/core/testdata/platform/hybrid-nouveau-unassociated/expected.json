@@ -1,0 +1,113 @@
+{
+  "platform": {
+    "os": {
+      "id": "fedora",
+      "idLike": [],
+      "variantId": "",
+      "versionId": "41",
+      "prettyName": "Fedora Linux 41",
+      "family": "fedora",
+      "immutable": "no",
+      "immutableEvidence": "mutable distro model",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "HP",
+      "productName": "Pavilion",
+      "sku": "generic",
+      "match": "unknown",
+      "evidence": "dmi:sys_vendor,product_name"
+    },
+    "gpu": {
+      "Vendor": "AMD",
+      "Renderer": "AMD Radeon RX 580 (radeonsi, polaris10, ACO)",
+      "Generation": "",
+      "Ambiguous": false,
+      "DLSS": false,
+      "NVAPI": false,
+      "FSR": true,
+      "FSR41": false,
+      "FrameGeneration": false
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "AMD Radeon RX 580 (radeonsi, polaris10, ACO)",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:hybrid-nouveau-unassociated"
+    },
+    "nvidia": {
+      "kernel": "unknown",
+      "userspace": "unknown",
+      "association": "unknown",
+      "rawVersion": "550.54.14",
+      "version": "550.54.14",
+      "versionSource": "/sys/module/nvidia/version",
+      "modeset": "no",
+      "vulkan": {
+        "manifests": [],
+        "scanState": "complete",
+        "nvidiaCandidate": "not-observed",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "headless",
+      "desktop": "",
+      "gameMode": "no",
+      "evidence": "no-display"
+    },
+    "steam": {
+      "installs": [],
+      "discovery": "unknown",
+      "running": "unknown"
+    },
+    "controllers": {
+      "devices": [
+        {
+          "name": "Microsoft X-Box 360 pad",
+          "bus": "0003",
+          "vendorId": "045e",
+          "productId": "028e",
+          "handlers": [
+            "event5",
+            "js1"
+          ],
+          "confidence": "controller"
+        }
+      ],
+      "discovery": "complete"
+    },
+    "diagnostics": [
+      {
+        "code": "nvidia/modules-conflict",
+        "subsystem": "nvidia",
+        "source": "sys:module",
+        "outcome": "conflict",
+        "detail": "both nvidia and nouveau modules observed; loaded evidence is ambiguous"
+      },
+      {
+        "code": "steam/home-unreadable",
+        "subsystem": "steam",
+        "source": "/home/tester",
+        "outcome": "missing",
+        "detail": "home directory unreadable; Steam inventory unknown"
+      }
+    ]
+  },
+  "profile": {
+    "version": 1,
+    "osId": "fedora",
+    "osVariant": "",
+    "osFamily": "fedora",
+    "sku": "generic",
+    "gpuVendor": "AMD",
+    "gpuGeneration": "unknown",
+    "gpuAmbiguous": false,
+    "session": "headless",
+    "gameMode": "no",
+    "hardwareMatch": "unknown"
+  },
+  "profileKey": "v1|os=fedora|variant=|family=fedora|sku=generic|gpu=AMD|gen=unknown|stable|session=headless|gamemode=no|match=unknown"
+}

@@ -10,26 +10,40 @@ import (
 )
 
 // There is one configuration: the most stable one, then the fastest that
-// stays stable. It differs only by GPU vendor (see configure.go); nothing is
-// left for the user to choose. Every setting is a Proton or driver feature;
-// the installer never adds or replaces DLLs (#11).
+// stays stable. It differs only by the detected launch profile (see
+// core.LaunchProfileFor and configure.go); nothing is left for the user to
+// choose. Every setting is a Proton or driver feature; the installer never
+// adds or replaces DLLs (#11).
 
 // ConfigSummary describes, for the confirmation screen, what the launch
 // settings will be on this GPU.
 func ConfigSummary(caps core.GPUCapabilities) string {
-	switch {
-	case caps.Vendor == core.GPUNVIDIA && caps.NVAPI:
+	switch core.LaunchProfileFor(caps) {
+	case core.LaunchNVIDIARTX:
+		if !caps.DLSS {
+			// GTX 16-series: Turing without the tensor cores DLSS needs.
+			return "NVIDIA: Reflex through the driver (NVAPI), CUDA/NVENC bridges"
+		}
 		return "NVIDIA: DLSS and Reflex through the driver (NVAPI), CUDA/NVENC bridges"
-	case caps.Vendor == core.GPUNVIDIA:
+	case core.LaunchNVIDIABasic:
 		return "NVIDIA (no RTX features): standard Proton settings"
-	case caps.Vendor == core.GPUAMD && caps.Generation == "RDNA4" && !caps.Ambiguous && caps.FSR41:
+	case core.LaunchAMDRDNA4:
 		return "AMD RDNA4: native FSR4 (FP8) through Proton"
-	case caps.Vendor == core.GPUAMD:
-		return "AMD: FSR4 through Proton where your GPU supports it"
-	case caps.Vendor == core.GPUIntel:
+	case core.LaunchAMDRDNA3:
+		return "AMD RDNA3: FSR4 through Proton where your GPU supports it"
+	case core.LaunchAMDBaseline:
+		return "AMD: the game's own FSR 3.x (no FSR4 emulation)"
+	case core.LaunchIntel:
 		return "Intel: standard Proton settings"
 	}
 	return "Unrecognised GPU: standard Proton settings"
+}
+
+// ProfileSummary is the review-screen line for the detected platform and the
+// evidence behind its launch profile, for example
+// "Steam Deck OLED · SteamOS 3 · RDNA2 · Game Mode (expected)".
+func ProfileSummary(p core.Platform) string {
+	return core.PlatformLabel(p) + " (" + string(core.LaunchProfileFor(p.GPU).Status()) + ")"
 }
 
 // DisplaySession names the graphical session. Bellum runs through XWayland
@@ -41,14 +55,17 @@ func DisplaySession() string {
 }
 
 func displaySession(env func(string) string) string {
-	desktop := env("XDG_CURRENT_DESKTOP")
-	switch {
-	case strings.EqualFold(desktop, "gamescope") || env("GAMESCOPE_WAYLAND_DISPLAY") != "":
+	// Session precedence is owned by core; this wrapper keeps the existing
+	// presentation string for current callers until step 3 migrates the
+	// display. The new UI uses typed session information, never this string.
+	info := core.ClassifySessionFunc(env)
+	switch info.Kind {
+	case core.SessionGamescope:
 		return "gamescope (Steam Deck / Game Mode)"
-	case env("WAYLAND_DISPLAY") != "" || strings.EqualFold(env("XDG_SESSION_TYPE"), "wayland"):
-		return strings.TrimSpace("Wayland " + desktop + " (the game runs through XWayland)")
-	case env("DISPLAY") != "":
-		return strings.TrimSpace("X11 " + desktop)
+	case core.SessionWayland:
+		return strings.TrimSpace("Wayland " + info.Desktop + " (the game runs through XWayland)")
+	case core.SessionX11:
+		return strings.TrimSpace("X11 " + info.Desktop)
 	}
 	return "no graphical session detected"
 }

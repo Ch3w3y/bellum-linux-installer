@@ -43,6 +43,35 @@ func TestFindEACRuntimeNativeSteam(t *testing.T) {
 	}
 }
 
+// Ubuntu's steam snap keeps its libraries under ~/snap/steam/common (#39).
+func TestFindEACRuntimeSnapSteam(t *testing.T) {
+	home := t.TempDir()
+	want := installEAC(t, filepath.Join(home, "snap", "steam", "common", ".local", "share", "Steam"), "4")
+	got, err := findEACRuntime(home, "", osFiles{})
+	if err != nil || got.Path != want || got.Manifest == "" {
+		t.Fatalf("got %+v, %v; want %s", got, err, want)
+	}
+}
+
+func TestSteamInstallCommandSnap(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	mkdirs(t, filepath.Join(home, "snap", "steam", "common"))
+	argv := steamInstallCommand(precheckCommands{available: map[string]bool{"snap": true}}, osFiles{})
+	if strings.Join(argv, " ") != "snap run steam steam://install/1826330" {
+		t.Fatalf("argv %q", argv)
+	}
+	// Without the snap installed there is nothing to ask.
+	if argv := steamInstallCommand(precheckCommands{available: map[string]bool{"snap": true}}, fakeNoSnapFiles{}); argv != nil {
+		t.Fatalf("argv %q without a steam snap", argv)
+	}
+}
+
+// fakeNoSnapFiles reports every path as missing.
+type fakeNoSnapFiles struct{ osFiles }
+
+func (fakeNoSnapFiles) Stat(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+
 func TestFindEACRuntimeFlatpakSteam(t *testing.T) {
 	home := t.TempDir()
 	want := installEAC(t, filepath.Join(home, ".var", "app", "com.valvesoftware.Steam", ".local", "share", "Steam"), "4")

@@ -20,7 +20,7 @@ SHELL := /bin/bash
 
 .PHONY: all build check release verify-release clean help
 
-VERSION ?= 2.0.1
+VERSION ?= 2.3.0
 # VERSION may be overridden on the command line, e.g.
 #   make release VERSION=2.1.0-rc1
 ifeq ($(VERSION),)

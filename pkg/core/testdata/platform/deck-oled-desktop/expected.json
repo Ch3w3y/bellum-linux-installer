@@ -1,0 +1,102 @@
+{
+  "platform": {
+    "os": {
+      "id": "steamos",
+      "idLike": [
+        "arch"
+      ],
+      "variantId": "",
+      "versionId": "3",
+      "prettyName": "SteamOS 3.6",
+      "family": "arch",
+      "immutable": "yes",
+      "immutableEvidence": "known distro identity: steamos",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "Valve",
+      "productName": "Galileo",
+      "sku": "deck-oled",
+      "match": "exact",
+      "evidence": "dmi:sys_vendor,product_name"
+    },
+    "gpu": {
+      "Vendor": "AMD",
+      "Renderer": "AMD Radeon Graphics (radeonsi, gfx1033, ACO, DRM 3.57)",
+      "Generation": "RDNA2",
+      "Ambiguous": false,
+      "DLSS": false,
+      "NVAPI": false,
+      "FSR": true,
+      "FSR41": false,
+      "FrameGeneration": false
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "AMD Radeon Graphics (radeonsi, gfx1033, ACO, DRM 3.57)",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:deck-oled-desktop"
+    },
+    "nvidia": {
+      "kernel": "not-observed",
+      "userspace": "unknown",
+      "association": "unknown",
+      "rawVersion": "",
+      "version": "",
+      "versionSource": "",
+      "modeset": "unknown",
+      "vulkan": {
+        "manifests": [],
+        "scanState": "complete",
+        "nvidiaCandidate": "not-observed",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "wayland",
+      "desktop": "KDE",
+      "gameMode": "no",
+      "evidence": "wayland-display"
+    },
+    "steam": {
+      "installs": [
+        {
+          "kind": "flatpak",
+          "root": "/home/tester/.var/app/com.valvesoftware.Steam/.local/share/Steam",
+          "evidence": "root:flatpak"
+        }
+      ],
+      "discovery": "complete",
+      "running": "no"
+    },
+    "controllers": {
+      "devices": [],
+      "discovery": "unknown"
+    },
+    "diagnostics": [
+      {
+        "code": "controllers/input-unreadable",
+        "subsystem": "controllers",
+        "source": "/proc/bus/input/devices",
+        "outcome": "missing",
+        "detail": "input device inventory unavailable"
+      }
+    ]
+  },
+  "profile": {
+    "version": 1,
+    "osId": "steamos",
+    "osVariant": "",
+    "osFamily": "arch",
+    "sku": "deck-oled",
+    "gpuVendor": "AMD",
+    "gpuGeneration": "RDNA2",
+    "gpuAmbiguous": false,
+    "session": "wayland",
+    "gameMode": "no",
+    "hardwareMatch": "exact"
+  },
+  "profileKey": "v1|os=steamos|variant=|family=arch|sku=deck-oled|gpu=AMD|gen=RDNA2|stable|session=wayland|gamemode=no|match=exact"
+}

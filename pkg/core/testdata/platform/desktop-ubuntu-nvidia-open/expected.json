@@ -1,0 +1,110 @@
+{
+  "platform": {
+    "os": {
+      "id": "ubuntu",
+      "idLike": [
+        "debian"
+      ],
+      "variantId": "",
+      "versionId": "24.04",
+      "prettyName": "Ubuntu 24.04 LTS",
+      "family": "debian",
+      "immutable": "no",
+      "immutableEvidence": "mutable distro model",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "HP",
+      "productName": "OMEN 16",
+      "sku": "generic",
+      "match": "unknown",
+      "evidence": "dmi:sys_vendor,product_name"
+    },
+    "gpu": {
+      "Vendor": "NVIDIA",
+      "Renderer": "NVIDIA GeForce RTX 4070",
+      "Generation": "Ada",
+      "Ambiguous": false,
+      "DLSS": true,
+      "NVAPI": true,
+      "FSR": true,
+      "FSR41": false,
+      "FrameGeneration": true
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "NVIDIA GeForce RTX 4070",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:desktop-ubuntu-nvidia-open"
+    },
+    "nvidia": {
+      "kernel": "open",
+      "userspace": "nvidia",
+      "association": "yes",
+      "rawVersion": "550.54.14",
+      "version": "550.54.14",
+      "versionSource": "/sys/module/nvidia/version",
+      "modeset": "unknown",
+      "vulkan": {
+        "manifests": [
+          {
+            "path": "/usr/share/vulkan/icd.d/nvidia_icd.json",
+            "libraryPath": "libGLX_nvidia.so.0",
+            "apiVersion": "1.3.0",
+            "vendorHint": "nvidia",
+            "parseState": "ok"
+          }
+        ],
+        "scanState": "complete",
+        "nvidiaCandidate": "present",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "wayland",
+      "desktop": "ubuntu",
+      "gameMode": "no",
+      "evidence": "wayland-display"
+    },
+    "steam": {
+      "installs": [
+        {
+          "kind": "native",
+          "root": "/home/tester/.local/share/Steam",
+          "evidence": "root:native"
+        }
+      ],
+      "discovery": "complete",
+      "running": "unknown"
+    },
+    "controllers": {
+      "devices": [],
+      "discovery": "unknown"
+    },
+    "diagnostics": [
+      {
+        "code": "controllers/input-unreadable",
+        "subsystem": "controllers",
+        "source": "/proc/bus/input/devices",
+        "outcome": "missing",
+        "detail": "input device inventory unavailable"
+      }
+    ]
+  },
+  "profile": {
+    "version": 1,
+    "osId": "ubuntu",
+    "osVariant": "",
+    "osFamily": "debian",
+    "sku": "generic",
+    "gpuVendor": "NVIDIA",
+    "gpuGeneration": "Ada",
+    "gpuAmbiguous": false,
+    "session": "wayland",
+    "gameMode": "no",
+    "hardwareMatch": "unknown"
+  },
+  "profileKey": "v1|os=ubuntu|variant=|family=debian|sku=generic|gpu=NVIDIA|gen=Ada|stable|session=wayland|gamemode=no|match=unknown"
+}

@@ -131,6 +131,7 @@ func TestWrapperChainsGameModeAndGamescope(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	t.Setenv("GAMESCOPE_WAYLAND_DISPLAY", "") // not inside Game Mode
 	t.Setenv("BASH_ENV", "")
 	wrapper := filepath.Join(t.TempDir(), "Bellum")
 	if err := os.WriteFile(wrapper, []byte(generateWrapperContent(LauncherConfig{Wineprefix: prefix})), 0700); err != nil {
@@ -203,5 +204,79 @@ func TestWrapperUpdatesLauncherFirstAndStartsEvenIfUpdateFails(t *testing.T) {
 	if !strings.Contains(generateWrapperContent(LauncherConfig{Wineprefix: prefix, ToolPath: tool}), "update-launcher") ||
 		strings.Contains(generateWrapperContent(LauncherConfig{Wineprefix: prefix}), "update-launcher") {
 		t.Fatal("update block not tied to ToolPath")
+	}
+}
+
+// wrapperFixture builds a runnable wrapper with stub Proton, umu-run and
+// gamescope, and returns it with the prefix and the stub bin directory.
+func wrapperFixture(t *testing.T, extraVars string, stubs map[string]string) (wrapper, prefix, bin string) {
+	t.Helper()
+	prefix = filepath.Join(t.TempDir(), "Bellum")
+	launcher := filepath.Join(prefix, "drive_c/users/steamuser/AppData/Local/Astarte Industries/Astarte Launcher/AstarteLauncher.exe")
+	proton := t.TempDir()
+	runtimeDir := t.TempDir()
+	bin = t.TempDir()
+	if err := os.MkdirAll(filepath.Dir(launcher), 0700); err != nil {
+		t.Fatal(err)
+	}
+	files := map[string]string{
+		launcher:                        "stub",
+		filepath.Join(proton, "proton"): "stub",
+		filepath.Join(bin, "umu-run"):   "#!/bin/sh\necho \"umu-run $*\"\n",
+	}
+	for name, content := range stubs {
+		files[filepath.Join(bin, name)] = content
+	}
+	for path, content := range files {
+		if err := os.WriteFile(path, []byte(content), 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	vars := "export WINEPREFIX='" + prefix + "'\nexport PROTONPATH='" + proton + "'\nexport PROTON_EAC_RUNTIME='" + runtimeDir + "'\n" + extraVars
+	if err := os.WriteFile(filepath.Join(prefix, "launch_vars.env"), []byte(vars), 0600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":"+os.Getenv("PATH"))
+	t.Setenv("BASH_ENV", "")
+	wrapper = filepath.Join(t.TempDir(), "Bellum")
+	if err := os.WriteFile(wrapper, []byte(generateWrapperContent(LauncherConfig{Wineprefix: prefix})), 0700); err != nil {
+		t.Fatal(err)
+	}
+	return wrapper, prefix, bin
+}
+
+func TestWrapperNeverNestsGamescopeInGameMode(t *testing.T) {
+	wrapper, prefix, _ := wrapperFixture(t, "export BELLUM_GAMESCOPE=1\n", map[string]string{"gamescope": "#!/bin/sh\necho \"gamescope $*\"\n"})
+	t.Setenv("GAMESCOPE_WAYLAND_DISPLAY", "gamescope-0")
+	if out, err := exec.Command("bash", wrapper).CombinedOutput(); err != nil {
+		t.Fatalf("wrapper failed: %v %s", err, out)
+	}
+	log, _ := os.ReadFile(filepath.Join(prefix, "launcher.log"))
+	if strings.Contains(string(log), "gamescope --") || !strings.Contains(string(log), "already running inside gamescope") || !strings.Contains(string(log), "umu-run") {
+		t.Fatalf("launcher.log:\n%s", log)
+	}
+}
+
+func TestWrapperHintsAtDoubleInputOutsideSteam(t *testing.T) {
+	// pgrep reports a running Steam.
+	wrapper, prefix, _ := wrapperFixture(t, "", map[string]string{"pgrep": "#!/bin/sh\nexit 0\n"})
+	t.Setenv("SteamGameId", "")
+	if out, err := exec.Command("bash", wrapper).CombinedOutput(); err != nil {
+		t.Fatalf("wrapper failed: %v %s", err, out)
+	}
+	log, _ := os.ReadFile(filepath.Join(prefix, "launcher.log"))
+	if !strings.Contains(string(log), "double input") {
+		t.Fatalf("no double-input hint:\n%s", log)
+	}
+
+	// Started from Steam: no hint.
+	wrapper, prefix, _ = wrapperFixture(t, "", map[string]string{"pgrep": "#!/bin/sh\nexit 0\n"})
+	t.Setenv("SteamGameId", "12345")
+	if out, err := exec.Command("bash", wrapper).CombinedOutput(); err != nil {
+		t.Fatalf("wrapper failed: %v %s", err, out)
+	}
+	log, _ = os.ReadFile(filepath.Join(prefix, "launcher.log"))
+	if strings.Contains(string(log), "double input") {
+		t.Fatalf("hint when started from Steam:\n%s", log)
 	}
 }

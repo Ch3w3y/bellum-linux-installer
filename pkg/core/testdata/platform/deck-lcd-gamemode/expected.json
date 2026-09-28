@@ -1,0 +1,106 @@
+{
+  "platform": {
+    "os": {
+      "id": "steamos",
+      "idLike": [
+        "arch"
+      ],
+      "variantId": "",
+      "versionId": "3",
+      "prettyName": "SteamOS 3.6",
+      "family": "arch",
+      "immutable": "yes",
+      "immutableEvidence": "known distro identity: steamos",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "Valve",
+      "productName": "Jupiter",
+      "sku": "deck-lcd",
+      "match": "exact",
+      "evidence": "dmi:sys_vendor,product_name"
+    },
+    "gpu": {
+      "Vendor": "AMD",
+      "Renderer": "AMD Radeon Graphics (radeonsi, gfx1033, ACO, DRM 3.57)",
+      "Generation": "RDNA2",
+      "Ambiguous": false,
+      "DLSS": false,
+      "NVAPI": false,
+      "FSR": true,
+      "FSR41": false,
+      "FrameGeneration": false
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "AMD Radeon Graphics (radeonsi, gfx1033, ACO, DRM 3.57)",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:deck-lcd-gamemode"
+    },
+    "nvidia": {
+      "kernel": "not-observed",
+      "userspace": "unknown",
+      "association": "unknown",
+      "rawVersion": "",
+      "version": "",
+      "versionSource": "",
+      "modeset": "unknown",
+      "vulkan": {
+        "manifests": [],
+        "scanState": "complete",
+        "nvidiaCandidate": "not-observed",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "gamescope",
+      "desktop": "gamescope",
+      "gameMode": "yes",
+      "evidence": "xdg-current-desktop:gamescope"
+    },
+    "steam": {
+      "installs": [
+        {
+          "kind": "native",
+          "root": "/home/tester/.local/share/Steam",
+          "evidence": "root:native"
+        }
+      ],
+      "discovery": "complete",
+      "running": "yes"
+    },
+    "controllers": {
+      "devices": [
+        {
+          "name": "Valve Software Steam Deck",
+          "bus": "0003",
+          "vendorId": "28de",
+          "productId": "1205",
+          "handlers": [
+            "event4",
+            "js0"
+          ],
+          "confidence": "controller"
+        }
+      ],
+      "discovery": "complete"
+    },
+    "diagnostics": []
+  },
+  "profile": {
+    "version": 1,
+    "osId": "steamos",
+    "osVariant": "",
+    "osFamily": "arch",
+    "sku": "deck-lcd",
+    "gpuVendor": "AMD",
+    "gpuGeneration": "RDNA2",
+    "gpuAmbiguous": false,
+    "session": "gamescope",
+    "gameMode": "yes",
+    "hardwareMatch": "exact"
+  },
+  "profileKey": "v1|os=steamos|variant=|family=arch|sku=deck-lcd|gpu=AMD|gen=RDNA2|stable|session=gamescope|gamemode=yes|match=exact"
+}

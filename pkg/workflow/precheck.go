@@ -1,10 +1,13 @@
 package workflow
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"syscall"
 	"time"
@@ -29,8 +32,11 @@ type PrecheckResult struct {
 	IsAMDGPU          bool
 	GPUCapabilities   core.GPUCapabilities
 	UseFSR41          bool
-	ProtonVer         string
-	ProtonPath        string
+	// Platform is the detected platform snapshot (step 2); its GPU matches
+	// GPUCapabilities.
+	Platform   core.Platform
+	ProtonVer  string
+	ProtonPath string
 }
 
 // ResolvePrefixPath turns a user-supplied location into the Bellum prefix
@@ -146,7 +152,10 @@ func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileSt
 	}
 	logger.Info("[OK] Install folder is writable")
 
-	if isSSD(parent, logger) {
+	if isSDCardWith(parent, DefaultBoundaries.Commands, files) {
+		// lsblk reports SD cards as non-rotational, so check them first.
+		logger.Warn("Install folder is on a microSD card. Bellum works there, but loading is slower than on the internal SSD.")
+	} else if isSSD(parent, logger) {
 		logger.Info("[OK] Install folder is on an SSD/NVMe drive")
 	} else {
 		logger.Warn("Install folder is NOT on an SSD/NVMe drive; loading may be slow")
@@ -208,15 +217,18 @@ type PrecheckOptions struct {
 // precheckHost holds every host effect RunPrechecks reaches, so tests can run
 // the full precheck phase against fakes.
 type precheckHost struct {
-	Commands      CommandRunner
-	Files         FileStore
-	DetectGPU     func() (core.GPUCapabilities, error)
-	Ask           func(string) bool
-	FreeBytes     func(string) (uint64, error)
-	VerifyEAC     func(string, []string) (string, bool, error)
-	StageLauncher func(string) (string, string, packages.LauncherCheck, error)
-	ProtonDir     func(string) string
-	FindEAC       func() (EACRuntime, error)
+	Commands  CommandRunner
+	Files     FileStore
+	DetectGPU func() (core.GPUCapabilities, error)
+	// DetectPlatform, when set, supplies the whole platform snapshot and its
+	// GPU replaces DetectGPU's.
+	DetectPlatform func() (core.Platform, error)
+	Ask            func(string) bool
+	FreeBytes      func(string) (uint64, error)
+	VerifyEAC      func(string, []string) (string, bool, error)
+	StageLauncher  func(string) (string, string, packages.LauncherCheck, error)
+	ProtonDir      func(string) string
+	FindEAC        func() (EACRuntime, error)
 	// RequestEAC runs the given command to ask Steam to install the EAC
 	// runtime; Steam shows its own confirmation.
 	RequestEAC func([]string) error
@@ -225,7 +237,7 @@ type precheckHost struct {
 }
 
 // steamInstallCommand returns the command that asks the user's Steam
-// (native or Flatpak) to install the EAC runtime, or nil without Steam.
+// (native, Flatpak or Snap) to install the EAC runtime, or nil without Steam.
 func steamInstallCommand(commands CommandRunner, files FileStore) []string {
 	uri := "steam://install/" + eacRuntimeAppID
 	if DiscoverExecutable("steam", commands) != "" {
@@ -235,6 +247,10 @@ func steamInstallCommand(commands CommandRunner, files FileStore) []string {
 	if DiscoverExecutable("flatpak", commands) != "" &&
 		(isDirWith(filepath.Join(home, ".var", "app", "com.valvesoftware.Steam"), files) || isDirWith("/var/lib/flatpak/app/com.valvesoftware.Steam", files)) {
 		return []string{"flatpak", "run", "com.valvesoftware.Steam", uri}
+	}
+	if DiscoverExecutable("snap", commands) != "" &&
+		(isDirWith(filepath.Join(home, "snap", "steam"), files) || isDirWith("/snap/steam", files)) {
+		return []string{"snap", "run", "steam", uri}
 	}
 	return nil
 }
@@ -269,16 +285,17 @@ func waitForEACInstall(host precheckHost, logger *core.Logger) (EACRuntime, erro
 }
 
 var defaultPrecheckHost = precheckHost{
-	RequestEAC:    startDetached,
-	Sleep:         time.Sleep,
-	Commands:      DefaultBoundaries.Commands,
-	Files:         DefaultBoundaries.Files,
-	DetectGPU:     core.DetectGPUCapabilities,
-	Ask:           core.AskBool,
-	FreeBytes:     freeBytes,
-	VerifyEAC:     packages.VerifyEACRuntime,
-	StageLauncher: packages.StageLauncherInstaller,
-	ProtonDir:     packages.GetProtonInstallPath,
+	RequestEAC:     startDetached,
+	Sleep:          time.Sleep,
+	Commands:       DefaultBoundaries.Commands,
+	Files:          DefaultBoundaries.Files,
+	DetectGPU:      core.DetectGPUCapabilities,
+	DetectPlatform: detectPlatform,
+	Ask:            core.AskBool,
+	FreeBytes:      freeBytes,
+	VerifyEAC:      packages.VerifyEACRuntime,
+	StageLauncher:  packages.StageLauncherInstaller,
+	ProtonDir:      packages.GetProtonInstallPath,
 	FindEAC: func() (EACRuntime, error) {
 		home, err := os.UserHomeDir()
 		if err != nil {
@@ -286,6 +303,61 @@ var defaultPrecheckHost = precheckHost{
 		}
 		return findEACRuntime(home, os.Getenv("PROTON_EAC_RUNTIME"), DefaultBoundaries.Files)
 	},
+}
+
+// platformDetectionBudget bounds the whole read-only platform detection.
+const platformDetectionBudget = 15 * time.Second
+
+// detectPlatform is the production platform probe. Detection problems never
+// block the install: a failed or cancelled detection keeps whatever it
+// collected, and a missing GPU falls back to the classic GPU probe.
+func detectPlatform() (core.Platform, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), platformDetectionBudget)
+	defer cancel()
+	p, err := core.DetectPlatform(ctx)
+	if err != nil {
+		var partial *core.PartialError
+		if errors.As(err, &partial) {
+			p = partial.Snapshot
+		}
+		if p.GPU.Vendor == "" {
+			caps, gerr := core.DetectGPUCapabilities()
+			if gerr != nil {
+				return core.Platform{}, gerr
+			}
+			p.GPU = caps
+		}
+	}
+	return p, nil
+}
+
+// platformFor runs the host's platform detection, or builds a GPU-only
+// snapshot from DetectGPU when no platform probe is configured.
+func platformFor(host precheckHost) (core.Platform, error) {
+	if host.DetectPlatform != nil {
+		return host.DetectPlatform()
+	}
+	caps, err := host.DetectGPU()
+	if err != nil {
+		return core.Platform{}, err
+	}
+	return core.Platform{GPU: caps}, nil
+}
+
+// steamOSLocationWarning warns when a SteamOS install location is outside
+// $HOME and removable media: SteamOS updates replace the rest of the system.
+func steamOSLocationWarning(prefix, home string, p core.Platform) string {
+	if p.OS.ID != "steamos" || home == "" {
+		return ""
+	}
+	within := func(root string) bool {
+		rel, err := filepath.Rel(root, prefix)
+		return err == nil && rel != ".." && !strings.HasPrefix(rel, "../")
+	}
+	if within(home) || within("/run/media") {
+		return ""
+	}
+	return fmt.Sprintf("%s is outside your home folder. SteamOS updates replace everything outside /home and removable drives, so install under %s or on a microSD card instead.", prefix, home)
 }
 
 // requiredTools lists the host commands the install needs. Everything else
@@ -314,9 +386,14 @@ func RunPrechecks(opts PrecheckOptions, logger *core.Logger) (*PrecheckResult, e
 
 func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHost) (*PrecheckResult, error) {
 
-	gpuCaps, err := host.DetectGPU()
+	platform, err := platformFor(host)
 	if err != nil {
 		return nil, err
+	}
+	gpuCaps := platform.GPU
+	if gpuCaps.Vendor == "" {
+		gpuCaps.Vendor = core.GPUUnknown
+		platform.GPU = gpuCaps
 	}
 	gpuType := string(gpuCaps.Vendor)
 	if gpuCaps.Vendor == core.GPUUnknown {
@@ -324,13 +401,13 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	}
 	isAMD := gpuCaps.Vendor == core.GPUAMD
 	// RDNA4 needs the Proton driver component for the game's native FSR4.
-	useFSR41 := gpuCaps.Vendor == core.GPUAMD && gpuCaps.Generation == "RDNA4" && !gpuCaps.Ambiguous
+	useFSR41 := core.LaunchProfileFor(gpuCaps).UsesFSR4Upgrade()
 	gpuLine := "GPU: " + gpuType
 	if gpuCaps.Generation != "" {
 		gpuLine += " " + gpuCaps.Generation
 	}
 	if gpuCaps.Renderer != "" && !strings.HasPrefix(gpuCaps.Renderer, "undetected") {
-		gpuLine += core.ColorGrayBold + "  (" + gpuCaps.Renderer + ")" + core.ColorReset
+		gpuLine += core.ColorGrayBold + "  (" + core.SanitizeField(gpuCaps.Renderer, core.MaxRendererLen) + ")" + core.ColorReset
 	}
 	if gpuCaps.Vendor != core.GPUUnknown {
 		gpuLine = "[OK] " + gpuLine
@@ -339,10 +416,23 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 	if gpuCaps.Vendor == core.GPUUnknown {
 		logger.Warn("Your GPU wasn't recognised (common in VMs and on some hybrid laptops). Bellum will use generic Proton settings without vendor-specific features.")
 	}
+	logger.Info("Detected: " + ProfileSummary(platform))
+	for _, d := range platform.Diagnostics {
+		logger.Record(fmt.Sprintf("detection: %s %s %s: %s", d.Code, d.Source, d.Outcome, d.Detail))
+	}
+	// NVIDIA driver problems warn, never block.
+	for _, warning := range NVIDIAWarnings(platform) {
+		logger.Warn(warning)
+	}
 
 	wineprefix, replaceIncomplete, update, err := validateWINEPREFIXWith(opts.Wineprefix, logger, host.Files, host.Ask)
 	if err != nil {
 		return nil, err
+	}
+
+	home, _ := os.UserHomeDir()
+	if warning := steamOSLocationWarning(wineprefix, home, platform); warning != "" {
+		logger.Warn(warning)
 	}
 
 	var problems []string
@@ -432,6 +522,7 @@ func runPrechecksWith(opts PrecheckOptions, logger *core.Logger, host precheckHo
 		IsAMDGPU:          isAMD,
 		GPUCapabilities:   gpuCaps,
 		UseFSR41:          useFSR41,
+		Platform:          platform,
 		ProtonVer:         protonVer,
 		ProtonPath:        protonPath,
 		LauncherInstaller: stagedLauncher,
@@ -518,22 +609,39 @@ func isSSDWith(path string, logger *core.Logger, commands CommandRunner) bool {
 	}
 
 	// Fallback to checking device name
-	device, err := commands.Output([]string{"df", "-P", path})
+	deviceName := filepath.Base(dfDevice(path, commands))
+	return strings.HasPrefix(deviceName, "nvme") || strings.HasPrefix(deviceName, "sd") || strings.HasPrefix(deviceName, "vd")
+}
+
+// dfDevice returns the device backing path according to `df -P`, or "".
+func dfDevice(path string, commands CommandRunner) string {
+	out, err := commands.Output([]string{"df", "-P", path})
 	if err != nil {
+		return ""
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	if len(lines) < 2 {
+		return ""
+	}
+	fields := strings.Fields(lines[len(lines)-1])
+	if len(fields) == 0 {
+		return ""
+	}
+	return fields[0]
+}
+
+var mmcPartitionRe = regexp.MustCompile(`^(mmcblk[0-9]+)(?:p[0-9]+)?$`)
+
+// isSDCardWith reports whether path is on an SD card (the Steam Deck's
+// microSD slot). Internal eMMC storage is also an mmcblk device, so the
+// kernel's card type decides: "SD" for SD cards, "MMC" for eMMC.
+func isSDCardWith(path string, commands CommandRunner, files FileStore) bool {
+	m := mmcPartitionRe.FindStringSubmatch(filepath.Base(dfDevice(path, commands)))
+	if m == nil {
 		return false
 	}
-
-	// Parse device name from df output
-	lines := strings.Split(device, "\n")
-	if len(lines) >= 2 {
-		fields := strings.Fields(lines[1])
-		if len(fields) >= 1 {
-			deviceName := filepath.Base(fields[0])
-			return strings.HasPrefix(deviceName, "nvme") || strings.HasPrefix(deviceName, "sd") || strings.HasPrefix(deviceName, "vd")
-		}
-	}
-
-	return false
+	data, err := files.ReadFile(filepath.Join("/sys/block", m[1], "device", "type"))
+	return err == nil && strings.TrimSpace(string(data)) == "SD"
 }
 
 // Scanner for user input

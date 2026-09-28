@@ -9,7 +9,7 @@ and screenshots the final screen with headless Chromium (Playwright).
     python3 tools/screenshots/render.py docs/images
 
 Set CHROMIUM to a Chromium binary if Playwright can't find one, and VERSION
-to the installer version shown in the banner (default 2.2.0).
+to the installer version shown in the banner (default 2.3.0).
 """
 import html
 import os
@@ -23,7 +23,7 @@ from playwright.sync_api import sync_playwright
 COLS = 104
 # scene: (rows, seconds to run before capturing; None runs to the end).
 # "progress" catches the install scene mid-download to show the live bar.
-SCENES = {"start": (44, None), "review": (20, None), "progress": (12, 1.3),
+SCENES = {"start": (45, None), "review": (21, None), "progress": (12, 1.3),
           "install": (30, None), "finish": (16, None)}
 
 # Terminal palette (Catppuccin-like dark theme) for the 16 ANSI colours.
@@ -103,7 +103,7 @@ body{{margin:0;background:transparent;padding:24px}}
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "docs/images"
     os.makedirs(out_dir, exist_ok=True)
-    version = os.environ.get("VERSION", "2.2.0")
+    version = os.environ.get("VERSION", "2.3.0")
     binary = os.path.join(tempfile.mkdtemp(), "screenshots")
     subprocess.run(["go", "build", "-o", binary, "-ldflags",
                     f"-X bellum-installer/pkg/config.InstallerVersion={version}",

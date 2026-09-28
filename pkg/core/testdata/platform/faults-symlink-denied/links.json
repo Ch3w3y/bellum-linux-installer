@@ -1,0 +1,1 @@
+{"links": {"/home/tester/.steam/steam": "HOST:/etc/shadow", "/home/tester/.steam/root": "/home/tester/.steam/loop", "/home/tester/.steam/loop": "/home/tester/.steam/root"}, "denied": ["/etc/os-release", "/proc/1/status"]}

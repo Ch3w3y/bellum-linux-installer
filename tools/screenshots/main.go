@@ -70,6 +70,7 @@ func start(logger *core.Logger) {
 	fmt.Printf("  %s›%s \n", core.ColorBoldCyan, core.ColorReset)
 	core.Step(2, 5, "Checking your system")
 	logger.Info("[OK] GPU: AMD RDNA4  (AMD Radeon RX 9070 XT (radeonsi, gfx1201, ACO))")
+	logger.Info("Detected: CachyOS Linux · RDNA4 · Wayland (verified)")
 	logger.Info("Install folder: " + core.Colorize(prefix, core.ColorBoldYellow))
 	for _, ok := range []string{
 		"Install folder is writable",
@@ -87,7 +88,7 @@ func start(logger *core.Logger) {
 func review() {
 	core.Step(3, 5, "Review")
 	core.PrintInstallerSummary(config.DefaultVersions.ProtonVer, config.DefaultVersions.WinetricksVer, "", "integrated with pinned Proton",
-		prefix, "", "AMD", "AMD RDNA4: native FSR4 (FP8) through Proton", "")
+		prefix, "", "CachyOS Linux · RDNA4 · Wayland (verified)", "AMD", "AMD RDNA4: native FSR4 (FP8) through Proton", "")
 	core.ConfirmProceed()
 }
 

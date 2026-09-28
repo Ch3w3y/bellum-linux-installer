@@ -162,3 +162,99 @@ func TestPrechecksOfferToInstallEACThroughSteam(t *testing.T) {
 		t.Fatalf("expected the EAC problem, got %v", err)
 	}
 }
+
+func TestPrechecksCarryTheDetectedPlatform(t *testing.T) {
+	_, host, opts := newPrecheckFixture(t, "python3", "flock")
+	detected := core.Platform{
+		OS:       core.OSInfo{ID: "steamos", VersionID: "3.7", Family: core.OSArch},
+		Hardware: core.HardwareInfo{SKU: core.SKUDeckOLED},
+		GPU:      core.GPUCapabilities{Vendor: core.GPUAMD, Generation: "RDNA2", FSR: true},
+		Session:  core.SessionInfo{Kind: core.SessionGamescope, GameMode: core.TriYes},
+	}
+	host.DetectGPU = func() (core.GPUCapabilities, error) { t.Fatal("GPU probed twice"); return core.GPUCapabilities{}, nil }
+	host.DetectPlatform = func() (core.Platform, error) { return detected, nil }
+	logger, _ := core.NewLogger("")
+	result, err := runPrechecksWith(opts, logger, host)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Platform.Hardware.SKU != core.SKUDeckOLED || result.GPUCapabilities.Generation != "RDNA2" || result.UseFSR41 || !result.IsAMDGPU {
+		t.Fatalf("unexpected result: %+v", result)
+	}
+	if got := ProfileSummary(result.Platform); got != "Steam Deck OLED · SteamOS 3 · RDNA2 · Game Mode (expected)" {
+		t.Fatalf("profile summary %q", got)
+	}
+
+	// A platform probe failure is reported, like a GPU probe failure was.
+	host.DetectPlatform = func() (core.Platform, error) { return core.Platform{}, errors.New("probe failed") }
+	if _, err := runPrechecksWith(opts, logger, host); err == nil {
+		t.Fatal("expected the probe error")
+	}
+}
+
+func TestSteamOSLocationWarning(t *testing.T) {
+	steamos := core.Platform{OS: core.OSInfo{ID: "steamos"}}
+	for prefix, warn := range map[string]bool{
+		"/home/deck/Games/Bellum":         false,
+		"/run/media/deck/SD/Bellum":       false,
+		"/opt/Bellum":                     true,
+		"/home/deckhand/Bellum":           true,
+		"/home/deck/../other/Bellum":      true,
+		"/run/media-not-really/sd/Bellum": true,
+	} {
+		if got := steamOSLocationWarning(filepath.Clean(prefix), "/home/deck", steamos) != ""; got != warn {
+			t.Errorf("%s: warning=%t, want %t", prefix, got, warn)
+		}
+	}
+	if steamOSLocationWarning("/opt/Bellum", "/home/deck", core.Platform{OS: core.OSInfo{ID: "arch"}}) != "" {
+		t.Error("only SteamOS resets the system on update")
+	}
+}
+
+// cardTypeFiles serves /sys/block/mmcblk0/device/type.
+type cardTypeFiles struct {
+	osFiles
+	cardType string
+}
+
+func (f cardTypeFiles) ReadFile(path string) ([]byte, error) {
+	if path == "/sys/block/mmcblk0/device/type" && f.cardType != "" {
+		return []byte(f.cardType + "\n"), nil
+	}
+	return nil, os.ErrNotExist
+}
+
+func TestIsSDCard(t *testing.T) {
+	const header = "Filesystem 1024-blocks Used Available Capacity Mounted on\n"
+	for _, tc := range []struct {
+		df, cardType string
+		want         bool
+	}{
+		{header + "/dev/mmcblk0p1 500000 1 499999 1% /run/media/deck/SD\n", "SD", true},
+		{header + "/dev/mmcblk0 500000 1 499999 1% /run/media/deck/SD\n", "SD", true},
+		// Internal eMMC is also mmcblk.
+		{header + "/dev/mmcblk0p8 500000 1 499999 1% /home\n", "MMC", false},
+		{header + "/dev/mmcblk0p1 500000 1 499999 1% /x\n", "", false},
+		{header + "/dev/nvme0n1p8 500000 1 499999 1% /home\n", "SD", false},
+		{header + "/dev/mmcblk0p1/../../etc 1 1 1 1% /x\n", "SD", false},
+		{"", "SD", false},
+	} {
+		if got := isSDCardWith("/x", fakeCommands{output: tc.df}, cardTypeFiles{cardType: tc.cardType}); got != tc.want {
+			t.Errorf("%q (%s): got %t, want %t", tc.df, tc.cardType, got, tc.want)
+		}
+	}
+}
+
+func TestPackageFamilyCoversDerivatives(t *testing.T) {
+	for id, want := range map[string]string{
+		"cachyos": "arch", "endeavouros": "arch", "nobara": "fedora", "pop": "debian",
+		"linuxmint": "debian", "opensuse-tumbleweed": "opensuse", "gentoo": "unknown",
+	} {
+		if got := (Host{ID: id}).PackageFamily(); got != want {
+			t.Errorf("%s: got %s, want %s", id, got, want)
+		}
+	}
+	if got := (Host{ID: "zorin", IDLike: "ubuntu debian"}).PackageFamily(); got != "debian" {
+		t.Errorf("ID_LIKE fallback: %s", got)
+	}
+}

@@ -1,0 +1,5 @@
+NAME="CachyOS Linux"
+PRETTY_NAME="CachyOS Linux"
+ID=cachyos
+ID_LIKE=arch
+VERSION_ID=2026.09.01

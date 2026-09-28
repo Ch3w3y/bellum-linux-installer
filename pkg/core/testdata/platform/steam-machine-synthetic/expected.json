@@ -1,0 +1,109 @@
+{
+  "platform": {
+    "os": {
+      "id": "steamos",
+      "idLike": [
+        "arch"
+      ],
+      "variantId": "",
+      "versionId": "3",
+      "prettyName": "SteamOS 3.6",
+      "family": "arch",
+      "immutable": "yes",
+      "immutableEvidence": "known distro identity: steamos",
+      "sourcePath": "/etc/os-release"
+    },
+    "hardware": {
+      "sysVendor": "Valve",
+      "productName": "SYNTHETIC-MACHINE-01",
+      "sku": "steam-machine-candidate",
+      "match": "heuristic",
+      "evidence": "dmi:sys_vendor,product_name+renderer:gfx11xx"
+    },
+    "gpu": {
+      "Vendor": "AMD",
+      "Renderer": "AMD Radeon RX 7600M XT gfx1102",
+      "Generation": "RDNA3",
+      "Ambiguous": false,
+      "DLSS": false,
+      "NVAPI": false,
+      "FSR": true,
+      "FSR41": false,
+      "FrameGeneration": false
+    },
+    "gpuProbe": {
+      "source": "renderer",
+      "renderer": "AMD Radeon RX 7600M XT gfx1102",
+      "pciVendor": "",
+      "pciDevice": "",
+      "deviceAssociation": "known",
+      "provenance": "fixture:steam-machine-synthetic"
+    },
+    "nvidia": {
+      "kernel": "not-observed",
+      "userspace": "unknown",
+      "association": "unknown",
+      "rawVersion": "",
+      "version": "",
+      "versionSource": "",
+      "modeset": "unknown",
+      "vulkan": {
+        "manifests": [],
+        "scanState": "complete",
+        "nvidiaCandidate": "not-observed",
+        "evidence": ""
+      }
+    },
+    "session": {
+      "kind": "gamescope",
+      "desktop": "gamescope",
+      "gameMode": "yes",
+      "evidence": "xdg-current-desktop:gamescope"
+    },
+    "steam": {
+      "installs": [
+        {
+          "kind": "native",
+          "root": "/home/tester/.local/share/Steam",
+          "evidence": "root:native"
+        }
+      ],
+      "discovery": "complete",
+      "running": "unknown"
+    },
+    "controllers": {
+      "devices": [],
+      "discovery": "unknown"
+    },
+    "diagnostics": [
+      {
+        "code": "controllers/input-unreadable",
+        "subsystem": "controllers",
+        "source": "/proc/bus/input/devices",
+        "outcome": "missing",
+        "detail": "input device inventory unavailable"
+      },
+      {
+        "code": "steam/proc-unreadable",
+        "subsystem": "steam",
+        "source": "/proc",
+        "outcome": "missing",
+        "detail": "process listing unavailable; Steam running state unknown"
+      }
+    ]
+  },
+  "profile": {
+    "version": 1,
+    "osId": "steamos",
+    "osVariant": "",
+    "osFamily": "arch",
+    "sku": "steam-machine-candidate",
+    "gpuVendor": "AMD",
+    "gpuGeneration": "RDNA3",
+    "gpuAmbiguous": false,
+    "session": "gamescope",
+    "gameMode": "yes",
+    "hardwareMatch": "heuristic"
+  },
+  "profileKey": "v1|os=steamos|variant=|family=arch|sku=steam-machine-candidate|gpu=AMD|gen=RDNA3|stable|session=gamescope|gamemode=yes|match=heuristic"
+}

@@ -56,18 +56,21 @@ func RunConfigurationWithBoundaries(config ConfigureConfig, logger *core.Logger,
 	}
 
 	// GPU-specific configuration: the single most-stable-then-fastest set
-	// for this vendor.
+	// for the detected launch profile.
 	extras := launchVarsToggles()
-	if config.GPUCapabilities.NVAPI {
+	caps := config.GPUCapabilities
+	switch profile := core.LaunchProfileFor(caps); {
+	case caps.NVAPI:
 		// dxvk_nvapi is included in Proton for NVIDIA
 		if err := createLaunchVarsFileNvidia(config.WINEPREFIX, config.ProtonPath, extras, logger, boundaries.Files); err != nil {
 			return err
 		}
-	} else if config.GPUCapabilities.Vendor == core.GPUAMD {
-		if err := createLaunchVarsFileAMD(config.WINEPREFIX, config.ProtonPath, config.IsFSR41 && config.GPUCapabilities.FSR41, extras, logger, boundaries.Files); err != nil {
+	case caps.Vendor == core.GPUAMD:
+		fsr4 := config.IsFSR41 && profile.UsesFSR4Upgrade()
+		if err := createLaunchVarsFileAMD(config.WINEPREFIX, config.ProtonPath, amdLaunchSettings{FSR4Upgrade: fsr4, RDNA3Workaround: profile.UsesRDNA3Workaround()}, extras, logger, boundaries.Files); err != nil {
 			return err
 		}
-	} else {
+	default:
 		if err := createLaunchVarsFileGeneric(config.WINEPREFIX, config.ProtonPath, extras, boundaries.Files); err != nil {
 			return err
 		}
@@ -166,12 +169,20 @@ export CUDA_DISABLE_PERF_BOOST="1"
 	return nil
 }
 
-// CreateLaunchVarsFileAMD creates the launch environment file for AMD GPUs
-func CreateLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, logger *core.Logger) error {
-	return createLaunchVarsFileAMD(wineprefix, protonpath, isFSR41, launchVarsToggles(), logger, DefaultBoundaries.Files)
+// amdLaunchSettings are the two AMD settings that differ by generation.
+type amdLaunchSettings struct {
+	FSR4Upgrade     bool
+	RDNA3Workaround bool
 }
 
-func createLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, extras string, logger *core.Logger, files FileStore) error {
+// CreateLaunchVarsFileAMD creates the launch environment file for AMD GPUs.
+// isFSR41 selects the RDNA4 settings; otherwise the RDNA3 settings are
+// written, as before profiles existed.
+func CreateLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, logger *core.Logger) error {
+	return createLaunchVarsFileAMD(wineprefix, protonpath, amdLaunchSettings{FSR4Upgrade: isFSR41, RDNA3Workaround: !isFSR41}, launchVarsToggles(), logger, DefaultBoundaries.Files)
+}
+
+func createLaunchVarsFileAMD(wineprefix, protonpath string, settings amdLaunchSettings, extras string, logger *core.Logger, files FileStore) error {
 	launchVars := filepath.Join(wineprefix, "launch_vars.env")
 	logger.Info(fmt.Sprintf("Creating launch environment file: %s", launchVars))
 
@@ -180,14 +191,18 @@ func createLaunchVarsFileAMD(wineprefix, protonpath string, isFSR41 bool, extras
 	// games when the GPU reports support. PROTON_FSR4_UPGRADE=1 forces that
 	// offer; we set it only on an unambiguous RDNA4 (native FP8 path).
 	// DXIL_SPIRV_CONFIG=wmma_rdna3_workaround makes amdxc64 take the FP16
-	// emulation path ("not recommended" in its own log), so RDNA4 never gets
-	// it; CachyOS notes it is no longer needed on RDNA3 in most cases either,
-	// but it is kept there as the existing, known behaviour.
+	// emulation path ("not recommended" in its own log). It targets RDNA3's
+	// matrix instructions, so only the RDNA3 profile keeps it (the existing,
+	// known behaviour; CachyOS notes it is rarely needed there now). RDNA2
+	// (the Steam Deck included), older and unknown AMD generations get
+	// neither: the game falls back to its own FSR 3.x.
 	fsr4Upgrade := "0"
-	dxilWorkaround := "export DXIL_SPIRV_CONFIG=wmma_rdna3_workaround\n"
-	if isFSR41 {
+	if settings.FSR4Upgrade {
 		fsr4Upgrade = "1"
-		dxilWorkaround = ""
+	}
+	dxilWorkaround := ""
+	if settings.RDNA3Workaround && !settings.FSR4Upgrade {
+		dxilWorkaround = "export DXIL_SPIRV_CONFIG=wmma_rdna3_workaround\n"
 	}
 
 	content := `# Bellum Launch Variables (AMD)

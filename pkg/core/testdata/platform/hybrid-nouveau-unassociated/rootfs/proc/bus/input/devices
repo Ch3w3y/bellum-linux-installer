@@ -1,0 +1,5 @@
+I: Bus=0003 Vendor=045e Product=028e Version=0110
+N: Name="Microsoft X-Box 360 pad"
+H: Handlers=event5 js1
+B: EV=2001b
+
