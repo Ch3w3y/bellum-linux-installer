@@ -17,10 +17,10 @@ installer is never run in CI; it is tested by hand through release candidates.
    curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version vX.Y.Z-rc.N
    ```
 
-   Follow the [QA and EAC checklist](docs/eac-qa.md). Any fix means a new
+   Follow the [QA and EAC checklist](eac-qa.md). Any fix means a new
    candidate.
 4. **Record the evidence** for the tested candidate commit in
-   [`RELEASE-GATE.md`](RELEASE-GATE.md) and `docs/release-evidence/<candidate
+   [`docs/release-gate.md`](release-gate.md) and `docs/release-evidence/<candidate
    SHA>/` (QA, EAC, security review, provenance of the pins), in one commit on
    `main` that changes nothing else.
 5. **Cut the final release** `vX.Y.Z`. The workflow runs the gate, builds,
@@ -36,7 +36,7 @@ closed. It requires:
 
 - a `Candidate:` line naming the full SHA of the tested release candidate;
 - that candidate to be an ancestor of the release commit, with **nothing but
-  `RELEASE-GATE.md` and `docs/release-evidence/` changed since**, so the
+  `docs/release-gate.md` and `docs/release-evidence/` changed since**, so the
   released code is exactly the code that was tested;
 - all four items (QA, EAC, Security, Provenance) checked, each with an HTTPS
   link that contains the candidate SHA and isn't a placeholder.
@@ -119,8 +119,8 @@ with the release review record.
   manifest.
 - Proton-CachyOS and umu-launcher are downloaded at install time and pinned by
   SHA-256 in `pkg/config/versions.go`. Pins are proposed by the daily
-  [`update-pins`](.github/workflows/update-pins.yml) workflow only after the
-  checks in [runtime pins](docs/runtime-pins.md#automated-pin-updates) pass.
+  [`update-pins`](../.github/workflows/update-pins.yml) workflow only after the
+  checks in [runtime pins](runtime-pins.md#automated-pin-updates) pass.
 - DXVK, vkd3d-proton, dxvk-nvapi and winetricks come from the pinned Proton
   archive, never from separate downloads.
 - The Astarte Launcher is accepted on its Authenticode signature from

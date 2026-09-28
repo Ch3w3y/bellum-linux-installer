@@ -12,7 +12,7 @@ shortcut, an app-menu entry and a `Bellum` command.
 
 This project continues [Joheb Rahman (joepaji)'s original Bellum Linux
 Installer](https://github.com/joepaji/bellum-linux-installer). See
-[Credits](CREDITS.md) for the project's lineage and the third-party software it
+[Credits](docs/credits.md) for the project's lineage and the third-party software it
 relies on.
 
 ![The installer's banner and system check](docs/images/install-start.png)
@@ -315,7 +315,7 @@ What the installer checks, and what it never does:
 - **No DLL changes**, no game-folder writes, no telemetry.
 
 Every host change the installer and uninstaller make is listed in
-[INSTALLER_AUDIT.md](INSTALLER_AUDIT.md). The prefix holds your launcher
+[the installer audit](docs/installer-audit.md). The prefix holds your launcher
 login, access certificates and WebView2 cookies, so keep it private and redact
 logs before sharing them.
 
@@ -431,12 +431,12 @@ Installs are tested by hand on real hardware through release candidates.
 
 | Document | Contents |
 | --- | --- |
-| [RELEASE.md](RELEASE.md) | How releases are cut, gated and verified |
-| [RELEASE-GATE.md](RELEASE-GATE.md) | The evidence a final release needs |
+| [docs/releasing.md](docs/releasing.md) | How releases are cut, gated and verified |
+| [docs/release-gate.md](docs/release-gate.md) | The evidence a final release needs |
 | [docs/runtime-pins.md](docs/runtime-pins.md) | Pinned Proton and umu-launcher versions, automated pin updates, upscaler behaviour |
 | [docs/eac-qa.md](docs/eac-qa.md) | The hardware and Easy Anti-Cheat QA checklist |
-| [INSTALLER_AUDIT.md](INSTALLER_AUDIT.md) | Every host change the installer and uninstaller make |
-| [CREDITS.md](CREDITS.md) | Project lineage and third-party software |
+| [docs/installer-audit.md](docs/installer-audit.md) | Every host change the installer and uninstaller make |
+| [docs/credits.md](docs/credits.md) | Project lineage and third-party software |
 
 ## License
 
@@ -445,4 +445,4 @@ project. Code originally written by Joheb Rahman for the
 [original installer](https://github.com/joepaji/bellum-linux-installer) was
 published without a license. It remains his, is included here with credit,
 and is covered by the MIT license only once he agrees. Third-party components
-keep their own licenses; see [Credits](CREDITS.md).
+keep their own licenses; see [Credits](docs/credits.md).

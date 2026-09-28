@@ -1,7 +1,7 @@
 # Hardware and Easy Anti-Cheat QA
 
 Every final release needs QA and EAC evidence from a real install of the
-release candidate it ships (see [RELEASE.md](../RELEASE.md)). CI can't provide
+release candidate it ships (see [docs/releasing.md](releasing.md)). CI can't provide
 this: it never runs the installer, and Easy Anti-Cheat only runs on real
 hardware with a real account. Astarte has enabled Proton/Linux EAC support for
 Bellum; this checklist confirms that each release's configuration works with
@@ -139,7 +139,7 @@ PROTON_LOG=1 UMU_LOG=1 Bellum
 ## Recording the evidence
 
 Write one record per item in `docs/release-evidence/<candidate SHA>/`
-(`qa.md`, `eac.md`) and link it from [RELEASE-GATE.md](../RELEASE-GATE.md).
+(`qa.md`, `eac.md`) and link it from [docs/release-gate.md](release-gate.md).
 Include:
 
 - the candidate tag and full commit SHA;
