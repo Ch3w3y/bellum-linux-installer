@@ -11,12 +11,12 @@ alone is not an approval: the required reviewer of GitHub's `release` environmen
 record and verify its contents before allowing publication. Do not tag while
 required-reviewer protection is absent.
 
-Candidate: 59ae4837bfde5a72e010741cc8792e6b08993f4a
+Candidate: 22bc77326ba53c2a4ac4094a38240616f4af37e6
 
-QA: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/qa.md
-EAC: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/eac.md
-Security: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/security.md
-Provenance: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/59ae4837bfde5a72e010741cc8792e6b08993f4a/provenance.md
+QA: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/22bc77326ba53c2a4ac4094a38240616f4af37e6/qa.md
+EAC: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/22bc77326ba53c2a4ac4094a38240616f4af37e6/eac.md
+Security: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/22bc77326ba53c2a4ac4094a38240616f4af37e6/security.md
+Provenance: [x] https://github.com/Ch3w3y/bellum-linux-installer/blob/main/docs/release-evidence/22bc77326ba53c2a4ac4094a38240616f4af37e6/provenance.md
 
 Release candidates (`vX.Y.Z-rc.N`) are exempt: they publish as GitHub
 pre-releases so the QA and EAC evidence above can be gathered on real
