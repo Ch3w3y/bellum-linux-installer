@@ -74,12 +74,8 @@ func TestHostDiscoveryAndDependencyGuidance(t *testing.T) {
 }
 
 func TestSSDPrecheckUsesInjectedCommandOutput(t *testing.T) {
-	logger, err := core.NewLogger("")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !isSSDWith("/mnt/bellum", logger, fakeCommands{output: "0\n"}) {
-		t.Fatal("expected injected non-rotational device result to be treated as SSD")
+	if got := storageClassWith("/mnt/bellum", storageCommands{findmnt: "/dev/sdb1\n", lsblk: map[string]string{"/dev/sdb1": "part 0\ndisk 0\n"}}); got != storageSSD {
+		t.Fatalf("expected injected non-rotational disk to be treated as SSD, got %v", got)
 	}
 }
 

@@ -155,12 +155,17 @@ func validateWINEPREFIXWith(wineprefix string, logger *core.Logger, files FileSt
 	if isSDCardWith(parent, DefaultBoundaries.Commands, files) {
 		// lsblk reports SD cards as non-rotational, so check them first.
 		logger.Warn("Install folder is on a microSD card. Bellum works there, but loading is slower than on the internal SSD.")
-	} else if isSSD(parent, logger) {
-		logger.Info("[OK] Install folder is on an SSD/NVMe drive")
 	} else {
-		logger.Warn("Install folder is NOT on an SSD/NVMe drive; loading may be slow")
-		if !ask("Astarte Developers strongly recommend using NVMe or SSD for the game. Are you sure you want to proceed? (Y/n): ") {
-			return "", false, false, fmt.Errorf("installation cancelled by user")
+		switch storageClassWith(parent, DefaultBoundaries.Commands) {
+		case storageSSD:
+			logger.Info("[OK] Install folder is on an SSD/NVMe drive")
+		case storageRotational:
+			logger.Warn("Install folder is NOT on an SSD/NVMe drive; loading may be slow")
+			if !ask("Astarte Developers strongly recommend using NVMe or SSD for the game. Are you sure you want to proceed? (Y/n): ") {
+				return "", false, false, fmt.Errorf("installation cancelled by user")
+			}
+		default:
+			logger.Warn("Couldn't tell what kind of drive the install folder is on. Astarte Developers strongly recommend NVMe or SSD for the game.")
 		}
 	}
 
@@ -597,20 +602,70 @@ func isWritable(path string) bool {
 	return syscall.Access(path, 2 /* W_OK */) == nil
 }
 
-func isSSD(path string, logger *core.Logger) bool {
-	return isSSDWith(path, logger, DefaultBoundaries.Commands)
+// storageClass is what the precheck can say about the drive under a folder.
+type storageClass int
+
+const (
+	storageUnknown    storageClass = iota // probe failed, network or virtual storage, or a mix
+	storageSSD                            // every physical disk underneath is non-rotational
+	storageRotational                     // every physical disk underneath is rotational
+)
+
+// storageClassWith resolves path to the block device it is mounted from and
+// walks down to the physical disks (through partitions, LUKS/device-mapper,
+// LVM and RAID) to read their rotational flag. A Btrfs subvolume on LUKS on
+// NVMe is /dev/mapper/root[/@home] -> crypt -> part -> disk, and only the
+// disk row describes the drive.
+func storageClassWith(path string, commands CommandRunner) storageClass {
+	source := mountSource(path, commands)
+	if !strings.HasPrefix(source, "/dev/") {
+		// NFS, SMB, tmpfs, overlay and the like have no disk to inspect.
+		return storageUnknown
+	}
+	out, err := commands.Output([]string{"lsblk", "-s", "-n", "-r", "-o", "TYPE,ROTA", source})
+	if err != nil {
+		return storageUnknown
+	}
+	disks, rotational := 0, 0
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		if len(fields) != 2 || fields[0] != "disk" {
+			continue
+		}
+		switch fields[1] {
+		case "0":
+		case "1":
+			rotational++
+		default:
+			return storageUnknown
+		}
+		disks++
+	}
+	switch {
+	case disks == 0:
+		return storageUnknown
+	case rotational == 0:
+		return storageSSD
+	case rotational == disks:
+		return storageRotational
+	}
+	return storageUnknown
 }
 
-func isSSDWith(path string, logger *core.Logger, commands CommandRunner) bool {
-	// Try lsblk first
-	if output, err := commands.Output([]string{"lsblk", "-no", "rota", filepath.Dir(path)}); err == nil {
-		rotational := strings.TrimSpace(output)
-		return rotational == "0"
+// mountSource returns the device that path's filesystem is mounted from, without
+// the [/subvolume] suffix findmnt adds for Btrfs, or "" when unknown.
+func mountSource(path string, commands CommandRunner) string {
+	source := ""
+	if out, err := commands.Output([]string{"findmnt", "-n", "-r", "-o", "SOURCE", "-T", path}); err == nil {
+		source = strings.TrimSpace(out)
 	}
-
-	// Fallback to checking device name
-	deviceName := filepath.Base(dfDevice(path, commands))
-	return strings.HasPrefix(deviceName, "nvme") || strings.HasPrefix(deviceName, "sd") || strings.HasPrefix(deviceName, "vd")
+	if source == "" {
+		source = dfDevice(path, commands)
+	}
+	if i := strings.Index(source, "["); i > 0 {
+		source = source[:i]
+	}
+	return source
 }
 
 // dfDevice returns the device backing path according to `df -P`, or "".

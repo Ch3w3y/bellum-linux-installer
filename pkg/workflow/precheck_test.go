@@ -258,3 +258,62 @@ func TestPackageFamilyCoversDerivatives(t *testing.T) {
 		t.Errorf("ID_LIKE fallback: %s", got)
 	}
 }
+
+// storageCommands answers findmnt, df and lsblk by the device they are asked
+// about; any other command, or a missing answer, fails.
+type storageCommands struct {
+	findmnt, df string
+	lsblk       map[string]string
+}
+
+func (f storageCommands) Run(core.RunMode, []string, *core.Logger, string) error { return nil }
+func (f storageCommands) LookPath(string) string                                 { return "" }
+func (f storageCommands) Output(argv []string) (string, error) {
+	switch argv[0] {
+	case "findmnt":
+		if f.findmnt != "" {
+			return f.findmnt, nil
+		}
+	case "df":
+		if f.df != "" {
+			return f.df, nil
+		}
+	case "lsblk":
+		if out, ok := f.lsblk[argv[len(argv)-1]]; ok {
+			return out, nil
+		}
+	}
+	return "", errors.New("command failed")
+}
+
+func TestStorageClass(t *testing.T) {
+	const dfHeader = "Filesystem 1024-blocks Used Available Capacity Mounted on\n"
+	for _, tc := range []struct {
+		name string
+		cmds storageCommands
+		want storageClass
+	}{
+		{"direct nvme", storageCommands{findmnt: "/dev/nvme0n1\n", lsblk: map[string]string{"/dev/nvme0n1": "disk 0\n"}}, storageSSD},
+		{"nvme partition", storageCommands{findmnt: "/dev/nvme0n1p2\n", lsblk: map[string]string{"/dev/nvme0n1p2": "part 0\ndisk 0\n"}}, storageSSD},
+		// Omarchy: Btrfs subvolume on LUKS on a Crucial P3. The mapper row has
+		// no model or transport; only the disk row describes the drive.
+		{"luks btrfs subvolume on nvme", storageCommands{findmnt: "/dev/mapper/root[/@home]\n", lsblk: map[string]string{"/dev/mapper/root": "crypt 0\npart 0\ndisk 0\n"}}, storageSSD},
+		{"sata ssd", storageCommands{findmnt: "/dev/sda1\n", lsblk: map[string]string{"/dev/sda1": "part 0\ndisk 0\n"}}, storageSSD},
+		{"sata hdd", storageCommands{findmnt: "/dev/sdb1\n", lsblk: map[string]string{"/dev/sdb1": "part 1\ndisk 1\n"}}, storageRotational},
+		{"luks on hdd", storageCommands{findmnt: "/dev/mapper/data\n", lsblk: map[string]string{"/dev/mapper/data": "crypt 1\npart 1\ndisk 1\n"}}, storageRotational},
+		{"raid over ssd and hdd", storageCommands{findmnt: "/dev/md0\n", lsblk: map[string]string{"/dev/md0": "raid1 1\npart 0\ndisk 0\npart 1\ndisk 1\n"}}, storageUnknown},
+		{"findmnt missing, df fallback", storageCommands{df: dfHeader + "/dev/nvme0n1p3 1 1 1 1% /home\n", lsblk: map[string]string{"/dev/nvme0n1p3": "part 0\ndisk 0\n"}}, storageSSD},
+		{"nfs", storageCommands{findmnt: "server:/export\n"}, storageUnknown},
+		{"tmpfs", storageCommands{findmnt: "tmpfs\n"}, storageUnknown},
+		{"lsblk fails", storageCommands{findmnt: "/dev/sda1\n"}, storageUnknown},
+		{"no disk row", storageCommands{findmnt: "/dev/loop0\n", lsblk: map[string]string{"/dev/loop0": "loop 0\n"}}, storageUnknown},
+		{"unparseable rota", storageCommands{findmnt: "/dev/sda1\n", lsblk: map[string]string{"/dev/sda1": "part ?\ndisk ?\n"}}, storageUnknown},
+		{"nothing answers", storageCommands{}, storageUnknown},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := storageClassWith("/home/user/Games", tc.cmds); got != tc.want {
+				t.Errorf("got %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
