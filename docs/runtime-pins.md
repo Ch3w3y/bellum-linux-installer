@@ -171,6 +171,11 @@ NVML and OptiX bridges. `PROTON_DLSS_UPGRADE=0` stays set: when enabled, it
 downloads newer DLSS DLLs from the same third-party manifest at launch.
 `PROTON_ENABLE_NVAPI`, `PROTON_ENABLE_NGX_UPDATER` and `PROTON_VKD3D_HEAP`
 are not read by this Proton build and are no longer written.
+`VKD3D_CONFIG` is written empty on NVIDIA RTX and GTX 16-series: with
+`descriptor_heap`, an RTX 5070 Ti on driver 610.57.04 hit a GPU crash
+(Xid 109, then Xid 31) about a minute into play, and it played stably
+without it. AMD, older NVIDIA and Intel still get `descriptor_heap`, so the
+contract check on `d3d12core.dll` stays.
 
 **One configuration.** There are no presets. The launch settings are the
 most stable set per GPU vendor, as described above. They are the same on X11,

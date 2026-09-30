@@ -186,6 +186,12 @@ stays stable, chosen for your GPU. There are no presets to pick.
 - **NVIDIA:** DLSS through Proton's defaults (NVAPI on, `nvngx.dll` from your
   driver). RTX and GTX 16-series cards also get `PROTON_NVIDIA_LIBS=1` (CUDA,
   NVENC and OptiX bridges). Proton's DLSS DLL auto-download stays off.
+  vkd3d-proton's descriptor heap is off on NVIDIA (`VKD3D_CONFIG=""`): with
+  driver 610.57.04 on an RTX 5070 Ti it caused a GPU crash
+  (`DXGI_ERROR_DEVICE_REMOVED`) about a minute into play, and play was stable
+  without it. If it fixed a problem for you before, set
+  `VKD3D_CONFIG="descriptor_heap"` in `launch_vars.env`; an update rewrites
+  that file, so set it again afterwards. AMD and other GPUs keep it on.
 - **Intel and unrecognised GPUs:** standard Proton settings.
 - **Display server:** the same on X11, Wayland and gamescope; the game runs
   through XWayland. Proton enables fsync by itself where the kernel supports
