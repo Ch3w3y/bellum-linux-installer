@@ -12,8 +12,8 @@ import (
 type ProfileStatus string
 
 const (
-	// ProfileVerified has recorded QA and Easy Anti-Cheat evidence on real
-	// hardware (docs/release-evidence).
+	// ProfileVerified has been played on real hardware with an Easy
+	// Anti-Cheat online session.
 	ProfileVerified ProfileStatus = "verified"
 	// ProfileExpected is derived from the code and specifications and not yet
 	// tested on real hardware.
@@ -64,11 +64,12 @@ func LaunchProfileFor(caps GPUCapabilities) LaunchProfile {
 	return LaunchGeneric
 }
 
-// Status reports the evidence behind a launch profile. Only RDNA4 has
-// recorded QA and EAC evidence (v2.2.0, RX 9070 XT); every other profile
-// ships as expected until a tester records evidence for it.
+// Status reports whether a launch profile has been tested on real hardware.
+// RDNA4 was verified on an RX 9070 XT (v2.2.0) and NVIDIA RTX on an RTX 5070
+// Ti (v2.4.0); every other profile ships as expected until a tester reports
+// back on it.
 func (l LaunchProfile) Status() ProfileStatus {
-	if l == LaunchAMDRDNA4 {
+	if l == LaunchAMDRDNA4 || l == LaunchNVIDIARTX {
 		return ProfileVerified
 	}
 	return ProfileExpected

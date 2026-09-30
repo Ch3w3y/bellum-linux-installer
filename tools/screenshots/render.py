@@ -9,7 +9,7 @@ and screenshots the final screen with headless Chromium (Playwright).
     python3 tools/screenshots/render.py docs/images
 
 Set CHROMIUM to a Chromium binary if Playwright can't find one, and VERSION
-to the installer version shown in the banner (default 2.3.0).
+to the installer version shown in the banner (default 2.4.0).
 """
 import html
 import os
@@ -103,7 +103,7 @@ body{{margin:0;background:transparent;padding:24px}}
 def main():
     out_dir = sys.argv[1] if len(sys.argv) > 1 else "docs/images"
     os.makedirs(out_dir, exist_ok=True)
-    version = os.environ.get("VERSION", "2.3.0")
+    version = os.environ.get("VERSION", "2.4.0")
     binary = os.path.join(tempfile.mkdtemp(), "screenshots")
     subprocess.run(["go", "build", "-o", binary, "-ldflags",
                     f"-X bellum-installer/pkg/config.InstallerVersion={version}",

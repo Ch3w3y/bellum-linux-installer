@@ -134,11 +134,10 @@ func CreateLaunchVarsFileNvidia(wineprefix, protonpath string, logger *core.Logg
 // present, so DLSS needs no flag here. PROTON_NVIDIA_LIBS adds the CUDA,
 // NVENC, NVML and OptiX bridges.
 //
-// VKD3D_CONFIG is written empty rather than "descriptor_heap": on an RTX 5070
-// Ti with driver 610.57.04 and the pinned Proton, descriptor_heap ended in
-// DXGI_ERROR_DEVICE_REMOVED about a minute into play (Xid 109, then Xid 31),
-// and play was stable without it. It stays one edit away because it has
-// fixed other problems on NVIDIA before. Empty, not absent, so a value
+// VKD3D_CONFIG is written empty rather than "descriptor_heap" because of an
+// upstream issue in NVIDIA's 610 driver branch: descriptor_heap crashes the
+// GPU about a minute into play. Turn it back on here once a later driver
+// branch has been tested without the crash. Empty, not absent, so a value
 // exported by the caller's environment doesn't slip back in.
 func createLaunchVarsFileNvidia(wineprefix, protonpath, extras string, logger *core.Logger, files FileStore) error {
 	launchVars := filepath.Join(wineprefix, "launch_vars.env")

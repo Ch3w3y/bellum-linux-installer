@@ -61,7 +61,7 @@ func TestLaunchProfilePolicy(t *testing.T) {
 		{GPUCapabilities{Vendor: GPUAMD}, LaunchAMDBaseline, false, false, ProfileExpected},
 		// Ambiguity never unlocks a generation-specific path.
 		{GPUCapabilities{Vendor: GPUAMD, Generation: "RDNA3", Ambiguous: true}, LaunchAMDBaseline, false, false, ProfileExpected},
-		{GPUCapabilities{Vendor: GPUNVIDIA, NVAPI: true}, LaunchNVIDIARTX, false, false, ProfileExpected},
+		{GPUCapabilities{Vendor: GPUNVIDIA, NVAPI: true}, LaunchNVIDIARTX, false, false, ProfileVerified},
 		{GPUCapabilities{Vendor: GPUNVIDIA}, LaunchNVIDIABasic, false, false, ProfileExpected},
 		{GPUCapabilities{Vendor: GPUIntel}, LaunchIntel, false, false, ProfileExpected},
 		{GPUCapabilities{Vendor: GPUUnknown}, LaunchGeneric, false, false, ProfileExpected},

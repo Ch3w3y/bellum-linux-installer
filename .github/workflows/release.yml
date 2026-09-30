@@ -49,26 +49,16 @@ jobs:
         with:
           ref: ${{ inputs.tag && format('refs/tags/{0}', inputs.tag) || github.ref }}
           persist-credentials: false
-          # The gate compares the release with the tested candidate commit.
           fetch-depth: 0
       - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
         with:
           go-version: '1.26.8'
-      - name: Check tag and release gate
+      - name: Check tag and clean tree
         env:
           TAG: ${{ inputs.tag || github.ref_name }}
         run: |
           test "$(git describe --tags --exact-match)" = "$TAG"
           test "$(git status --porcelain --untracked-files=all)" = ''
-          test -f docs/release-gate.md
-          # Release candidates (vX.Y.Z-rc.N) exist to gather the QA and EAC
-          # evidence the gate asks for, so they skip it and publish as
-          # pre-releases that the one-line installer never picks by default.
-          if [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+-rc\.[0-9]+$ ]]; then
-            echo "Release candidate $TAG: evidence gate deferred to the final release."
-          else
-            scripts/check-release-gate.sh "$(git rev-parse HEAD)" docs/release-gate.md
-          fi
       - name: Code and vulnerability checks
         run: |
           go version

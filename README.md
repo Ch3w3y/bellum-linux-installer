@@ -17,12 +17,14 @@ relies on.
 
 ![The installer's banner and system check](docs/images/install-start.png)
 
-**Tested on:** AMD RX 9070 XT (RDNA4) · CachyOS · KDE Plasma Wayland, with an
-Easy Anti-Cheat online session ([release evidence](docs/release-evidence/)).
+**Tested on:** AMD RX 9070 XT (RDNA4) · CachyOS · KDE Plasma Wayland, and
+NVIDIA RTX 5070 Ti · Omarchy (Arch) · Hyprland Wayland, each with an Easy
+Anti-Cheat online session.
 The installer recognises the machine it runs on (Steam Deck, Steam Machine,
 SteamOS, Bazzite, each AMD generation and NVIDIA on each major distro) and
 picks the matching settings by itself; see [Platforms](#platforms). Profiles
-other than RDNA4 are **expected** to work but aren't verified yet, and reports
+other than RDNA4 and NVIDIA RTX are **expected** to work but aren't verified
+yet, and reports
 from other setups are very welcome.
 
 ## Install
@@ -40,7 +42,7 @@ after `bash -s --`. For example, to install a specific release or release
 candidate:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version v2.3.0
+curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version v2.4.0
 ```
 
 Prefer not to pipe a script into your shell? See [Verify before you
@@ -186,12 +188,8 @@ stays stable, chosen for your GPU. There are no presets to pick.
 - **NVIDIA:** DLSS through Proton's defaults (NVAPI on, `nvngx.dll` from your
   driver). RTX and GTX 16-series cards also get `PROTON_NVIDIA_LIBS=1` (CUDA,
   NVENC and OptiX bridges). Proton's DLSS DLL auto-download stays off.
-  vkd3d-proton's descriptor heap is off on NVIDIA (`VKD3D_CONFIG=""`): with
-  driver 610.57.04 on an RTX 5070 Ti it caused a GPU crash
-  (`DXGI_ERROR_DEVICE_REMOVED`) about a minute into play, and play was stable
-  without it. If it fixed a problem for you before, set
-  `VKD3D_CONFIG="descriptor_heap"` in `launch_vars.env`; an update rewrites
-  that file, so set it again afterwards. AMD and other GPUs keep it on.
+  vkd3d-proton's descriptor heap is off on NVIDIA for now (`VKD3D_CONFIG=""`)
+  because of a 610-branch driver issue; see "Descriptor heap and the 610 driver branch" below.
 - **Intel and unrecognised GPUs:** standard Proton settings.
 - **Display server:** the same on X11, Wayland and gamescope; the game runs
   through XWayland. Proton enables fsync by itself where the kernel supports
@@ -223,6 +221,18 @@ distribution, when:
   get shader-loading failures or a black screen, try 595.58.03 or the 590
   branch.
 
+**Descriptor heap and the 610 driver branch.** NVIDIA's 610.xx drivers
+(tested: 610.57.04) crash the GPU about a minute into play when vkd3d-proton's
+descriptor heap is on: the game stops with `DXGI_ERROR_DEVICE_REMOVED` and the
+kernel log shows Xid 109 and Xid 31. This is an upstream driver issue, not a
+Bellum or installer bug; earlier installer versions and drivers were fine with
+it on. The installer therefore writes `VKD3D_CONFIG=""` for NVIDIA RTX and
+GTX 16-series cards, and AMD, older NVIDIA and Intel keep it on. It will be
+turned back on by default once a later driver branch has been tested without
+the crash. To try it yourself, set `VKD3D_CONFIG="descriptor_heap"` in
+`<install folder>/launch_vars.env` (an update rewrites that file, so set it
+again afterwards).
+
 These are warnings; the install continues. This project hasn't validated any
 NVIDIA driver branch yet.
 
@@ -240,7 +250,7 @@ specifications, not yet tested). You can still override any setting in
 | AMD RDNA4 (RX 9000) | native FSR4 (`PROTON_FSR4_UPGRADE=1`) | **verified** (RX 9070 XT · CachyOS · KDE Wayland, v2.2.0) |
 | AMD RDNA3 (RX 7000, Steam Machine) | Proton's FSR4 check + RDNA3 workaround | expected |
 | AMD RDNA2 (RX 6000, Steam Deck LCD/OLED) and older | no FSR4 emulation; the game's FSR 3.x | expected |
-| NVIDIA RTX / GTX 16 | DLSS and NVAPI through the driver, `PROTON_NVIDIA_LIBS=1` | expected |
+| NVIDIA RTX / GTX 16 | DLSS and NVAPI through the driver, `PROTON_NVIDIA_LIBS=1`, descriptor heap off | **verified** (RTX 5070 Ti · Omarchy · Hyprland Wayland, v2.4.0) |
 | NVIDIA (older), Intel, unrecognised | standard Proton settings | expected |
 
 | Platform | What the installer does |
@@ -333,7 +343,7 @@ Found a security problem? Please report it privately through the repository's
 To check a release yourself before running anything:
 
 ```bash
-v=2.3.0   # the release you want
+v=2.4.0   # the release you want
 base=https://github.com/Ch3w3y/bellum-linux-installer/releases/download/v$v
 curl -fLO "$base/bellum-installer-linux-amd64-$v.tar.gz"
 curl -fLO "$base/SHA256SUMS"
@@ -367,8 +377,8 @@ To build from source you need [Go 1.26+](https://go.dev/dl/), `git` and
 ```bash
 git clone https://github.com/Ch3w3y/bellum-linux-installer.git
 cd bellum-linux-installer
-make release VERSION=2.3.0
-./dist/bellum-installer-linux-amd64-2.3.0/installer
+make release VERSION=2.4.0
+./dist/bellum-installer-linux-amd64-2.4.0/installer
 ```
 
 ## Uninstalling
@@ -426,19 +436,18 @@ v2.3 brought automatic platform profiles
 
 ```bash
 make check                         # what CI runs: gofmt, go vet, go test, module pinning
-make release VERSION=2.3.0         # reproducible tarball, MANIFEST.md and SHA256SUMS in dist/
+make release VERSION=2.4.0         # reproducible tarball, MANIFEST.md and SHA256SUMS in dist/
 make verify-release                # re-check the staged release
 scripts/test-release.sh            # release tooling and gate regression tests
 python3 tools/screenshots/render.py docs/images   # regenerate the README screenshots
 ```
 
 CI runs static checks, unit tests and builds; it never runs the installer.
-Installs are tested by hand on real hardware through release candidates.
+Installs are tested by hand on real hardware.
 
 | Document | Contents |
 | --- | --- |
-| [docs/releasing.md](docs/releasing.md) | How releases are cut, gated and verified |
-| [docs/release-gate.md](docs/release-gate.md) | The evidence a final release needs |
+| [docs/releasing.md](docs/releasing.md) | How releases are cut and verified |
 | [docs/runtime-pins.md](docs/runtime-pins.md) | Pinned Proton and umu-launcher versions, automated pin updates, upscaler behaviour |
 | [docs/eac-qa.md](docs/eac-qa.md) | The hardware and Easy Anti-Cheat QA checklist |
 | [docs/installer-audit.md](docs/installer-audit.md) | Every host change the installer and uninstaller make |

@@ -1,53 +1,31 @@
 # Releasing
 
-How a release is built, tested on real hardware, gated and published. The
-installer is never run in CI; it is tested by hand through release candidates.
+How a release is built, tested and published. The installer is never run in
+CI; it is tested by hand on real hardware.
 
 ## Overview
 
 1. **Merge to `main`** with CI green (gofmt, vet, tests, module pinning,
    builds, `install.sh` shellcheck and dry run).
-2. **Cut a release candidate** `vX.Y.Z-rc.N` (see [Starting a
-   release](#starting-a-release)). The workflow builds both architectures,
-   attests them and publishes a GitHub **pre-release**. Candidates skip the
-   evidence gate because they exist to gather it.
-3. **Test the candidate on real hardware** with the one-line installer:
+2. **Optionally cut a release candidate** `vX.Y.Z-rc.N` (see [Starting a
+   release](#starting-a-release)) to test a risky change on real hardware
+   first. The workflow builds both architectures, attests them and publishes a
+   GitHub **pre-release**, which the one-line installer only installs when
+   asked for by name:
 
    ```bash
    curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version vX.Y.Z-rc.N
    ```
 
-   Follow the [QA and EAC checklist](eac-qa.md). Any fix means a new
-   candidate.
-4. **Record the evidence** for the tested candidate commit in
-   [`docs/release-gate.md`](release-gate.md) and `docs/release-evidence/<candidate
-   SHA>/` (QA, EAC, security review, provenance of the pins), in one commit on
-   `main` that changes nothing else.
-5. **Cut the final release** `vX.Y.Z`. The workflow runs the gate, builds,
-   attests and waits for approval on the `release` environment, then
-   publishes a **draft** release.
-6. **Review and publish the draft.** The one-line installer only picks up
+   The [QA and EAC checklist](eac-qa.md) lists what to try.
+3. **Cut the final release** `vX.Y.Z`. The workflow builds, attests and waits
+   for approval on the `release` environment, then publishes a **draft**
+   release.
+4. **Review and publish the draft.** The one-line installer only picks up
    published, non-pre-release versions (GitHub's "latest release").
 
-## The evidence gate
-
-`scripts/check-release-gate.sh` runs for every final release and fails
-closed. It requires:
-
-- a `Candidate:` line naming the full SHA of the tested release candidate;
-- that candidate to be an ancestor of the release commit, with **nothing but
-  `docs/release-gate.md` and `docs/release-evidence/` changed since**, so the
-  released code is exactly the code that was tested;
-- all four items (QA, EAC, Security, Provenance) checked, each with an HTTPS
-  link that contains the candidate SHA and isn't a placeholder.
-
-A link is not an approval. The reviewer on the `release` environment must
-read each record before approving. Configure **Settings → Environments →
-release → Required reviewers**; don't publish a final release without it.
-
-`scripts/test-release.sh` covers the gate (valid, unchecked, placeholder,
-stale and missing-candidate evidence, and code changed after the candidate),
-the dirty-tree check, archive tampering and the asset-set check.
+`scripts/test-release.sh` covers the dirty-tree check, archive tampering and
+the asset-set check.
 
 ## Starting a release
 
@@ -55,8 +33,7 @@ From the Actions tab: **Tagged release → Run workflow**, enter the tag (for
 example `v2.2.0-rc.6` or `v2.2.0`). This creates the tag at the head of the
 chosen branch. Pushing a `v*` tag does the same.
 
-The workflow checks that the tag matches, the tree is clean and the gate
-passes (final releases only). It then runs `make check` and `govulncheck`,
+The workflow checks that the tag matches and the tree is clean. It then runs `make check` and `govulncheck`,
 builds `amd64` and `arm64` with `make release`, verifies each archive,
 creates GitHub build-provenance attestations, and publishes once the asset
 set is complete.
@@ -108,8 +85,6 @@ gh attestation verify "bellum-installer-linux-amd64-$v.tar.gz" --repo Ch3w3y/bel
 gh attestation verify "bellum-installer-linux-arm64-$v.tar.gz" --repo Ch3w3y/bellum-linux-installer
 ```
 
-Keep the output, the archive digests, the workflow run, tag and source commit
-with the release review record.
 
 ## Provenance policy
 

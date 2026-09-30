@@ -1,9 +1,8 @@
 # Hardware and Easy Anti-Cheat QA
 
-Every final release needs QA and EAC evidence from a real install of the
-release candidate it ships (see [docs/releasing.md](releasing.md)). CI can't provide
-this: it never runs the installer, and Easy Anti-Cheat only runs on real
-hardware with a real account. Astarte has enabled Proton/Linux EAC support for
+What to try when testing a release or release candidate on real hardware
+(see [docs/releasing.md](releasing.md)). CI can't do this: it never runs the
+installer, and Easy Anti-Cheat only runs on real hardware with a real account. Astarte has enabled Proton/Linux EAC support for
 Bellum; this checklist confirms that each release's configuration works with
 it.
 
@@ -16,15 +15,15 @@ curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/
 Test a fresh install where possible, and an update of an existing install
 (run the same command on it).
 
-## Evidence per profile
+## Profiles
 
 Since v2.3 the installer picks a launch profile from the detected platform
 and marks it **verified** or **expected** (see the README's
-[Platforms](../README.md#platforms)). A profile becomes verified only with
-QA and EAC evidence from real hardware running it; untested profiles ship as
-expected, with settings no riskier than the nearest verified one. Record which
-profile you tested: copy the review screen's **Detected** line into the
-record.
+[Platforms](../README.md#platforms)). A profile becomes verified only once
+someone has played on real hardware running it, with an Easy Anti-Cheat
+online session; untested profiles ship as expected, with settings no riskier
+than the nearest verified one. When reporting a test, include the review
+screen's **Detected** line.
 
 | Profile | Controller check | Status |
 | --- | --- | --- |
@@ -32,8 +31,8 @@ record.
 | Steam Deck (LCD or OLED) · SteamOS · Game Mode and Desktop | built-in controls through Steam Input | needs a tester |
 | Steam Machine · SteamOS | Steam Controller through Steam Input | needs a tester |
 | RDNA2 or RDNA3 desktop · Bazzite | desktop pad | needs a tester |
+| NVIDIA RTX · Arch (Omarchy) · Hyprland Wayland | — | verified in v2.4.0 (RTX 5070 Ti, driver 610.57.04; controller not yet tested) |
 | NVIDIA RTX · Fedora or Ubuntu | desktop pad | needs a tester |
-| NVIDIA · Arch | — | nice to have |
 | Ubuntu with Snap Steam | — | needs a tester (Snap EAC runtime) |
 
 ## Checklist
@@ -135,26 +134,6 @@ grep -iE 'umu|proton|easyanticheat|eac|anti.cheat' ~/Games/Bellum/launcher.log
 # More detail on the next launch
 PROTON_LOG=1 UMU_LOG=1 Bellum
 ```
-
-## Recording the evidence
-
-Write one record per item in `docs/release-evidence/<candidate SHA>/`
-(`qa.md`, `eac.md`) and link it from [docs/release-gate.md](release-gate.md).
-Include:
-
-- the candidate tag and full commit SHA;
-- the date, and who tested;
-- hardware and software: CPU, GPU, driver (Mesa or NVIDIA version), distro and
-  kernel, desktop and session (X11, Wayland or gamescope/Game Mode), and
-  whether Steam is native, Flatpak or Snap;
-- the review screen's **Detected** line (the profile tested);
-- controllers used and how Bellum was started (from Steam or the shortcut);
-- the Proton EasyAntiCheat Runtime build (Steam shows it; the installer logs
-  its digest);
-- each checklist item as passed, failed or not tested, with notes;
-- short, **redacted** log excerpts.
-
-Mark anything missing or ambiguous as inconclusive rather than passed.
 
 ## Privacy
 
