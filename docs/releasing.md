@@ -5,38 +5,51 @@ CI; it is tested by hand on real hardware.
 
 ## Overview
 
-1. **Merge to `main`** with CI green (gofmt, vet, tests, module pinning,
-   builds, `install.sh` shellcheck and dry run).
-2. **Optionally cut a release candidate** `vX.Y.Z-rc.N` (see [Starting a
-   release](#starting-a-release)) to test a risky change on real hardware
-   first. The workflow builds both architectures, attests them and publishes a
-   GitHub **pre-release**, which the one-line installer only installs when
-   asked for by name:
+1. **Merge to `main`.** After the push's full CI run passes, the **Release**
+   workflow automatically selects the next patch tag, for example
+   `v2.4.0` → `v2.4.1`. This applies to all main updates, including runtime
+   pins and Go security updates; direct pushes to main follow the same rule.
+2. **Build and verify.** The workflow tags the exact commit checked by CI,
+   runs code and vulnerability checks again, builds both architectures,
+   verifies archives and attests their provenance.
+3. **Publish automatically.** After both builds and the complete asset-set
+   check pass, the patch becomes a published GitHub release marked **latest**.
+   The one-line installer then picks it up. Automatic patches use the
+   `automatic-release` environment without the manual approval gate.
 
-   ```bash
-   curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version vX.Y.Z-rc.N
-   ```
+Automatic versioning increments only the patch component of the highest
+stable `vX.Y.Z` tag. It ignores release candidates and unrelated tags, and
+never chooses a new major or minor version. A manually created stable major
+or minor tag becomes the baseline for subsequent automatic patches. No
+version-bump commit is needed: the tag's version is stamped into both binaries
+and the manifest; the Makefile's default version is only for local builds.
 
-   The [QA and EAC checklist](eac-qa.md) lists what to try.
-3. **Cut the final release** `vX.Y.Z`. The workflow builds, attests and waits
-   for approval on the `release` environment, then publishes a **draft**
-   release.
-4. **Review and publish the draft.** The one-line installer only picks up
-   published, non-pre-release versions (GitHub's "latest release").
+Release runs are serialized to avoid allocating the same version twice.
+Superseded main commits are skipped; GitHub may coalesce pending runs when
+merges arrive quickly, so a release can include several merges. A failed CI
+run never starts an automatic release. A failed build may leave its tag in
+place: rerun the failed release workflow to reuse it. Rerunning CI on an
+already released commit does not create another version or replace assets.
 
+## Manual major/minor releases and candidates
+
+From the Actions tab: **Release → Run workflow**, enter an explicit tag such
+as `v3.0.0` or `v3.0.0-rc.1` and choose the branch to release. Pushing a `v*`
+tag also starts this path. Use a development branch to cut candidates before
+merging changes to `main`, since main merges automatically publish patches.
+
+Manual releases retain the `release` environment approval gate. Stable tags
+create **drafts** for review and publication; `-rc.N` tags publish as
+**pre-releases**, which the installer only uses when explicitly requested:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/Ch3w3y/bellum-linux-installer/main/install.sh | bash -s -- --version v3.0.0-rc.1
+```
+
+The [QA and EAC checklist](eac-qa.md) lists what to try on hardware.
 `scripts/test-release.sh` covers the dirty-tree check, archive tampering and
-the asset-set check.
-
-## Starting a release
-
-From the Actions tab: **Tagged release → Run workflow**, enter the tag (for
-example `v2.2.0-rc.6` or `v2.2.0`). This creates the tag at the head of the
-chosen branch. Pushing a `v*` tag does the same.
-
-The workflow checks that the tag matches and the tree is clean. It then runs `make check` and `govulncheck`,
-builds `amd64` and `arm64` with `make release`, verifies each archive,
-creates GitHub build-provenance attestations, and publishes once the asset
-set is complete.
+the asset-set check. `python3 scripts/test-next-release-tag.py` tests automatic
+version selection, including retries, candidate filtering and manual majors.
 
 ## Building locally
 

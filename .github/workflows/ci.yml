@@ -90,7 +90,10 @@ jobs:
           cache: true
 
       - name: shellcheck
-        run: shellcheck install.sh
+        run: shellcheck install.sh scripts/next-release-tag.sh
+
+      - name: Automatic release version tests
+        run: python3 scripts/test-next-release-tag.py
 
       - name: Dry run against a locally built release
         run: |
