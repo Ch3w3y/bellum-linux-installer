@@ -371,7 +371,7 @@ one-line install. For `--wineprefix`, `WINEPREFIX` and the folder picker,
 `Bellum` is appended unless the path already ends in a `Bellum` folder. The
 folder must not exist yet or must be empty.
 
-To build from source you need [Go 1.26.9+](https://go.dev/dl/), `git` and
+To build from source you need [Go 1.26.10+](https://go.dev/dl/), `git` and
 `make`:
 
 ```bash
