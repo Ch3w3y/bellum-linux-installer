@@ -24,10 +24,10 @@ type Versions struct {
 // DefaultVersions contains the version configuration
 var DefaultVersions = Versions{
 	Workdir:       ".",
-	ProtonVer:     "proton-cachyos-11.0-20261005-slr-x86_64",
+	ProtonVer:     "proton-cachyos-11.0-20261015-slr-x86_64",
 	ProtonBaseURL: "https://github.com/CachyOS/proton-cachyos/releases/download",
 	// SHA-256 from the official CachyOS GitHub release asset metadata.
-	ProtonSHA256: "096bfe73b506d6565b04ecc45214197a4091818f16ed91f5324b4d2082d0a263",
+	ProtonSHA256: "35e16eab636724e3ed7aa8e2dbc33eb8e102e0c63bbc28b5a39af544c75d5bd3",
 	// umu-launcher's self-contained zipapp (needs only python3), so users
 	// don't have to find a distro package for it.
 	UMUVersion:      "1.4.4",
