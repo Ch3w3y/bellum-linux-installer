@@ -115,7 +115,9 @@ def main():
     commits = git('log', '--no-merges', '--format=%H%x09%s', f'{previous}..HEAD' if previous else 'HEAD')
     changes = '\n'.join(f'- {subject} ([{sha[:7]}](https://github.com/{args.repo}/commit/{sha}))'
                         for sha, subject in (line.split('\t', 1) for line in commits.splitlines()))
-    text = render(current, old, changes)
+    highlights = Path('docs/release-notes') / (args.tag + '.md')
+    text = ('## Release highlights\n\n' + highlights.read_text().strip() + '\n\n' if highlights.exists() else '')
+    text += render(current, old, changes)
     text += f'\nCompare: https://github.com/{args.repo}/compare/{previous}...{args.tag}\n' if previous else ''
     Path(args.output).write_text(text)
 
