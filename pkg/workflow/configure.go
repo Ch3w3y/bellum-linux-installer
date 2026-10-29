@@ -134,10 +134,10 @@ func CreateLaunchVarsFileNvidia(wineprefix, protonpath string, logger *core.Logg
 // present, so DLSS needs no flag here. PROTON_NVIDIA_LIBS adds the CUDA,
 // NVENC, NVML and OptiX bridges.
 //
-// VKD3D_CONFIG is written empty rather than "descriptor_heap" because of an
+// VKD3D_CONFIG includes fault reporting, but omits "descriptor_heap" because of an
 // upstream issue in NVIDIA's 610 driver branch: descriptor_heap crashes the
 // GPU about a minute into play. Turn it back on here once a later driver
-// branch has been tested without the crash. Empty, not absent, so a value
+// branch has been tested without the crash. Explicit, not absent, so a value
 // exported by the caller's environment doesn't slip back in.
 func createLaunchVarsFileNvidia(wineprefix, protonpath, extras string, logger *core.Logger, files FileStore) error {
 	launchVars := filepath.Join(wineprefix, "launch_vars.env")
@@ -157,8 +157,8 @@ export PROTON_DXVK_D3D8="1"
 export PROTON_NVIDIA_LIBS="1"
 export PROTON_DLSS_UPGRADE="0"
 export MALLOC_ARENA_MAX="1"
-# Set to "descriptor_heap" to try vkd3d-proton's descriptor heap path
-export VKD3D_CONFIG=""
+# Fault reporting is driver-dependent. Add descriptor_heap only to test a fixed NVIDIA driver.
+export VKD3D_CONFIG="fault"
 export WINEESYNC="1"
 export WINEFSYNC="1"
 export DXVK_NVAPI="1"
@@ -224,7 +224,7 @@ export STEAM_COMPAT_DATA_PATH=` + quoteShellEnv(wineprefix) + `
 export PROTON_DXVK_D3D8="1"
 export PROTON_DLSS_UPGRADE="0"
 export MALLOC_ARENA_MAX="1"
-export VKD3D_CONFIG="descriptor_heap"
+export VKD3D_CONFIG="descriptor_heap,fault"
 export WINE_LARGE_ADDRESS_AWARE="1"
 ` + dxilWorkaround + extras
 
@@ -247,7 +247,7 @@ func createLaunchVarsFileGeneric(wineprefix, protonpath, extras string, files Fi
 		"export WINEPREFIX=" + quoteShellEnv(wineprefix) + "\n" +
 		"export STEAM_COMPAT_DATA_PATH=" + quoteShellEnv(wineprefix) + "\n" +
 		"export PROTON_FSR4_UPGRADE=0\nexport PROTON_DLSS_UPGRADE=0\nexport PROTON_DXVK_D3D8=1\n" +
-		"export MALLOC_ARENA_MAX=1\nexport VKD3D_CONFIG=descriptor_heap\nexport WINE_LARGE_ADDRESS_AWARE=1\n" +
+		"export MALLOC_ARENA_MAX=1\nexport VKD3D_CONFIG=descriptor_heap,fault\nexport WINE_LARGE_ADDRESS_AWARE=1\n" +
 		extras
 	return files.WriteFile(filepath.Join(wineprefix, "launch_vars.env"), []byte(content), 0600)
 }

@@ -171,7 +171,7 @@ NVML and OptiX bridges. `PROTON_DLSS_UPGRADE=0` stays set: when enabled, it
 downloads newer DLSS DLLs from the same third-party manifest at launch.
 `PROTON_ENABLE_NVAPI`, `PROTON_ENABLE_NGX_UPDATER` and `PROTON_VKD3D_HEAP`
 are not read by this Proton build and are no longer written.
-`VKD3D_CONFIG` is written empty on NVIDIA RTX and GTX 16-series because of
+`VKD3D_CONFIG` is set to `fault` on NVIDIA RTX and GTX 16-series because of
 an upstream issue in NVIDIA's 610 driver branch ([NVIDIA
 drivers](../README.md#graphics-and-performance)). AMD, older NVIDIA and Intel still get
 `descriptor_heap`, so the contract check on `d3d12core.dll` stays.
@@ -186,3 +186,15 @@ been tested with Bellum and Easy Anti-Cheat.
 
 **EAC.** Wine's `ntdll.so` in the pinned build reads `PROTON_EAC_RUNTIME`
 directly, which is how `launch_vars.env` points the game at Valve's runtime.
+
+### Device-fault reporting contract
+
+The verified October 15 archive contains vkd3d-proton commit
+`0bb64c56c8f0dcc11ecc0f6c56e00e4f7bd8d506`. Its `fault` option gates
+`VK_KHR_device_fault` and requests supported device-fault features during Vulkan
+device creation. Bellum enables this option on every profile, retaining the
+existing descriptor-heap choices. The pin updater now requires the option token,
+extension name, and both fault-report retrieval entry points in `d3d12core.dll`.
+These checks verify build capability, not driver support or crash output on any
+particular machine. See the README's GPU crash diagnostics for collection and
+opt-out instructions.

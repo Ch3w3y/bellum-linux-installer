@@ -35,10 +35,10 @@ func TestSingleConfigPerVendor(t *testing.T) {
 	}{
 		// DLSS works through Proton's default NVAPI + nvngx copy in both presets.
 		// descriptor_heap stays off on NVIDIA while the 610 driver branch
-		// crashes with it. The empty value keeps a caller's setting out.
-		{"rtx", rtx, []string{`PROTON_NVIDIA_LIBS="1"`, `DXVK_ENABLE_NVAPI="1"`, "\nexport VKD3D_CONFIG=\"\"\n"}, []string{"PROTON_ENABLE_NVAPI", "PROTON_ENABLE_NGX_UPDATER", "PROTON_VKD3D_HEAP", `VKD3D_CONFIG="descriptor_heap"`}},
+		// crashes with it. Fault reporting must not re-enable the descriptor heap.
+		{"rtx", rtx, []string{`PROTON_NVIDIA_LIBS="1"`, `DXVK_ENABLE_NVAPI="1"`, "\nexport VKD3D_CONFIG=\"fault\"\n"}, []string{"PROTON_ENABLE_NVAPI", "PROTON_ENABLE_NGX_UPDATER", "PROTON_VKD3D_HEAP", `VKD3D_CONFIG="descriptor_heap"`}},
 		// RDNA4 gets the forced FSR4 offer and never the FP16 emulation switch.
-		{"rdna4", rdna4, []string{`PROTON_FSR4_UPGRADE="1"`, `VKD3D_CONFIG="descriptor_heap"`}, []string{"wmma_rdna3_workaround", "PROTON_FSR4_RDNA3_UPGRADE"}},
+		{"rdna4", rdna4, []string{`PROTON_FSR4_UPGRADE="1"`, `VKD3D_CONFIG="descriptor_heap,fault"`}, []string{"wmma_rdna3_workaround", "PROTON_FSR4_RDNA3_UPGRADE"}},
 		{"rdna3", rdna3, []string{`PROTON_FSR4_UPGRADE="0"`, "wmma_rdna3_workaround"}, []string{"PROTON_FSR4_RDNA3_UPGRADE"}},
 		// RDNA2 (the Steam Deck), older and unknown AMD generations drop the
 		// RDNA3-only FP16 emulation path.
@@ -59,6 +59,17 @@ func TestSingleConfigPerVendor(t *testing.T) {
 				t.Fatal(err)
 			}
 			content := string(files.written["/prefix/launch_vars.env"])
+			faultEnabled := false
+			for _, line := range strings.Split(content, "\n") {
+				if value, ok := strings.CutPrefix(line, "export VKD3D_CONFIG="); ok {
+					for _, option := range strings.Split(strings.Trim(value, "\"'"), ",") {
+						faultEnabled = faultEnabled || option == "fault"
+					}
+				}
+			}
+			if !faultEnabled {
+				t.Fatal("device fault reporting must be requested for every GPU profile")
+			}
 			for _, want := range append(tc.want, `BELLUM_GAMEMODE="0"`, "BELLUM_UMU_RUN=") {
 				if !strings.Contains(content, want) {
 					t.Errorf("launch_vars.env lacks %s:\n%s", want, content)

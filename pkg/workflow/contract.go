@@ -26,6 +26,10 @@ func ProtonContract() []ProtonRequirement {
 		{"files/lib/wine/x86_64-unix/ntdll.so", "PROTON_EAC_RUNTIME", "Easy Anti-Cheat runtime bridge"},
 		{"files/lib/wine/x86_64-windows/amdxc64.dll", "FSR4_UPGRADE", "FSR4 provider for AMD GPUs"},
 		{"files/lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll", "descriptor_heap", "VKD3D_CONFIG option"},
+		{"files/lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll", "\x00fault\x00", "VKD3D_CONFIG fault option"},
+		{"files/lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll", "VK_KHR_device_fault", "driver-gated device fault reporting"},
+		{"files/lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll", "vkGetDeviceFaultReportsKHR", "device fault report retrieval"},
+		{"files/lib/wine/vkd3d-proton/x86_64-windows/d3d12core.dll", "vkGetDeviceFaultDebugInfoKHR", "optional vendor binary retrieval"},
 		{"files/lib/wine/dxvk/x86_64-windows/dxgi.dll", "DXVK_ENABLE_NVAPI", "NVIDIA launch setting"},
 		// minNVIDIADriver is DXVK 3.x's documented minimum; a new DXVK major
 		// needs that minimum reviewed before the pin moves.
