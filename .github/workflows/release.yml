@@ -148,6 +148,7 @@ jobs:
         with:
           ref: ${{ needs.tag.outputs.sha }}
           persist-credentials: false
+          fetch-depth: 0
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
           pattern: release-*
@@ -158,6 +159,13 @@ jobs:
           TAG: ${{ needs.tag.outputs.tag }}
         run: |
           scripts/check-release-assets.sh "${TAG#v}" dist
+      - name: Generate complete release notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.tag.outputs.tag }}
+        run: |
+          python3 scripts/release-notes.py --tag "$TAG" --repo "$GITHUB_REPOSITORY" --output "$RUNNER_TEMP/release-notes.md"
+          cat "$RUNNER_TEMP/release-notes.md" >> "$GITHUB_STEP_SUMMARY"
       - name: Publish release assets
         env:
           EVENT: ${{ github.event_name }}
@@ -165,10 +173,10 @@ jobs:
           TAG: ${{ needs.tag.outputs.tag }}
         run: |
           if [[ "$TAG" =~ -rc\.[0-9]+$ ]]; then
-            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --prerelease \
-              --notes "Release candidate for hardware testing. Install with: curl -fsSL https://raw.githubusercontent.com/${GITHUB_REPOSITORY}/main/install.sh | bash -s -- --version $TAG"
+            printf '\nRelease candidate for hardware testing. Install with: curl -fsSL https://raw.githubusercontent.com/%s/main/install.sh | bash -s -- --version %s\n' "$GITHUB_REPOSITORY" "$TAG" >> "$RUNNER_TEMP/release-notes.md"
+            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --notes-file "$RUNNER_TEMP/release-notes.md" --prerelease
           elif [ "$EVENT" = workflow_run ]; then
-            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --latest
+            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --notes-file "$RUNNER_TEMP/release-notes.md" --latest
           else
-            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --generate-notes --draft
+            gh release create "$TAG" dist/*.tar.gz dist/SHA256SUMS --verify-tag --notes-file "$RUNNER_TEMP/release-notes.md" --draft
           fi

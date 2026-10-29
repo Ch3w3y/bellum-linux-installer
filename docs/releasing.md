@@ -115,3 +115,22 @@ gh attestation verify "bellum-installer-linux-arm64-$v.tar.gz" --repo Ch3w3y/bel
   `ASTARTE INDUSTRIES INC.`; known build digests are recorded, and an unknown
   one only warns.
 - Any checksum or signature failure stops the install.
+
+## Release notes
+
+Publication runs `scripts/release-notes.py` against the release commit and the
+previous published stable release. Notes include installer commits, the exact
+Proton/umu pins and checksums, winetricks changes, and newly accepted launcher
+hashes. When a runtime pin changes, the complete upstream release bodies for
+every intervening stable release are included, covering bundled component
+updates as documented by upstream. Unchanged pins are explicitly marked.
+Upstream API failures or an incomplete release range stop publication instead of
+silently publishing incomplete notes; rerun after restoring access. No upstream
+notes are fetched for unchanged pins. Candidate and draft releases use the same
+notes generator. The workflow stores the generated notes in its step summary.
+
+For a local preview with an explicit published baseline:
+
+```bash
+python3 scripts/release-notes.py --tag v2.4.3 --previous v2.4.2 --repo Ch3w3y/bellum-linux-installer --output /tmp/bellum-release-notes.md
+```

@@ -158,6 +158,35 @@ export BELLUM_VKBASALT=1   # vkBasalt post-processing (needs vkbasalt)
 `~/.local/share/bellum-installer/<version>/logs/installer.log`, and every error
 message ends with that path.
 
+### GPU crash diagnostics
+
+New installs and installer updates request vkd3d-proton device-fault reporting
+with `VKD3D_CONFIG="fault"` on NVIDIA RTX/GTX 16-series and
+`VKD3D_CONFIG="descriptor_heap,fault"` on the other profiles. This keeps the
+NVIDIA descriptor-heap workaround in place. Existing installs need an installer
+update, or the same edit in `<install folder>/launch_vars.env`.
+
+The pinned Proton's vkd3d-proton implements `VK_KHR_device_fault`, the newer
+interface rather than `VK_EXT_device_fault`. The `fault` option requests the
+extension and the features the driver reports as supported; it cannot make an
+unsupported GPU/driver provide fault addresses or vendor binary data. Vendor
+binary collection also requires the driver's `deviceFaultVendorBinary` support.
+This is a Vulkan device-creation feature request, not a JSON setting to pass to
+Bellum. It adds no replacement DLLs or shader instrumentation.
+
+After a crash, send the developers `<install folder>/launcher.log`, your GPU
+and driver version, and `vkd3d-proton.fault.bin` if one was produced (look in the
+game's working directory). The binary is only written when supported by the
+driver and returned with a recognised header. Logs may contain GPU fault
+addresses without identifying a particular source shader.
+
+Fault reporting is a debugging mode: it adds address tracking and deliberately
+holds the application during crash reporting, so overhead and delayed exit are
+possible. Hardware and Easy Anti-Cheat validation remain manual. To disable it,
+remove `fault` from `VKD3D_CONFIG` in `launch_vars.env`, leaving `""` on NVIDIA
+RTX/GTX 16-series or `"descriptor_heap"` on other profiles. An installer update
+restores the default.
+
 ## Updating
 
 Run the install command again. On a finished install it offers an update
@@ -188,7 +217,7 @@ stays stable, chosen for your GPU. There are no presets to pick.
 - **NVIDIA:** DLSS through Proton's defaults (NVAPI on, `nvngx.dll` from your
   driver). RTX and GTX 16-series cards also get `PROTON_NVIDIA_LIBS=1` (CUDA,
   NVENC and OptiX bridges). Proton's DLSS DLL auto-download stays off.
-  vkd3d-proton's descriptor heap is off on NVIDIA for now (`VKD3D_CONFIG=""`)
+  vkd3d-proton's descriptor heap is off on NVIDIA for now (`VKD3D_CONFIG="fault"`)
   because of a 610-branch driver issue; see "Descriptor heap and the 610 driver branch" below.
 - **Intel and unrecognised GPUs:** standard Proton settings.
 - **Display server:** the same on X11, Wayland and gamescope; the game runs
@@ -226,10 +255,10 @@ distribution, when:
 descriptor heap is on: the game stops with `DXGI_ERROR_DEVICE_REMOVED` and the
 kernel log shows Xid 109 and Xid 31. This is an upstream driver issue, not a
 Bellum or installer bug; earlier installer versions and drivers were fine with
-it on. The installer therefore writes `VKD3D_CONFIG=""` for NVIDIA RTX and
+it on. The installer therefore writes `VKD3D_CONFIG="fault"` for NVIDIA RTX and
 GTX 16-series cards, and AMD, older NVIDIA and Intel keep it on. It will be
 turned back on by default once a later driver branch has been tested without
-the crash. To try it yourself, set `VKD3D_CONFIG="descriptor_heap"` in
+the crash. To try it yourself, set `VKD3D_CONFIG="descriptor_heap,fault"` in
 `<install folder>/launch_vars.env` (an update rewrites that file, so set it
 again afterwards).
 
