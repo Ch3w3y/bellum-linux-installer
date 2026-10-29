@@ -41,14 +41,19 @@ jobs:
 
       - name: Check upstream releases
         id: pins
+        # Keep reporting available, but retain the real outcome for the final gate.
+        continue-on-error: true
         env:
           GITHUB_TOKEN: ${{ github.token }}
         run: |
           go build -o "$RUNNER_TEMP/pinupdate" ./tools/pinupdate
           set +e
           "$RUNNER_TEMP/pinupdate" -summary "$RUNNER_TEMP/pins.md"
-          echo "status=$?" >> "$GITHUB_OUTPUT"
+          status=$?
+          set -e
+          echo "status=$status" >> "$GITHUB_OUTPUT"
           cat "$RUNNER_TEMP/pins.md" >> "$GITHUB_STEP_SUMMARY"
+          exit "$status"
 
       - name: Commit the new pins
         if: steps.pins.outputs.changed == 'true'
@@ -81,10 +86,13 @@ jobs:
           fi
 
       - name: Report failed checks
-        if: steps.pins.outputs.failed == 'true'
+        if: always() && (steps.pins.outputs.failed == 'true' || steps.pins.outcome == 'failure')
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ ! -s "$RUNNER_TEMP/pins.md" ]; then
+            printf '%s\n' 'Pin checker failed before writing a summary. See the Check upstream releases step in this run.' > "$RUNNER_TEMP/pins.md"
+          fi
           title='Runtime pin update needs attention'
           existing=$(gh issue list --state open --search "in:title \"$title\"" --json number --jq '.[0].number')
           if [ -n "$existing" ]; then
@@ -92,3 +100,7 @@ jobs:
           else
             gh issue create --title "$title" --body-file "$RUNNER_TEMP/pins.md"
           fi
+
+      - name: Fail when upstream verification failed
+        if: always() && steps.pins.outcome == 'failure'
+        run: exit 1

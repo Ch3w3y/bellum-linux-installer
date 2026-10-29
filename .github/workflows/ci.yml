@@ -93,7 +93,9 @@ jobs:
         run: shellcheck install.sh scripts/next-release-tag.sh
 
       - name: Automatic release version tests
-        run: python3 scripts/test-next-release-tag.py
+        run: |
+          python3 scripts/test-next-release-tag.py
+          python3 scripts/test-pin-update-workflow.py
 
       - name: Dry run against a locally built release
         run: |
